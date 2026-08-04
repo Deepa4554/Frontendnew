@@ -80,9 +80,9 @@ interface CartLine {
 
 const ORDER_TYPES = [
   { key: 'DINE_IN', label: 'Dine In', icon: 'silverware-fork-knife' },
+  { key: 'QSR', label: 'Token', icon: 'ticket-confirmation-outline' },
   { key: 'TAKEAWAY', label: 'Takeaway', icon: 'bag-personal-outline' },
   { key: 'DELIVERY', label: 'Delivery', icon: 'moped-outline' },
-  { key: 'QSR', label: 'Token', icon: 'ticket-confirmation-outline' },
   { key: 'CASH', label: 'Cash Sale', icon: 'cash' },
 ];
 
