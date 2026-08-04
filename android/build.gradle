@@ -1,0 +1,33 @@
+buildscript {
+    ext {
+        buildToolsVersion = "36.0.0"
+        minSdkVersion = 24
+        compileSdkVersion = 36
+        targetSdkVersion = 36
+        // RN 0.86's precompiled JSI/Hermes/fbjni binaries are built against NDK 26's
+        // libc++ ABI. NDK 27 changed the LLVM toolchain/libc++ ABI enough that native
+        // modules linking against those prebuilts (react-native-nitro-modules here,
+        // confirmed still true as of 0.36.1) fail with "undefined symbol:
+        // std::runtime_error::~runtime_error()" and similar libc++ symbols at link
+        // time. Pin to 26.1 until RN's prebuilts catch up — the other side of this
+        // tradeoff (NDK 26's Clang not fully supporting the C++20 concepts
+        // react-native-reanimated 4.5's CSS code uses) is patched instead, see
+        // patches/react-native-reanimated+*.patch.
+        ndkVersion = "26.1.10909125"
+        kotlinVersion = "2.1.20"
+    }
+    repositories {
+        google()
+        mavenCentral()
+    }
+    dependencies {
+        classpath("com.android.tools.build:gradle")
+        classpath("com.facebook.react:react-native-gradle-plugin")
+        classpath("org.jetbrains.kotlin:kotlin-gradle-plugin")
+        // Only actually applied in app/build.gradle if google-services.json is present (see
+        // its own comment) — safe to declare unconditionally here either way.
+        classpath("com.google.gms:google-services:4.4.2")
+    }
+}
+
+apply plugin: "com.facebook.react.rootproject"

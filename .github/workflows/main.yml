@@ -1,0 +1,82 @@
+name: CafePOS Enterprise CI/CD
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  lint-and-test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run TypeScript Compiler
+        run: npx tsc --noEmit
+
+      - name: Run ESLint
+        run: npm run lint
+
+      - name: Run Jest Tests
+        run: npm run test
+
+  build-android:
+    needs: lint-and-test
+    runs-on: ubuntu-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with: { node-version: '22' }
+      - uses: actions/setup-java@v3
+        with:
+          distribution: 'zulu'
+          java-version: '17'
+      
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Build Android Release
+        run: |
+          cd android
+          ./gradlew assembleRelease
+          
+      # In a real pipeline, we would upload this artifact to Play Store or S3
+      - name: Upload APK
+        uses: actions/upload-artifact@v3
+        with:
+          name: app-release
+          path: android/app/build/outputs/apk/release/app-release.apk
+
+  build-ios:
+    needs: lint-and-test
+    runs-on: macos-latest
+    if: github.ref == 'refs/heads/main'
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-node@v3
+        with: { node-version: '22' }
+        
+      - name: Install dependencies
+        run: npm ci
+        
+      - name: Install Pods
+        run: cd ios && pod install
+        
+      - name: Build iOS Release
+        run: |
+          cd ios
+          xcodebuild -workspace CafePOS.xcworkspace -scheme CafePOS -configuration Release -sdk iphoneos archive -archivePath $PWD/build/CafePOS.xcarchive
+          
+      # In a real pipeline, export IPA and upload to TestFlight

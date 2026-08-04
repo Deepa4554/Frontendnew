@@ -1,0 +1,61 @@
+diff --git a/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp b/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp
+index 7b0a10b..4b98e5e 100644
+--- a/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp
++++ b/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.cpp
+@@ -149,13 +149,15 @@ template TransformMatrix3D TransformOperationInterpolator<MatrixOperation>::inte
+     const TransformMatrix::Shared &) const;
+ 
+ // Specialization for resolvable operations
+-template <ResolvableOp TOperation>
++template <typename TOperation>
++  requires ResolvableOp<TOperation>
+ TransformOperationInterpolator<TOperation>::TransformOperationInterpolator(
+     const std::shared_ptr<TOperation> &defaultOperation,
+     ResolvableValueInterpolatorConfig config)
+     : StyleOperationInterpolator(defaultOperation), config_(std::move(config)) {}
+ 
+-template <ResolvableOp TOperation>
++template <typename TOperation>
++  requires ResolvableOp<TOperation>
+ std::unique_ptr<StyleOperation> TransformOperationInterpolator<TOperation>::interpolate(
+     double progress,
+     const std::shared_ptr<StyleOperation> &from,
+@@ -168,7 +170,8 @@ std::unique_ptr<StyleOperation> TransformOperationInterpolator<TOperation>::inte
+       fromOp.value.interpolate(progress, toOp.value, getResolvableValueContext(context)));
+ }
+ 
+-template <ResolvableOp TOperation>
++template <typename TOperation>
++  requires ResolvableOp<TOperation>
+ std::shared_ptr<StyleOperation> TransformOperationInterpolator<TOperation>::resolveOperation(
+     const std::shared_ptr<StyleOperation> &operation,
+     const StyleOperationsInterpolationContext &context) const {
+@@ -184,7 +187,8 @@ std::shared_ptr<StyleOperation> TransformOperationInterpolator<TOperation>::reso
+   return std::make_shared<TOperation>(resolved.value());
+ }
+ 
+-template <ResolvableOp TOperation>
++template <typename TOperation>
++  requires ResolvableOp<TOperation>
+ ResolvableValueInterpolationContext TransformOperationInterpolator<TOperation>::getResolvableValueContext(
+     const StyleOperationsInterpolationContext &context) const {
+   return ResolvableValueInterpolationContext{
+diff --git a/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h b/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h
+index f771438..ca06f44 100644
+--- a/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h
++++ b/node_modules/react-native-reanimated/Common/cpp/reanimated/CSS/interpolation/transforms/TransformOperationInterpolator.h
+@@ -59,7 +59,13 @@ class TransformOperationInterpolator<MatrixOperation> : public StyleOperationInt
+ };
+ 
+ // Specialization for resolvable operations
+-template <ResolvableOp TOperation>
++// NDK 26's Clang has a frontend bug with a concept name used directly as a class-template
++// partial specialization's parameter (`template <ResolvableOp TOperation>` — "type
++// constraint differs in template redeclaration" at compile time even though this is valid,
++// unchanged C++20). The equivalent `requires` clause form below expresses the identical
++// constraint but compiles cleanly on that toolchain.
++template <typename TOperation>
++  requires ResolvableOp<TOperation>
+ class TransformOperationInterpolator<TOperation> : public StyleOperationInterpolator {
+  public:
+   TransformOperationInterpolator(

@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<!-- Release counterpart to PrabandhOS.entitlements (which stays on "development" for
+	     debug builds run from Xcode). aps-environment picks which APNs environment the
+	     device registers against, and the two issue different, non-interchangeable tokens:
+	     a TestFlight/App Store build signed with "development" gets a sandbox token, so
+	     every push the backend sends through FCM production is silently dropped. Both
+	     configs pointed at the one "development" file until this was split — see
+	     project.pbxproj's CODE_SIGN_ENTITLEMENTS for each configuration. -->
+	<key>aps-environment</key>
+	<string>production</string>
+</dict>
+</plist>

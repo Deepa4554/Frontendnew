@@ -1,0 +1,32 @@
+import React from 'react';
+import { TouchableOpacity, StyleSheet, ViewStyle, StyleProp } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useThemeColors } from '../../../core/theme/useThemeColors';
+
+interface SearchClearButtonProps {
+  onPress: () => void;
+  style?: StyleProp<ViewStyle>;
+}
+
+/** Tiny "x" button dropped into a search box's wrapper (position: relative) to clear its text on tap. */
+export const SearchClearButton = ({ onPress, style }: SearchClearButtonProps) => {
+  const COLORS = useThemeColors();
+  return (
+    <TouchableOpacity
+      onPress={onPress}
+      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      style={[styles.btn, style]}
+    >
+      <Icon name="close-circle" size={13} color={COLORS.muted} />
+    </TouchableOpacity>
+  );
+};
+
+const styles = StyleSheet.create({
+  btn: {
+    position: 'absolute',
+    right: 10,
+    top: '50%',
+    marginTop: -6.5,
+  },
+});

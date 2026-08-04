@@ -1,0 +1,17 @@
+diff --git a/node_modules/react-native/ReactCommon/react/renderer/core/graphicsConversions.h b/node_modules/react-native/ReactCommon/react/renderer/core/graphicsConversions.h
+index 0000000..0000000 100644
+--- a/node_modules/react-native/ReactCommon/react/renderer/core/graphicsConversions.h
++++ b/node_modules/react-native/ReactCommon/react/renderer/core/graphicsConversions.h
+@@ -68,7 +68,11 @@ inline folly::dynamic toDynamic(const YGValue &dimension)
+     case YGUnitPoint:
+       return dimension.value;
+     case YGUnitPercent:
+-      return std::format("{}%", dimension.value);
++      // Patched: NDK 26's libc++ (pinned in android/build.gradle for nitro-modules ABI
++      // compatibility — see its comment) doesn't implement C++20 std::format yet, which
++      // fails this file's compile with "no member named 'format' in namespace 'std'".
++      // folly::sformat is already available here (folly/Format.h) and is a drop-in.
++      return folly::sformat("{}%", dimension.value);
+   }
+
+   return nullptr;

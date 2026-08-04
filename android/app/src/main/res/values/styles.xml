@@ -1,0 +1,17 @@
+<resources>
+
+    <!-- Base application theme. -->
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+        <!-- Customize your theme here. -->
+        <item name="android:editTextBackground">@drawable/rn_edit_text_material</item>
+        <!-- Without these, AppCompat falls back to its own default control colors on
+             some OEM skins (seen on Realme/ColorOS) — a solid black ripple/highlight
+             on every touch, regardless of the screen's own background/brand color.
+             Fully transparent turns the native ripple off everywhere; the app's own
+             TouchableOpacity components already provide their own press feedback
+             (opacity fade), so no highlight is needed on top of that. -->
+        <item name="colorAccent">#C5652E</item>
+        <item name="colorControlHighlight">#00000000</item>
+    </style>
+
+</resources>

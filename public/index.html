@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <!--
+      Locks down what the page is allowed to load/run/connect to — the main
+      defense-in-depth backstop against XSS actually doing anything even if a
+      malicious script gets injected somewhere. script-src has no
+      'unsafe-inline', so an injected <script> tag or inline event handler
+      simply won't execute. style-src needs 'unsafe-inline' because
+      react-native-web/react-native-paper inject their atomic CSS via runtime
+      <style> tags, not external stylesheets.
+      'wasm-unsafe-eval' in script-src is WASM-compilation-only (does NOT
+      enable eval()/unsafe-eval) — required for the Tesseract.js OCR engine
+      that powers "Import from Photo" on the menu screen (self-hosted under
+      /tesseract, see webpack.config.js and menuPhotoOcrFallback.ts).
+      Note: <meta> CSP can't enforce frame-ancestors or report-uri — if this
+      is ever served from a real backend/CDN (not just webpack's static
+      output), set the equivalent Content-Security-Policy response header
+      there too for full coverage.
+      connect-src uses "http://*:5080" (not a literal "localhost:5080") so a
+      phone on the LAN opening http://<lan-ip>:3000 can reach the dev API at
+      http://<lan-ip>:5080 too — env.ts derives that origin from
+      window.location.hostname, and CSP host-source syntax has no way to
+      express "same host, different port" other than wildcarding the host.
+      The ws:/wss: entries are for SignalR's WebSocket transport (see
+      ordersRealtime.ts). They are NOT redundant with the http:/https: ones:
+      Chrome refuses to let an http: source expression authorise a ws: URL, so
+      without these the orders/KDS live feed is blocked outright and silently
+      falls back to polling (or just fails) — which is exactly what happened.
+      fcmregistrations.googleapis.com/firebaseinstallations.googleapis.com are
+      what pushNotifications.web.ts's getToken()/service worker registration
+      actually calls under the hood (FCM Web SDK, self-hosted — see
+      web/firebase-messaging-sw.ts's own comment on why no gstatic.com CDN
+      script is needed).
+    -->
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'self'; script-src 'self' 'wasm-unsafe-eval'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com data:; img-src 'self' data: blob: https://*.supabase.co; connect-src 'self' http://*:5080 ws://*:5080 https://cafeposapi-85wt.onrender.com wss://cafeposapi-85wt.onrender.com https://*.supabase.co https://fcmregistrations.googleapis.com https://firebaseinstallations.googleapis.com; object-src 'none'; base-uri 'self'; form-action 'self';"
+    />
+    <title>PrabandhOS</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+    <style>
+      @font-face {
+        font-family: 'MaterialCommunityIcons';
+        src: url('./fonts/MaterialCommunityIcons.ttf') format('truetype');
+      }
+      html, body, #root {
+        height: 100%;
+        margin: 0;
+        padding: 0;
+        background: #F7EFE8;
+        overscroll-behavior: none;
+      }
+      #root {
+        display: flex;
+        flex-direction: column;
+      }
+      /* react-native-web renders every TextInput as a bare <input>/<textarea> sitting
+         inside a wrapper <div> that carries the actual rounded-pill look (border-radius,
+         border, background) — the input itself has square corners and often doesn't
+         span the wrapper's full width/height (icon + padding around it). So ringing the
+         input directly (`input:focus { box-shadow }`) draws a sharp rectangle that both
+         pokes outside the rounded wrapper AND doesn't cover the whole visual box.
+         Instead, ring whichever wrapper div directly contains the focused field — that
+         div already has the real border-radius, so the highlight follows it exactly and
+         covers the whole textbox. One rule, no per-screen changes needed anywhere. */
+      input, textarea, select {
+        outline: none;
+      }
+      /* :not([role="switch"]) excludes RN's Switch — react-native-web renders it as an
+         invisible <input type="checkbox" role="switch"> layered directly inside its own
+         wrapper <div> (alongside the visible track/thumb), so without this exclusion the
+         same ring meant for text fields was firing around every toggle whenever its hidden
+         checkbox took focus. */
+      div:has(> input:focus:not([role="switch"])),
+      div:has(> textarea:focus),
+      div:has(> select:focus) {
+        box-shadow: 0 0 0 1px rgba(197, 101, 46, 0.25);
+      }
+    </style>
+  </head>
+  <body>
+    <div id="root"></div>
+    <!-- External file, not inline — CSP's script-src 'self' (no 'unsafe-inline') requires it. -->
+    <script src="./errorLogger.js"></script>
+  </body>
+</html>

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#3A2318"/>
+      <stop offset="1" stop-color="#1B0F08"/>
+    </linearGradient>
+    <radialGradient id="glow" cx="0.3" cy="0.22" r="0.9">
+      <stop offset="0" stop-color="#FFFFFF" stop-opacity="0.10"/>
+      <stop offset="1" stop-color="#FFFFFF" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- App tile background -->
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="url(#bg)"/>
+  <rect x="0" y="0" width="512" height="512" rx="116" fill="url(#glow)"/>
+
+  <!-- Monogram: P (fork stem) + O (plate) + S (steam swirl) -->
+  <g transform="translate(-44,6)" fill="none" stroke-linecap="round" stroke-linejoin="round">
+    <!-- Fork = stem of the P -->
+    <g stroke="#D9A75F" stroke-width="26">
+      <path d="M182,126 v38 a26,26 0 0 0 52,0 v-38"/>
+      <path d="M208,126 v52"/>
+      <path d="M208,190 v196"/>
+    </g>
+    <!-- Plate / cup rim = the O, closing the bowl of the P -->
+    <circle cx="326" cy="236" r="92" stroke="#D9A75F" stroke-width="26"/>
+    <!-- Steam swirl inside = the S -->
+    <path d="M354,190 C300,178 292,236 326,236 C360,236 352,294 298,282"
+          stroke="#F3E3C3" stroke-width="20"/>
+  </g>
+</svg>

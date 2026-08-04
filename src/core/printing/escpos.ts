@@ -1,0 +1,136 @@
+/**
+ * Renders the shared receipt line model (see receiptFormat.ts) to a raw ESC/POS
+ * command byte stream. Used by the WiFi transport: the backend relay (PrintController)
+ * doesn't understand receipts, just forwards whatever bytes it's given straight to the
+ * printer's TCP socket, so all the formatting has to happen here on the client first.
+ *
+ * Text is kept ASCII-only (₹ becomes "Rs.", handled upstream in receiptFormat.ts) since
+ * a printer's built-in codepage usually can't render arbitrary Unicode.
+ */
+import { ReceiptLine } from './receiptFormat';
+
+const ESC = 0x1b;
+const GS = 0x1d;
+
+const CMD = {
+  INIT: [ESC, 0x40],
+  ALIGN_LEFT: [ESC, 0x61, 0x00],
+  ALIGN_CENTER: [ESC, 0x61, 0x01],
+  BOLD_ON: [ESC, 0x45, 0x01],
+  BOLD_OFF: [ESC, 0x45, 0x00],
+  DOUBLE_SIZE_ON: [GS, 0x21, 0x11],
+  DOUBLE_SIZE_OFF: [GS, 0x21, 0x00],
+  FEED: (lines: number) => [ESC, 0x64, lines],
+  CUT: [GS, 0x56, 0x00],
+};
+
+const toAscii = (s: string) =>
+  s
+    .replace(/₹/g, 'Rs.')
+    .replace(/[^\x00-\x7E\n]/g, '?'); // anything else non-ASCII the printer likely can't render
+
+class ByteBuilder {
+  private bytes: number[] = [];
+
+  push(...codes: number[]) {
+    this.bytes.push(...codes);
+    return this;
+  }
+
+  line(s = '') {
+    for (const ch of toAscii(s)) this.bytes.push(ch.charCodeAt(0));
+    this.bytes.push(0x0a);
+    return this;
+  }
+
+  toBytes(): Uint8Array {
+    return new Uint8Array(this.bytes);
+  }
+}
+
+/**
+ * Standard ESC/POS "GS ( k" QR sequence (Epson TM/most clone thermal printers): select
+ * model -> set module size -> set error-correction level -> store the data -> print the
+ * stored symbol. `data` is expected to already be a plain-ASCII URL (the wa.me deep link),
+ * so no toAscii() pass is needed here the way text lines get one.
+ */
+function qrCommand(data: string, moduleSize: number): number[] {
+  const dataBytes = Array.from(data, (ch) => ch.charCodeAt(0) & 0xff);
+  const storeLen = dataBytes.length + 3; // cn + fn + m + data
+  const clampedSize = Math.min(16, Math.max(1, moduleSize));
+
+  return [
+    // Select model 2.
+    GS, 0x28, 0x6b, 0x04, 0x00, 0x31, 0x41, 0x32, 0x00,
+    // Set module size.
+    GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x43, clampedSize,
+    // Set error-correction level M.
+    GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x45, 0x31,
+    // Store the data.
+    GS, 0x28, 0x6b, storeLen & 0xff, (storeLen >> 8) & 0xff, 0x31, 0x50, 0x30, ...dataBytes,
+    // Print the stored symbol.
+    GS, 0x28, 0x6b, 0x03, 0x00, 0x31, 0x51, 0x30,
+  ];
+}
+
+function renderLine(b: ByteBuilder, line: ReceiptLine, columns: number) {
+  switch (line.kind) {
+    case 'dashes':
+      b.line('-'.repeat(columns));
+      return;
+    case 'feed':
+      b.push(...CMD.FEED(1));
+      return;
+    case 'text': {
+      b.push(...(line.align === 'center' ? CMD.ALIGN_CENTER : CMD.ALIGN_LEFT));
+      if (line.bold) b.push(...CMD.BOLD_ON);
+      if (line.big) b.push(...CMD.DOUBLE_SIZE_ON);
+      b.line(line.text);
+      if (line.big) b.push(...CMD.DOUBLE_SIZE_OFF);
+      if (line.bold) b.push(...CMD.BOLD_OFF);
+      return;
+    }
+    case 'qr': {
+      b.push(...CMD.ALIGN_CENTER);
+      b.push(...qrCommand(line.data, line.size ?? 6));
+      b.push(...CMD.ALIGN_LEFT);
+      return;
+    }
+  }
+}
+
+/** Renders any already-built line model (a bill via buildReceiptLines, or a kitchen
+ * ticket via buildKotLines — see receiptFormat.ts) to raw ESC/POS bytes. */
+export function buildEscPosFromLines(lines: ReceiptLine[], columns = 32): Uint8Array {
+  const b = new ByteBuilder();
+  b.push(...CMD.INIT);
+  for (const line of lines) renderLine(b, line, columns);
+  b.push(...CMD.ALIGN_LEFT);
+  b.push(...CMD.FEED(3));
+  b.push(...CMD.CUT);
+  return b.toBytes();
+}
+
+const BASE64_CHARS = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/';
+
+/**
+ * Base64-encodes ESC/POS bytes for transport over JSON (used by the WiFi relay call).
+ * Hand-rolled rather than relying on `btoa` — Hermes (React Native's JS engine) doesn't
+ * ship it, and this needs to work identically on both native and web without a polyfill.
+ */
+export function escPosToBase64(bytes: Uint8Array): string {
+  let result = '';
+  for (let i = 0; i < bytes.length; i += 3) {
+    const b0 = bytes[i];
+    const b1 = i + 1 < bytes.length ? bytes[i + 1] : undefined;
+    const b2 = i + 2 < bytes.length ? bytes[i + 2] : undefined;
+
+    result += BASE64_CHARS[b0 >> 2];
+    result += BASE64_CHARS[((b0 & 0x03) << 4) | (b1 === undefined ? 0 : b1 >> 4)];
+    result += b1 === undefined ? '=' : BASE64_CHARS[((b1 & 0x0f) << 2) | (b2 === undefined ? 0 : b2 >> 6)];
+    result += b2 === undefined ? '=' : BASE64_CHARS[b2 & 0x3f];
+  }
+  return result;
+}
+
+export type { PrintableReceipt, PrintableReceiptItem } from './receiptFormat';
