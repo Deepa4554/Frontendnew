@@ -16,6 +16,7 @@ import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { SkeletonList, SkeletonBox } from '../../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
+import { istToday } from '../../../../../core/utils/istDate';
 import { CategoryFilterModal, CategoryFilterTrigger } from '../../../../../shared/components/molecules/CategoryFilterModal';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 
@@ -33,11 +34,13 @@ export const BillingScreen = () => {
     SERVED: { bg: COLORS.chipBg, text: COLORS.muted, label: 'Served' },
   };
   const dispatch = useDispatch();
-  // from/to both pinned to today (same toISOString().slice(0,10) convention as
-  // DashboardScreen's "Today" preset) with a generous pageSize — a busy day's order
-  // count must never be silently cut off by the default 20-per-page cap, since this
-  // screen's revenue/transaction totals need to be exactly today's real numbers.
-  const todayIso = new Date().toISOString().slice(0, 10);
+  // from/to both pinned to today at the CAFE (IST), matching how the API reads these params
+  // — a plain toISOString() here would send the UTC day, which before 5:30 AM IST is still
+  // yesterday, hiding every order taken after midnight until the morning. Generous pageSize
+  // alongside it: a busy day's order count must never be silently cut off by the default
+  // 20-per-page cap, since this screen's revenue/transaction totals need to be exactly
+  // today's real numbers.
+  const todayIso = istToday();
   const { data, isLoading, isError, refetch } = useOrders({ from: todayIso, to: todayIso, pageSize: 500 });
   const { data: settings } = useSettings();
   const [openOrder, setOpenOrder] = useState<ApiOrder | null>(null);

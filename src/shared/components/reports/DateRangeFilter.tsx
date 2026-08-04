@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
 import { modalHeadingOverride } from '../../design/commonStyles';
+import { istToday, istDatePlusDays } from '../../../core/utils/istDate';
 
 export type RangePreset = 'today' | 'yesterday' | '7d' | '15d' | '30d' | 'custom';
 
@@ -23,7 +24,6 @@ export const PRESETS: { key: RangePreset; label: string }[] = [
   { key: 'custom', label: 'Custom Range' },
 ];
 
-const toIsoDate = (d: Date) => d.toISOString().slice(0, 10);
 const isValidIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s.trim());
 const pad2 = (n: number) => String(n).padStart(2, '0');
 const toLocalIso = (y: number, m: number, d: number) => `${y}-${pad2(m + 1)}-${pad2(d)}`;
@@ -31,15 +31,15 @@ const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
 
 export const rangeForPreset = (preset: RangePreset, customFrom: string, customTo: string): DateRangeValue => {
-  const today = new Date();
+  // Both presets resolve against the cafe's clock, not UTC and not the device's — the API
+  // reads from/to as IST calendar days, so "Today" before 5:30 AM IST would otherwise ask
+  // for yesterday and report a day that hasn't finished as if it were empty.
   if (preset === 'today') {
-    const iso = toIsoDate(today);
+    const iso = istToday();
     return { from: iso, to: iso };
   }
   if (preset === 'yesterday') {
-    const y = new Date(today);
-    y.setDate(y.getDate() - 1);
-    const iso = toIsoDate(y);
+    const iso = istDatePlusDays(-1);
     return { from: iso, to: iso };
   }
   if (preset === '7d') return { days: 7 };
@@ -68,8 +68,9 @@ const CalendarGrid = ({ selected, onSelect, styles, COLORS }: {
 
   const firstDayOffset = new Date(viewYear, viewMonth, 1).getDay();
   const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
-  const now = new Date();
-  const todayIso = toLocalIso(now.getFullYear(), now.getMonth(), now.getDate());
+  // Which cell gets the "today" ring — the cafe's today, so it agrees with what the Today
+  // preset above actually fetches rather than drifting on a device set to another timezone.
+  const todayIso = istToday();
 
   const goMonth = (delta: number) => {
     const next = new Date(viewYear, viewMonth + delta, 1);
