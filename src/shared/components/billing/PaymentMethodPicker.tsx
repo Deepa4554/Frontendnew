@@ -108,11 +108,13 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
   }, [cashNeeded, cashTickManual, cashTouched]);
 
   // Cash is normally the leg that auto-absorbs the remainder (see cashNeeded above). Once
-  // the cashier hand-types a number into Cash itself, that absorbing role has to hand off to
-  // another ticked method — otherwise a manual Cash entry just silently overshoots the total
-  // instead of shrinking whichever method was covering the rest of the bill. UPI takes over
-  // first (if ticked), Card next; whichever it is recomputes the exact same way Cash used to.
-  const flexMethod: PaymentMethod | null = !cashTouched
+  // the cashier hand-types a number into Cash itself, OR unticks Cash altogether, that
+  // absorbing role has to hand off to another ticked method — otherwise a manual Cash entry
+  // just silently overshoots the total, or unticking Cash leaves the balance stranded with
+  // nothing covering it, instead of shrinking/filling whichever method now covers the rest
+  // of the bill. UPI takes over first (if ticked), Card next; whichever it is recomputes the
+  // exact same way Cash used to.
+  const flexMethod: PaymentMethod | null = (!cashTouched && selectedMethods.includes('Cash'))
     ? null
     : selectedMethods.includes('UPI') ? 'UPI'
     : selectedMethods.includes('Card') ? 'Card'

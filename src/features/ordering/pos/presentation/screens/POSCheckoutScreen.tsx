@@ -1896,14 +1896,16 @@ export const POSCheckoutScreen = () => {
                 </View>
                 <Icon name="chevron-up" size={20} color={COLORS.muted} />
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.cartBarHoldBtn, submitting && { opacity: 0.7 }]}
-                onPress={holdOrder}
-                disabled={submitting}
-              >
-                <Icon name="clock-outline" size={16} color={COLORS.heading} />
-                <Text style={styles.cartBarHoldBtnText}>{resumeMode ? 'Add' : 'Hold'}</Text>
-              </TouchableOpacity>
+              {(resumeMode || (orderType !== 'QSR' && orderType !== 'CASH')) && (
+                <TouchableOpacity
+                  style={[styles.cartBarHoldBtn, submitting && { opacity: 0.7 }]}
+                  onPress={holdOrder}
+                  disabled={submitting}
+                >
+                  <Icon name="clock-outline" size={16} color={COLORS.heading} />
+                  <Text style={styles.cartBarHoldBtnText}>{resumeMode ? 'Add' : 'Hold'}</Text>
+                </TouchableOpacity>
+              )}
               <TouchableOpacity
                 style={[styles.cartBarFireBtn, submitting && { opacity: 0.7 }]}
                 onPress={() => fireToKitchen(true)}
