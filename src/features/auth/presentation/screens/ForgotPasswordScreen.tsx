@@ -43,11 +43,26 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
   // See LoginScreen.tsx — drives the wrapper's border color since the browser's own
   // focus ring is off.
   const [focusedField, setFocusedField] = useState<string | null>(null);
+  // Same approach as CreateCafeScreen: a field is only flagged once the user has left
+  // it or pressed a button, so a freshly opened form isn't already covered in red.
+  const [touchedFields, setTouchedFields] = useState<Record<string, boolean>>({});
+  const [sendAttempted, setSendAttempted] = useState(false);
+  const [resetAttempted, setResetAttempted] = useState(false);
+
+  const emailError = isValidEmail(email) ? null : 'Enter a valid email address.';
+  const otpError = /^\d{6}$/.test(otp.trim()) ? null : 'Enter the 6-digit code sent to your email.';
+  const passwordError = newPassword.length >= 6 ? null : 'Password must be at least 6 characters.';
+
+  const markTouched = (field: string) => {
+    setFocusedField(null);
+    setTouchedFields((prev) => ({ ...prev, [field]: true }));
+  };
 
   const warn = (message: string) => dispatch(showToast({ message, icon: 'alert-circle-outline', tone: 'warning' }));
 
   const sendOtp = async () => {
-    if (!isValidEmail(email)) return warn('Enter a valid email address.');
+    setSendAttempted(true);
+    if (emailError) return warn(emailError);
     setSending(true);
     try {
       await authApi.forgotPasswordRequestOtp(email.trim().toLowerCase());
@@ -61,8 +76,9 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
   };
 
   const submitReset = async () => {
-    if (!/^\d{6}$/.test(otp.trim())) return warn('Enter the 6-digit code sent to your email.');
-    if (newPassword.length < 6) return warn('Password must be at least 6 characters.');
+    setResetAttempted(true);
+    if (otpError) return warn(otpError);
+    if (passwordError) return warn(passwordError);
 
     setResetting(true);
     try {
@@ -99,7 +115,11 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
 
           <View style={styles.card}>
             <Text style={styles.fieldLabel}>Work Email</Text>
-            <View style={[styles.inputWrapper, focusedField === 'email' && styles.inputWrapperFocused]}>
+            <View style={[
+              styles.inputWrapper,
+              focusedField === 'email' && styles.inputWrapperFocused,
+              !!((touchedFields.email || sendAttempted) && emailError) && styles.inputWrapperError,
+            ]}>
               <Icon name="at" size={20} color={COLORS.muted} style={styles.inputIcon} />
               <TextInput
                 style={[styles.input, webNoOutline]}
@@ -111,9 +131,12 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
                 autoCapitalize="none"
                 editable={!otpSent}
                 onFocus={() => setFocusedField('email')}
-                onBlur={() => setFocusedField(null)}
+                onBlur={() => markTouched('email')}
               />
             </View>
+            {!!((touchedFields.email || sendAttempted) && emailError) && (
+              <Text style={styles.errorText}>{emailError}</Text>
+            )}
 
             {!otpSent ? (
               <TouchableOpacity style={styles.primaryButton} onPress={sendOtp} disabled={sending} activeOpacity={0.85}>
@@ -127,7 +150,11 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
             ) : (
               <>
                 <Text style={[styles.fieldLabel, { marginTop: 16 }]}>Verification Code</Text>
-                <View style={[styles.inputWrapper, focusedField === 'otp' && styles.inputWrapperFocused]}>
+                <View style={[
+                  styles.inputWrapper,
+                  focusedField === 'otp' && styles.inputWrapperFocused,
+                  !!((touchedFields.otp || resetAttempted) && otpError) && styles.inputWrapperError,
+                ]}>
                   <Icon name="shield-key-outline" size={20} color={COLORS.muted} style={styles.inputIcon} />
                   <TextInput
                     style={[styles.input, webNoOutline]}
@@ -138,12 +165,19 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
                     keyboardType="number-pad"
                     maxLength={6}
                     onFocus={() => setFocusedField('otp')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => markTouched('otp')}
                   />
                 </View>
+                {!!((touchedFields.otp || resetAttempted) && otpError) && (
+                  <Text style={styles.errorText}>{otpError}</Text>
+                )}
 
                 <Text style={[styles.fieldLabel, { marginTop: 16 }]}>New Password</Text>
-                <View style={[styles.inputWrapper, focusedField === 'newPassword' && styles.inputWrapperFocused]}>
+                <View style={[
+                  styles.inputWrapper,
+                  focusedField === 'newPassword' && styles.inputWrapperFocused,
+                  !!((touchedFields.newPassword || resetAttempted) && passwordError) && styles.inputWrapperError,
+                ]}>
                   <Icon name="lock-outline" size={20} color={COLORS.muted} style={styles.inputIcon} />
                   <TextInput
                     style={[styles.input, webNoOutline]}
@@ -153,7 +187,7 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
                     placeholder="At least 6 characters"
                     placeholderTextColor={COLORS.placeholder}
                     onFocus={() => setFocusedField('newPassword')}
-                    onBlur={() => setFocusedField(null)}
+                    onBlur={() => markTouched('newPassword')}
                   />
                   <TouchableOpacity
                     onPress={() => setShowPassword(!showPassword)}
@@ -162,6 +196,9 @@ export const ForgotPasswordScreen = ({ navigation }: any) => {
                     <Icon name={showPassword ? 'eye-off-outline' : 'eye-outline'} size={20} color={COLORS.muted} />
                   </TouchableOpacity>
                 </View>
+                {!!((touchedFields.newPassword || resetAttempted) && passwordError) && (
+                  <Text style={styles.errorText}>{passwordError}</Text>
+                )}
 
                 <TouchableOpacity onPress={sendOtp} disabled={sending} style={styles.resendBtn}>
                   <Text style={styles.resendText}>{sending ? 'Resending…' : 'Resend code'}</Text>
@@ -244,6 +281,19 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   inputWrapperFocused: {
     borderColor: COLORS.accent,
     borderWidth: 2,
+  },
+  // Listed after inputWrapperFocused everywhere it's applied, so a focused field that
+  // still has an error stays red rather than reverting to the neutral accent border.
+  inputWrapperError: {
+    borderColor: '#B3261E',
+    borderWidth: 1.5,
+  },
+  // Matches LoginScreen.tsx's errorText so every auth form flags problems identically.
+  errorText: {
+    color: '#B3261E',
+    fontSize: 12,
+    marginTop: isDesktopWeb ? 4 : 3,
+    marginLeft: isDesktopWeb ? 4 : 3,
   },
   inputIcon: { marginRight: isDesktopWeb ? 10 : 7.5 },
   input: {
