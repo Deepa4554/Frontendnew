@@ -47,15 +47,16 @@ const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) :
  * The one payment-method picker used everywhere a bill gets settled — an existing order's
  * bill panel (OrderBillActions) and the Pay First sheet (POSCheckoutScreen, which settles a
  * local cart before the order even exists on the server) both embed this instead of keeping
- * their own separate payment UI. Cash is ticked by default and covers the whole bill; ticking
- * Card/UPI and typing an amount there automatically shrinks Cash's own amount by that much
- * (and unticks Cash once it hits zero), so splitting "₹50 by UPI, rest cash" is one number
- * typed into UPI, not manual mental math on both sides.
+ * their own separate payment UI. UPI is ticked by default and covers the whole bill; whichever
+ * other tender gets ticked and typed into, the remainder-absorbing leg recalculates itself
+ * (Cash absorbs it while it's ticked and untyped-in, otherwise UPI then Card take the role —
+ * see flexMethod), so splitting "₹50 cash, rest UPI" is one number typed into Cash, not manual
+ * mental math on both sides.
  *
  * Cash's own field stays directly editable (unlike Card/UPI's auto-only counterpart doesn't
- * exist here) so it can double as "how much cash was physically handed over" — type 500 for
- * a ₹498 bill and a "Return ₹2" label appears right below; type less than what's still owed
- * and it reads "Due" instead. Whatever's actually applied to the bill (for canSettle/splits)
+ * exist here) so it can double as "how much cash was physically handed over" — on a cash-only
+ * bill, type 500 for a ₹498 one and a "Return ₹2" label appears right below; type less than
+ * what's still owed and it reads "Due" instead. Whatever's actually applied to the bill (for canSettle/splits)
  * is capped at what's needed, never the raw handed-over figure — the excess is just change,
  * not part of the recorded payment.
  *
@@ -67,9 +68,11 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
   const { isDesktopWeb } = useResponsive();
   const styles = makeStyles(COLORS, isDesktopWeb);
 
-  const [selectedMethods, setSelectedMethods] = useState<PaymentMethod[]>(['Cash']);
+  // UPI is the default tender — it's what most counters actually take, so the common case
+  // settles without touching the picker at all.
+  const [selectedMethods, setSelectedMethods] = useState<PaymentMethod[]>(['UPI']);
   const [multiAmounts, setMultiAmounts] = useState<Record<PaymentMethod, string>>({
-    Cash: owed > 0 ? owed.toFixed(2) : '', Card: '', UPI: '',
+    Cash: '', Card: '', UPI: owed > 0 ? owed.toFixed(2) : '',
   });
   // Cash's tick state is auto-managed (see the effect below) — auto-ticked when Card/UPI
   // stop covering the whole bill, auto-unticked when they cover it fully — right up until
