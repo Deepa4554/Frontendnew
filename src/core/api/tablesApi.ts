@@ -35,6 +35,10 @@ export interface ApiTable {
 export interface CreateTableRequest {
   zone: string;
   seats: number;
+  /** The table's display name on the floor plan (e.g. "T9", "Corner Booth"). Optional —
+   * omitted/blank, the server auto-numbers the next "T{n}". Must be unique within the cafe;
+   * a clash comes back as a 409 with a readable message. See backend TablesController.Create. */
+  code?: string;
 }
 
 export const tablesApi = {

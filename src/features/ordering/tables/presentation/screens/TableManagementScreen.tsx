@@ -146,6 +146,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const [occupiedModal, setOccupiedModal] = useState<ApiTable | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
   const [newSeats, setNewSeats] = useState(4);
+  // The new table's display name (its code — what every order records as TableCode, and what
+  // the tile shows). Optional: left blank the server auto-numbers the next "T{n}", which is
+  // exactly what this screen did before naming was offered.
+  const [newTableName, setNewTableName] = useState('');
   // Zones only ever exist as a byproduct of tables that already have one — there's
   // no dedicated "create a floor" flow, so a genuinely new floor (e.g. a cafe's
   // first table on "Rooftop") had no way to get created. This mode swaps the
@@ -569,22 +573,46 @@ export const TableManagementScreen = ({ navigation }: any) => {
     Linking.openURL(url);
   };
 
+  // Only used as the name field's placeholder, so the cashier can see what leaving it blank
+  // would produce. Mirrors the server's own rule (highest T-number + 1, non-numeric names
+  // counting as 0) — it's a hint, not the value that gets sent: the server always decides.
+  const nextAutoCode = useMemo(() => {
+    const maxNum = allTables.reduce((max, t) => {
+      const n = parseInt(t.code.replace(/^T/i, ''), 10);
+      return Number.isFinite(n) && n > max ? n : max;
+    }, 0);
+    return `T${maxNum + 1}`;
+  }, [allTables]);
+
+  const closeAddModal = () => {
+    setAddModalVisible(false);
+    setNewZoneMode(false);
+    setNewZoneName('');
+    setNewTableName('');
+  };
+
   const handleAddTable = async () => {
     const targetZone = newZoneMode ? newZoneName.trim() : activeZone;
     if (newZoneMode && !targetZone) {
       dispatch(showToast({ message: 'Enter a name for the new floor/zone.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
+    const name = newTableName.trim();
+    // Blank is a deliberate, supported choice (auto-numbering) — only a name that's actually
+    // taken is worth stopping for. The server enforces this too (unique index + 409); catching
+    // it here just saves a round trip and points at the field the cashier has to change.
+    if (name && allTables.some((t) => t.code.toLowerCase() === name.toLowerCase())) {
+      dispatch(showToast({ message: `A table named "${name}" already exists.`, icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
     try {
-      await createTable.mutateAsync({ zone: targetZone, seats: newSeats });
+      await createTable.mutateAsync({ zone: targetZone, seats: newSeats, code: name || undefined });
       // Jump the active tab to wherever the table actually landed — most
       // noticeable for a brand-new zone, which otherwise wouldn't be visible
       // until the user found and tapped its (now newly-existing) tab themselves.
       setZone(targetZone);
-      setAddModalVisible(false);
       setNewSeats(4);
-      setNewZoneMode(false);
-      setNewZoneName('');
+      closeAddModal();
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not add table'), icon: 'alert-circle-outline', tone: 'danger' }));
     }
@@ -1165,7 +1193,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
         visible={addModalVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => { setAddModalVisible(false); setNewZoneMode(false); setNewZoneName(''); }}
+        onRequestClose={closeAddModal}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
@@ -1194,6 +1222,22 @@ export const TableManagementScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             )}
 
+            {/* Table name = the code shown on the tile and recorded on every order placed
+                there. Optional on purpose: a cafe that just wants T1, T2, T3… shouldn't have
+                to type anything, so blank keeps the old auto-numbering behaviour. */}
+            <Text style={[styles.modalLine, { marginTop: 14 }]}>Table Name</Text>
+            <View style={{ borderRadius: 8 }}>
+              <TextInput
+                style={styles.newZoneInput}
+                value={newTableName}
+                onChangeText={setNewTableName}
+                placeholder={`${nextAutoCode} (leave blank to auto-number)`}
+                placeholderTextColor={COLORS.placeholder}
+                maxLength={20}
+                autoCapitalize="characters"
+              />
+            </View>
+
             <Text style={[styles.modalLine, { marginTop: 14 }]}>Seats</Text>
             <View style={styles.seatStepperRow}>
               <TouchableOpacity style={styles.seatStepBtn} onPress={() => setNewSeats((n) => Math.max(1, n - 1))}>
@@ -1205,10 +1249,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             </View>
             <View style={styles.modalActions}>
-              <TouchableOpacity
-                style={styles.modalCancelBtn}
-                onPress={() => { setAddModalVisible(false); setNewZoneMode(false); setNewZoneName(''); }}
-              >
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={closeAddModal}>
                 <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
               <TouchableOpacity style={styles.modalPayBtn} onPress={handleAddTable} disabled={createTable.isPending}>
