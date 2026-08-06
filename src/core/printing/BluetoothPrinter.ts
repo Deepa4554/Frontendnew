@@ -8,6 +8,8 @@
  * hardware. Run `pod install` (iOS) and rebuild before trying it.
  */
 import { BLEPrinter } from 'react-native-thermal-receipt-printer';
+import { ReceiptLine } from './receiptFormat';
+import { buildMarkupFromLines } from './blePrinterMarkup';
 
 export interface BluetoothPrinterDevice {
   address: string;
@@ -36,7 +38,10 @@ export const BluetoothPrinter = {
     await BLEPrinter.connectPrinter(address);
   },
 
-  async printMarkup(markupText: string): Promise<void> {
-    await BLEPrinter.printBill(markupText);
+  /** Rendering lives behind this call rather than in PrinterService because the two platforms
+   * need different output for the same lines: BLEPrinter does its own ESC/POS encoding and
+   * wants tagged markup, while the browser has to emit raw bytes (see BluetoothPrinter.web.ts). */
+  async printLines(lines: ReceiptLine[], columns: number): Promise<void> {
+    await BLEPrinter.printBill(buildMarkupFromLines(lines, columns));
   },
 };

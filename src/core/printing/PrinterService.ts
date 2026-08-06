@@ -1,6 +1,5 @@
 import { getPrinterConfig, getEffectivePrinterConfig, PrinterConfig } from './printerConfig';
 import { buildEscPosFromLines, escPosToBase64 } from './escpos';
-import { buildMarkupFromLines } from './blePrinterMarkup';
 import { PrintableKot, PrintableKotItem, PrintableReceipt, PrintableTokenSlip, ReceiptLine, buildKotLines, buildReceiptLines, buildTokenSlipLines } from './receiptFormat';
 import { printApi } from '../api/printApi';
 import { BluetoothPrinter } from './BluetoothPrinter';
@@ -12,8 +11,9 @@ export interface PrintResult {
 
 /** Routes an already-built line model to whichever printer is configured on this
  * device — WiFi goes through the backend relay (works on both mobile and web, see
- * PrintController.cs), Bluetooth talks straight to the paired device (native app
- * only). Shared by printReceipt (customer bill) and printKot (kitchen ticket) below —
+ * PrintController.cs), Bluetooth talks straight to the printer: via BLEPrinter on native,
+ * via Web Bluetooth in Chrome/Android (see BluetoothPrinter.web.ts for that path's browser
+ * limitations). Shared by printReceipt (customer bill) and printKot (kitchen ticket) below —
  * same transports, different content. `config` defaults to this device's single global
  * printer; printKot passes a station-specific one when routing a split ticket. */
 async function printLines(lines: ReceiptLine[], config: PrinterConfig = getPrinterConfig()): Promise<PrintResult> {
@@ -42,7 +42,7 @@ async function printLines(lines: ReceiptLine[], config: PrinterConfig = getPrint
   }
   try {
     await BluetoothPrinter.connect(config.bluetoothAddress);
-    await BluetoothPrinter.printMarkup(buildMarkupFromLines(lines, columns));
+    await BluetoothPrinter.printLines(lines, columns);
     return { ok: true, message: 'Sent to printer.' };
   } catch (err) {
     return { ok: false, message: extractErrorMessage(err) };

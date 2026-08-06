@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -79,16 +79,33 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
     dispatch(showToast({ message: 'Printer settings updated.', icon: 'check-circle', tone: 'success' }));
   };
 
+  // Bluetooth works on both platforms now, but by different routes: native lists the devices
+  // the OS has already paired, while the browser (Web Bluetooth) can only pop its own chooser
+  // and has no access to the system's paired list at all — so every message below differs.
+  const isWeb = Platform.OS === 'web';
+
   const scanBluetooth = async () => {
     if (!BluetoothPrinter.isSupported()) {
-      dispatch(showToast({ message: 'Bluetooth printing needs the mobile app — not available in the browser.', icon: 'information-outline', tone: 'info' }));
+      dispatch(showToast({
+        message: isWeb
+          ? 'This browser can’t do Bluetooth. Use Chrome on Android, a WiFi printer, or the mobile app.'
+          : 'Bluetooth printing isn’t available on this device.',
+        icon: 'information-outline',
+        tone: 'info',
+      }));
       return;
     }
     try {
       setScanning(true);
       const found = await BluetoothPrinter.scanDevices();
       setDevices(found);
-      if (found.length === 0) dispatch(showToast({ message: 'Pair your printer in your phone’s Bluetooth settings first, then scan again.', icon: 'information-outline', tone: 'info' }));
+      if (found.length === 0) dispatch(showToast({
+        message: isWeb
+          ? 'No printer picked. Switch the printer on, tap Scan and choose it from the browser’s list.'
+          : 'Pair your printer in your phone’s Bluetooth settings first, then scan again.',
+        icon: 'information-outline',
+        tone: 'info',
+      }));
     } catch (err) {
       dispatch(showToast({ message: err instanceof Error ? err.message : 'Could not scan for Bluetooth devices.', icon: 'alert-circle-outline', tone: 'danger' }));
     } finally {
@@ -134,7 +151,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
         <Text style={styles.subtitle}>
           {stationKey
             ? `Printer for "${stationLabel ?? stationKey}" KOTs on this device. Leave unset and this station's tickets fall back to the device's default printer below.`
-            : 'Printer setup is per-device — each till/terminal can have its own printer. Bluetooth printing only works from the installed mobile app, not the browser.'}
+            : 'Printer setup is per-device — each till/terminal can have its own printer.'}
         </Text>
 
         <Text style={styles.fieldLabel}>Printer Type</Text>
@@ -199,7 +216,9 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
           <View style={styles.card}>
             <TouchableOpacity style={styles.scanBtn} onPress={scanBluetooth} disabled={scanning}>
               {scanning ? <ActivityIndicator size="small" color={COLORS.accent} /> : <Icon name="magnify" size={16} color={COLORS.accent} />}
-              <Text style={styles.scanBtnText}>{scanning ? 'Scanning…' : 'Scan for paired devices'}</Text>
+              <Text style={styles.scanBtnText}>
+                {scanning ? 'Scanning…' : isWeb ? 'Scan for nearby printers' : 'Scan for paired devices'}
+              </Text>
             </TouchableOpacity>
 
             {devices.map((d) => (
@@ -226,6 +245,12 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
                 </View>
               </View>
             )}
+
+            <Text style={styles.hint}>
+              {isWeb
+                ? 'Chrome on Android/desktop only, over https — iPhone browsers can’t do Bluetooth at all. Only BLE printers work here; older Bluetooth Classic units need the mobile app. The browser forgets the printer on every page reload, so tap Scan once after reloading.'
+                : 'Pair the printer in your phone’s Bluetooth settings first, then scan here to pick it.'}
+            </Text>
           </View>
         )}
 
