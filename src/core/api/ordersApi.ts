@@ -248,6 +248,18 @@ export const ordersApi = {
   confirmGuestOrder: (id: number) => apiClient.post<ApiOrder>(`/orders/${id}/confirm`).then((r) => r.data),
   addItem: (id: number, req: CreateOrderItemRequest) =>
     apiClient.post<ApiOrder>(`/orders/${id}/items`, req).then((r) => r.data),
+  /** Corrects an existing line's quantity — `qty` is the line's FINAL quantity, not a delta,
+   * and must be >= 1 (use `removeItem` to drop the line entirely).
+   *
+   * Unfired lines are simply rewritten. On a FIRED line (see backend
+   * OrdersController.UpdateItemQty): a decrease is Owner/Manager-only and can reach units the
+   * system already recorded as served — that's the till reconciling a bill ("was it 3 lassis or
+   * 4?") — needing a `reason` once it goes past the not-yet-cooked units. An increase raises the
+   * same line in place, no extra line and no extra KOT; on a line that's still cooking the added
+   * units enter at New, and on a fully-served one they join the served units so nothing is sent
+   * back to the kitchen. Staff wanting a genuinely separate round use Add Item instead. */
+  updateItemQty: (id: number, itemId: number, qty: number, reason?: string) =>
+    apiClient.patch<ApiOrder>(`/orders/${id}/items/${itemId}/qty`, { qty, reason }).then((r) => r.data),
   /** reason is required once the item is Preparing/Ready (server 400s without it) —
    * optional while still New/Read/unfired. */
   removeItem: (id: number, itemId: number, reason?: string) =>

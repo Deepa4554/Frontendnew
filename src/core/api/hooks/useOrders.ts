@@ -1,5 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit } from '../ordersApi';
+import { PagedResult } from '../types';
 import { queryKeys } from './queryKeys';
 
 export const useOrders = (params?: { activeOnly?: boolean; branchId?: number | null; page?: number; pageSize?: number; from?: string; to?: string; kdsReady?: boolean; orderType?: string }) =>
@@ -211,6 +212,64 @@ export const useAddOrderItem = () => {
     mutationFn: ({ id, menuItemId, qty, modifier, variantId, modifierOptionIds }: { id: number; menuItemId: number; qty: number; modifier?: string; variantId?: number; modifierOptionIds?: number[] }) =>
       ordersApi.addItem(id, { menuItemId, qty, modifier, variantId, modifierOptionIds }),
     onSuccess: () => invalidateOrderGraph(qc),
+  });
+};
+
+/** Writes `order` into every cached copy of it — its own `order(id)` entry plus its row inside
+ *  any `orders(params)` list currently held. Lets a mutation that already returns the updated
+ *  order skip refetching one: on this deployment the active-orders list costs ~6s in the browser
+ *  (see useOrders' own notes and OrdersController.List), which is not a price worth paying for
+ *  data the response just handed over. */
+const patchCachedOrder = (qc: ReturnType<typeof useQueryClient>, order: ApiOrder) => {
+  qc.setQueryData(queryKeys.order(order.id), order);
+  qc.getQueryCache().findAll({ queryKey: ['orders'] }).forEach((cached) => {
+    // ['orders', <number>] is a single order (handled above); ['orders', 'rush-forecast'] and
+    // friends carry no items array and fall out on the next guard.
+    if (typeof cached.queryKey[1] === 'number') return;
+    const page = cached.state.data as PagedResult<ApiOrder> | undefined;
+    if (!page?.items?.some((o) => o.id === order.id)) return;
+    qc.setQueryData<PagedResult<ApiOrder>>(cached.queryKey, {
+      ...page,
+      items: page.items.map((o) => (o.id === order.id ? order : o)),
+    });
+  });
+};
+
+/** Edits one line's quantity in place — see ordersApi.updateItemQty for the fired-line rules.
+ *
+ *  Optimistic, and deliberately does NOT invalidate the order queries. A cashier correcting a
+ *  count taps this repeatedly, and the old invalidate-everything approach made each tap cost the
+ *  round trip PLUS a full refetch of the active-orders list, tables, customers and inventory —
+ *  seconds of spinner on a database that answers from Tokyo. The number now moves on tap, the
+ *  server's returned order replaces the guess when it lands, and the caches that genuinely go
+ *  stale (stock came off the shelf; the bill total moved) are marked stale without a refetch, so
+ *  they refresh when someone next looks at them. */
+export const useUpdateOrderItemQty = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, itemId, qty, reason }: { id: number; itemId: number; qty: number; reason?: string }) =>
+      ordersApi.updateItemQty(id, itemId, qty, reason),
+    onMutate: async ({ id, itemId, qty }) => {
+      await qc.cancelQueries({ queryKey: queryKeys.order(id) });
+      const previousOrder = qc.getQueryData<ApiOrder>(queryKeys.order(id));
+      if (previousOrder) {
+        // Line quantity only — totals are the server's to compute (per-line tax slabs, discount
+        // apportionment), and a wrong guess at the money is worse than a half-second stale one.
+        qc.setQueryData<ApiOrder>(queryKeys.order(id), {
+          ...previousOrder,
+          items: previousOrder.items.map((i) => (i.id === itemId ? { ...i, qty } : i)),
+        });
+      }
+      return { previousOrder, id };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.previousOrder) qc.setQueryData(queryKeys.order(ctx.id), ctx.previousOrder);
+    },
+    onSuccess: (updated) => {
+      patchCachedOrder(qc, updated);
+      qc.invalidateQueries({ queryKey: queryKeys.tables, refetchType: 'none' });
+      qc.invalidateQueries({ queryKey: ['inventory'], refetchType: 'none' });
+    },
   });
 };
 

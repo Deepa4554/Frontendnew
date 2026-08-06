@@ -23,6 +23,8 @@ import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
+import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
+import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
 import { modalHeadingOverride } from '../../../../../shared/design/commonStyles';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
@@ -74,6 +76,8 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
   const payOrder = usePayOrder();
   const cancelBatch = useCancelBatch();
   const removeOrderItem = useRemoveOrderItem();
+  // Quantity corrections on every line below — see useItemQtyEditor for the fired-line rules.
+  const qtyEditor = useItemQtyEditor(order?.id ?? null);
   const [printingBill, setPrintingBill] = useState(false);
   const [printingKot, setPrintingKot] = useState(false);
   // Prompt for a reason once an item is already Preparing/Ready — matches the server's
@@ -429,7 +433,14 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                           const servable = item.status !== 'SERVED';
                           return (
                             <View key={item.id} style={styles.itemRow}>
-                              <Text style={styles.itemQty}>{item.qty}×</Text>
+                              {/* No served-units floor — see TokenDashboardScreen for why the
+                                  till has to be able to correct an already-served count. */}
+                              <ItemQtyStepper
+                                qty={item.qty}
+                                disabled={order.paid}
+                                pending={qtyEditor.pendingItemId === item.id}
+                                onChange={(next) => qtyEditor.request(item, next)}
+                              />
                               <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                               <TouchableOpacity
                                 disabled={!servable || serveItem.isPending}
@@ -452,7 +463,12 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                   {/* Unfired lines (just-added via "Add Item", not yet part of any KOT) */}
                   {order.items.filter((i) => i.fireBatch === 0 && !i.voided).map((item) => (
                     <View key={item.id} style={styles.itemRow}>
-                      <Text style={styles.itemQty}>{item.qty}×</Text>
+                      <ItemQtyStepper
+                        qty={item.qty}
+                        disabled={order.paid}
+                        pending={qtyEditor.pendingItemId === item.id}
+                        onChange={(next) => qtyEditor.request(item, next)}
+                      />
                       <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.unfiredTag}><Text style={styles.unfiredTagText}>NEW</Text></View>
                       {!order.paid && (
@@ -500,6 +516,10 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* Same wastage bargain as the void prompt below, for a quantity cut rather than a
+          whole line. */}
+      <QtyReasonPrompt editor={qtyEditor} />
 
       {/* Reason prompt — item is already Preparing/Ready, so removing it won't reverse
           stock (food's genuinely spent); the server requires a reason for the record. */}
@@ -607,7 +627,6 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   unfiredTag: { alignSelf: 'flex-start', backgroundColor: COLORS.warningBg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 'auto' },
   unfiredTagText: { fontSize: 10, fontWeight: '800', color: COLORS.warning },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
-  itemQty: { fontSize: 13, fontWeight: '700', color: COLORS.heading, width: 30 },
   itemName: { flex: 1, minWidth: 0, fontSize: 13, color: COLORS.heading },
   itemStatusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   itemStatusPillText: { fontSize: 11, fontWeight: '800' },

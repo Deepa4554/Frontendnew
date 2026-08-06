@@ -661,6 +661,27 @@ export const POSCheckoutScreen = () => {
     );
   };
 
+  // Direct quantity entry on a cart line. The ± buttons are right for a ±1 correction, but
+  // ringing up 12 of something shouldn't cost eleven taps — tapping the number types over it
+  // instead. Same affordance the order-detail screens' ItemQtyStepper offers on an order that
+  // already exists, so the gesture is the same before and after the order is placed.
+  const [qtyEditLineId, setQtyEditLineId] = useState<string | null>(null);
+  const [qtyDraft, setQtyDraft] = useState('');
+
+  const beginQtyEdit = (line: CartLine) => {
+    setQtyDraft(String(line.qty));
+    setQtyEditLineId(line.id);
+  };
+
+  // Anything unparseable (or a cleared field) leaves the line as it was rather than dropping to
+  // 0 — 0 deletes the line above, and a mistyped keystroke must not be able to do that silently.
+  const commitQtyEdit = (line: CartLine) => {
+    setQtyEditLineId(null);
+    const parsed = parseInt(qtyDraft, 10);
+    if (!Number.isFinite(parsed) || parsed < 1 || parsed === line.qty) return;
+    setCart((prev) => prev.map((c) => (c.id === line.id ? { ...c, qty: parsed } : c)));
+  };
+
   const subtotal = cart.reduce((sum, item) => sum + item.price * item.qty, 0);
   const discountAmount = subtotal * (discountPct / 100);
   const taxable = Math.max(0, subtotal - discountAmount);
@@ -1614,7 +1635,23 @@ export const POSCheckoutScreen = () => {
             <TouchableOpacity style={styles.stepperBtn} onPress={() => updateQty(line.id, -1)}>
               <Text style={styles.stepperBtnText}>−</Text>
             </TouchableOpacity>
-            <Text style={styles.stepperValue}>{line.qty}</Text>
+            {qtyEditLineId === line.id ? (
+              <TextInput
+                style={[styles.stepperValue, styles.stepperValueInput]}
+                value={qtyDraft}
+                onChangeText={setQtyDraft}
+                onBlur={() => commitQtyEdit(line)}
+                onSubmitEditing={() => commitQtyEdit(line)}
+                keyboardType="number-pad"
+                selectTextOnFocus
+                autoFocus
+                maxLength={3}
+              />
+            ) : (
+              <TouchableOpacity onPress={() => beginQtyEdit(line)} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
+                <Text style={styles.stepperValue}>{line.qty}</Text>
+              </TouchableOpacity>
+            )}
             <TouchableOpacity style={styles.stepperBtn} onPress={() => updateQty(line.id, 1)}>
               <Text style={styles.stepperBtnText}>+</Text>
             </TouchableOpacity>
@@ -3494,6 +3531,15 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     color: COLORS.heading,
     minWidth: 18,
     textAlign: 'center',
+  },
+  // Overrides only what the field needs on top of stepperValue, so the typed number sits exactly
+  // where the static one did. fontSize 16: anything smaller makes mobile Safari zoom the whole
+  // page in the moment this takes focus.
+  stepperValueInput: {
+    fontSize: 16,
+    minWidth: 32,
+    paddingVertical: 0,
+    paddingHorizontal: 2,
   },
   cartPrice: {
     fontSize: 14,

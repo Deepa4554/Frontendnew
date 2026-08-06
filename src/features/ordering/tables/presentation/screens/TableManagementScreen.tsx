@@ -36,6 +36,8 @@ import { CategoryFilterModal, CategoryFilterTrigger } from '../../../../../share
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
 import { WhatsAppTrackingQr } from '../../../../../shared/components/billing/WhatsAppTrackingQr';
 import { PaymentMethod } from '../../../../../shared/components/billing/PaymentMethodPicker';
+import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
+import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
 import { equalShares, paidShareCount } from '../../../../../core/billing/splitBill';
 
 import { INPUT_BORDER_WIDTH, modalHeadingOverride } from '../../../../../shared/design/commonStyles';
@@ -175,6 +177,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const [splitMethod, setSplitMethod] = useState<PaymentMethod>('Cash');
   const [customAmount, setCustomAmount] = useState('');
   const [collecting, setCollecting] = useState(false);
+
+  // Quantity corrections on every item row below — see useItemQtyEditor for the fired-line rules.
+  const qtyEditor = useItemQtyEditor(occupiedOrder?.id ?? null);
 
   const unfiredCount = occupiedOrder?.items.filter((i) => i.fireBatch === 0).length ?? 0;
   // Item list (open/inKitchen view) only makes sense while there's still kitchen work to
@@ -924,7 +929,12 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 <View style={styles.occItemsScroll}>
                   {occupiedOrder.items.map((item) => (
                     <View key={item.id} style={styles.occItemRow}>
-                      <Text style={styles.occItemQty}>{item.qty}×</Text>
+                      <ItemQtyStepper
+                        qty={item.qty}
+                        disabled={occupiedOrder.paid}
+                        pending={qtyEditor.pendingItemId === item.id}
+                        onChange={(next) => qtyEditor.request(item, next)}
+                      />
                       <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.occUnfiredTag}><Text style={styles.occUnfiredTagText}>NEW</Text></View>
                       <Text style={styles.occItemPrice}>₹{(item.price * item.qty).toFixed(2)}</Text>
@@ -961,7 +971,15 @@ export const TableManagementScreen = ({ navigation }: any) => {
                           return (
                             <View key={item.id} style={styles.occItemRow}>
                               <View style={[styles.occItemStatusDot, { backgroundColor: dotColor }]} />
-                              <Text style={styles.occItemQty}>{item.qty}×</Text>
+                              {/* No served-units floor — see TokenDashboardScreen for why the
+                                  till has to be able to correct an already-served count. A voided
+                                  line isn't editable at all; it's history. */}
+                              <ItemQtyStepper
+                                qty={item.qty}
+                                disabled={occupiedOrder.paid || item.voided}
+                                pending={qtyEditor.pendingItemId === item.id}
+                                onChange={(next) => qtyEditor.request(item, next)}
+                              />
                               <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
                               {/* The status label IS the tap target — one tap jumps straight to
                                   Served, no confirmation, no stage-by-stage stepping. */}
@@ -996,7 +1014,12 @@ export const TableManagementScreen = ({ navigation }: any) => {
                       {occupiedOrder.items.filter((i) => i.fireBatch === 0).map((item) => (
                         <View key={item.id} style={styles.occItemRow}>
                           <View style={[styles.occItemStatusDot, { backgroundColor: COLORS.muted }]} />
-                          <Text style={styles.occItemQty}>{item.qty}×</Text>
+                          <ItemQtyStepper
+                            qty={item.qty}
+                            disabled={occupiedOrder.paid}
+                            pending={qtyEditor.pendingItemId === item.id}
+                            onChange={(next) => qtyEditor.request(item, next)}
+                          />
                           <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
                           {/* Same slot the fired rows put their status pill in, so the columns
                               line up. Not a TouchableOpacity: there's no kitchen stage to
@@ -1264,6 +1287,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* Same wastage bargain as the void prompt below, for a quantity cut rather than a
+          whole line. */}
+      <QtyReasonPrompt editor={qtyEditor} />
 
       {/* Reason prompt — item is already Preparing/Ready, so voiding it won't reverse
           stock (food's genuinely spent); the server requires a reason for the record. */}
@@ -1718,7 +1745,6 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     borderBottomWidth: 1,
     borderBottomColor: COLORS.divider,
   },
-  occItemQty: { fontSize: fs(13), fontWeight: '700', color: COLORS.muted, minWidth: 24 },
   occItemName: { fontSize: fs(14), color: COLORS.heading, flex: 1, minWidth: 0 },
   occItemStatusDot: { width: 8, height: 8, borderRadius: 4 },
   occItemStatusPill: { borderRadius: 6, paddingHorizontal: isDesktopWeb ? 5 : 5.25, paddingVertical: isDesktopWeb ? 1.5 : 1.5 },
