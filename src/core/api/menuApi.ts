@@ -13,6 +13,10 @@ export interface MenuItem {
   description: string | null;
   available: boolean;
   popular: boolean;
+  /** Staff pinned this to the front of the POS grid. Cafe-wide, and POS-only — the customer QR
+   * menu reads the same endpoint but keeps its plain alphabetical order, so the ordering is
+   * applied by the POS grid rather than by the server (see backend MenuItem.Pinned). */
+  pinned: boolean;
   productType: ProductType;
   linkedInventoryItemId: number | null;
   /** Which kitchen station preps this item — FK to a managed per-tenant Station (see
@@ -215,6 +219,8 @@ export const menuApi = {
     apiClient.post<CreateMenuItemRequest[]>('/menu-items/categorize-text', { ocrText }).then((r) => r.data),
   update: (id: number, req: UpdateMenuItemRequest) => apiClient.patch<MenuItem>(`/menu-items/${id}`, req).then((r) => r.data),
   toggleAvailability: (id: number) => apiClient.patch<MenuItem>(`/menu-items/${id}/toggle-availability`).then((r) => r.data),
+  /** Pins/unpins an item to the front of the POS grid — see MenuItem.pinned. */
+  togglePinned: (id: number) => apiClient.patch<MenuItem>(`/menu-items/${id}/toggle-pinned`).then((r) => r.data),
   remove: (id: number) => apiClient.delete<void>(`/menu-items/${id}`).then((r) => r.data),
   /** Wipes the entire menu — past orders are untouched (see MenuController.DeleteAll). */
   removeAll: () => apiClient.delete<void>('/menu-items').then((r) => r.data),

@@ -7,7 +7,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { selectTableForOrder, clearSelectedTable, clearResumeOrder, setPendingOrderType } from '../../../../../core/store/tablesSlice';
 import { showToast } from '../../../../../core/store/uiSlice';
-import { useMenuItems } from '../../../../../core/api/hooks/useMenu';
+import { useMenuItems, useToggleMenuPinned } from '../../../../../core/api/hooks/useMenu';
 import { useTables } from '../../../../../core/api/hooks/useTables';
 import { useBranches } from '../../../../../core/api/hooks/useBranches';
 import { useCreateOrder, useFireOrder, useOrder, useAddOrderItem, usePayOrder, useBillCharges } from '../../../../../core/api/hooks/useOrders';
@@ -155,9 +155,10 @@ const NoteSuggestionChips = ({
  * React Query's structural sharing keeps an unchanged item's identity stable across
  * refetches — so a row re-renders only when its own item's data actually changes.
  * The JSX is exactly the block that previously lived inline in menuAndCategoryPicker. */
-const MenuRow = React.memo(({ item, onPress, styles, COLORS, isDesktopWeb }: {
+const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesktopWeb }: {
   item: ApiMenuItem;
   onPress: (item: ApiMenuItem) => void;
+  onTogglePin: (item: ApiMenuItem) => void;
   styles: ReturnType<typeof makeStyles>;
   COLORS: ReturnType<typeof useThemeColors>;
   isDesktopWeb: boolean;
@@ -219,6 +220,21 @@ const MenuRow = React.memo(({ item, onPress, styles, COLORS, isDesktopWeb }: {
     )}
 
     <View style={styles.menuRowAction}>
+      {/* Its own tap target inside the row — the row body adds to the cart, so pinning has to
+          be something you can hit without ringing the item up by accident. Stays visible when
+          unpinned (a faint outline) rather than appearing on hover: on a touch till there is no
+          hover, and a control nobody can find is a control nobody uses. */}
+      <TouchableOpacity
+        onPress={() => onTogglePin(item)}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
+        style={styles.pinBtn}
+      >
+        <Icon
+          name={item.pinned ? 'pin' : 'pin-outline'}
+          size={15}
+          color={item.pinned ? COLORS.accent : COLORS.divider}
+        />
+      </TouchableOpacity>
       <View style={[styles.addBtn, !item.available && styles.addBtnDisabled]}>
         <Text style={styles.addBtnText}>ADD</Text>
         <Icon name="plus" size={11} color={COLORS.accent} />
@@ -439,13 +455,19 @@ export const POSCheckoutScreen = () => {
       (dietFilter === 'ALL' ||
         (dietFilter === 'VEG' && (m.vegNonVegType == null || m.vegNonVegType === 'Veg' || m.vegNonVegType === 'Jain')) ||
         (dietFilter === 'NONVEG' && m.vegNonVegType === 'NonVeg')));
-    if (q === '') return matched;
+    // Pinned items lead every view — the handful a till rings up all day shouldn't have to be
+    // found in the alphabetical scroll (see backend MenuItem.Pinned). Applied here rather than in
+    // the query because MenuController.List also serves the customer QR menu, which keeps its own
+    // plain ordering. `sort` is stable, so everything else holds the server's Category/Name order.
+    const byPin = (a: typeof matched[number], b: typeof matched[number]) =>
+      Number(b.pinned) - Number(a.pinned);
+    if (q === '') return [...matched].sort(byPin);
     // An exact short-code match is almost always what the user meant (e.g. "CAPP"),
-    // so float those to the top — otherwise preserve the original menu order.
+    // so float those above even a pinned item — typing a code is a more specific ask than pinning.
     return [...matched].sort((a, b) => {
       const aExact = (a.shortCode ?? '').toLowerCase() === q ? 0 : 1;
       const bExact = (b.shortCode ?? '').toLowerCase() === q ? 0 : 1;
-      return aExact - bExact;
+      return aExact - bExact || byPin(a, b);
     });
   }, [menuItems, activeCategory, menuSearchQuery, dietFilter]);
 
@@ -528,6 +550,23 @@ export const POSCheckoutScreen = () => {
   const addToCartRef = useRef(addToCart);
   addToCartRef.current = addToCart;
   const onMenuRowPress = useCallback((item: ApiMenuItem) => addToCartRef.current(item), []);
+
+  // Pin/unpin straight from the till — see MenuRow's pin button. Stable identity for the same
+  // React.memo reason as onMenuRowPress above; the mutation object itself never changes identity,
+  // so this closure has nothing stale to capture.
+  const togglePinned = useToggleMenuPinned();
+  const togglePinnedRef = useRef(togglePinned);
+  togglePinnedRef.current = togglePinned;
+  const onMenuRowTogglePin = useCallback((item: ApiMenuItem) => {
+    togglePinnedRef.current.mutate(item.id, {
+      onError: (err) => dispatch(showToast({
+        message: getApiErrorMessage(err, 'Could not update pin'),
+        icon: 'alert-circle-outline',
+        tone: 'danger',
+      })),
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const confirmOptionsAdd = () => {
     if (!optionsItem) return;
@@ -1829,6 +1868,7 @@ export const POSCheckoutScreen = () => {
               key={item.id}
               item={item}
               onPress={onMenuRowPress}
+              onTogglePin={onMenuRowTogglePin}
               styles={styles}
               COLORS={COLORS}
               isDesktopWeb={isDesktopWeb}
@@ -3100,9 +3140,18 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     marginLeft: 10,
     flexShrink: 0,
   },
+  // Row rather than a stack, so the pin sits BESIDE the ADD button instead of adding a second
+  // line of height to every row in the grid. Widened just enough to take the pin.
   menuRowAction: {
+    flexDirection: 'row',
     alignItems: 'center',
-    width: 68,
+    gap: 4,
+    width: 88,
+  },
+  pinBtn: {
+    alignItems: 'center',
+    justifyContent: 'center',
+    width: 18,
   },
   addBtn: {
     flexDirection: 'row',
@@ -3115,7 +3164,8 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     paddingVertical: 2.5,
     paddingHorizontal: 3,
     backgroundColor: COLORS.cardAlt,
-    width: '100%',
+    // flex, not width:'100%' — it now shares the row above with the pin button.
+    flex: 1,
   },
   addBtnDisabled: {
     borderColor: COLORS.inputBorder,

@@ -69,6 +69,16 @@ export const useToggleMenuAvailability = () => {
   });
 };
 
+/** Pins/unpins an item to the front of the POS grid — see menuApi.togglePinned. Only the menu
+ *  list needs refreshing: pinning changes nothing about what sells, so best-sellers is untouched. */
+export const useToggleMenuPinned = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => menuApi.togglePinned(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.menu }),
+  });
+};
+
 export const useDeleteMenuItem = () => {
   const qc = useQueryClient();
   return useMutation({
