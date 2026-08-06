@@ -14,15 +14,40 @@ const GS = 0x1d;
 
 const CMD = {
   INIT: [ESC, 0x40],
+  // Font B (9x17 dots) instead of the default Font A (12x24). On the same 384-dot 58mm head
+  // that's 42 characters a line rather than 32 — the density every other billing app prints
+  // at, and enough for a long item name and its price to share one line instead of the name
+  // being truncated to fit. Callers must build their lines against the matching width (see
+  // FONT_B_COLUMNS) — this command changes what fits, not what's composed.
+  FONT_B: [ESC, 0x4d, 0x01],
   ALIGN_LEFT: [ESC, 0x61, 0x00],
   ALIGN_CENTER: [ESC, 0x61, 0x01],
   BOLD_ON: [ESC, 0x45, 0x01],
   BOLD_OFF: [ESC, 0x45, 0x00],
-  DOUBLE_SIZE_ON: [GS, 0x21, 0x11],
-  DOUBLE_SIZE_OFF: [GS, 0x21, 0x00],
+  // Emphasis for a `big` line comes in two strengths, picked per line by renderLine.
+  //
+  // WIDE (height + width) is what a heading wants — the cafe name on a bill, a token number —
+  // but it halves how many characters fit, and every line is composed against the full
+  // `columns`. A long line printed WIDE therefore ran off the paper and continued on the next
+  // one mid-word: a real 58mm KOT printed "[N] 1x Chicken B" / "iryani". So renderLine only
+  // uses WIDE when the text genuinely fits in half the width, and falls back to TALL (double
+  // height, normal width) otherwise — still clearly emphasised, still honest about columns.
+  TALL_ON: [GS, 0x21, 0x01],
+  WIDE_ON: [GS, 0x21, 0x11],
+  SIZE_OFF: [GS, 0x21, 0x00],
   FEED: (lines: number) => [ESC, 0x64, lines],
   CUT: [GS, 0x56, 0x00],
 };
+
+/**
+ * Characters per line once FONT_B is in effect, keyed by the paper's Font-A width — which is
+ * what Printer Settings stores (32 = 58mm, 48 = 80mm). Both are just the head's dot count
+ * divided by the glyph width: 384/9 = 42, 576/9 = 64. Only the transports that emit these
+ * bytes themselves may use these numbers; the native BLE library encodes its own text at
+ * Font A, so that path has to keep composing against the paper width (see PrinterService).
+ */
+export const toFontBColumns = (paperColumns: number): number =>
+  ({ 32: 42, 48: 64 } as Record<number, number>)[paperColumns] ?? Math.floor((paperColumns * 12) / 9);
 
 const toAscii = (s: string) =>
   s
@@ -84,9 +109,10 @@ function renderLine(b: ByteBuilder, line: ReceiptLine, columns: number) {
     case 'text': {
       b.push(...(line.align === 'center' ? CMD.ALIGN_CENTER : CMD.ALIGN_LEFT));
       if (line.bold) b.push(...CMD.BOLD_ON);
-      if (line.big) b.push(...CMD.DOUBLE_SIZE_ON);
+      // Double-width only where it still fits — see CMD.WIDE_ON.
+      if (line.big) b.push(...(line.text.length * 2 <= columns ? CMD.WIDE_ON : CMD.TALL_ON));
       b.line(line.text);
-      if (line.big) b.push(...CMD.DOUBLE_SIZE_OFF);
+      if (line.big) b.push(...CMD.SIZE_OFF);
       if (line.bold) b.push(...CMD.BOLD_OFF);
       return;
     }
@@ -104,6 +130,7 @@ function renderLine(b: ByteBuilder, line: ReceiptLine, columns: number) {
 export function buildEscPosFromLines(lines: ReceiptLine[], columns = 32): Uint8Array {
   const b = new ByteBuilder();
   b.push(...CMD.INIT);
+  b.push(...CMD.FONT_B);
   for (const line of lines) renderLine(b, line, columns);
   b.push(...CMD.ALIGN_LEFT);
   b.push(...CMD.FEED(3));

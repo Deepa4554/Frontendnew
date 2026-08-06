@@ -27,6 +27,11 @@ async function ensureInit() {
 export const BluetoothPrinter = {
   isSupported: () => true,
 
+  /** False: BLEPrinter does its own ESC/POS encoding from tagged markup and gives no way to
+   * select a font, so this path always prints at the printer's default Font A. PrinterService
+   * reads this to decide how wide to compose lines — see its columnsFor(). */
+  printsCompactFont: false,
+
   async scanDevices(): Promise<BluetoothPrinterDevice[]> {
     await ensureInit();
     const devices = await BLEPrinter.getDeviceList();

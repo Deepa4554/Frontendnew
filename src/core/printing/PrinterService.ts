@@ -1,5 +1,5 @@
 import { getPrinterConfig, getEffectivePrinterConfig, PrinterConfig } from './printerConfig';
-import { buildEscPosFromLines, escPosToBase64 } from './escpos';
+import { buildEscPosFromLines, escPosToBase64, toFontBColumns } from './escpos';
 import { PrintableKot, PrintableKotItem, PrintableReceipt, PrintableTokenSlip, ReceiptLine, buildKotLines, buildReceiptLines, buildTokenSlipLines } from './receiptFormat';
 import { printApi } from '../api/printApi';
 import { BluetoothPrinter } from './BluetoothPrinter';
@@ -9,6 +9,22 @@ export interface PrintResult {
   message: string;
 }
 
+/**
+ * How many characters a line may hold on this printer — the single number every build*Lines
+ * call composes against, so it has to be decided before any line exists, not at render time.
+ *
+ * The paper's own width (config.columns: 32 for 58mm, 48 for 80mm) is the Font A figure.
+ * Whichever transport emits ESC/POS bytes itself selects the smaller Font B (see escpos.ts),
+ * which fits noticeably more per line — so those get the wider count. The native Bluetooth
+ * library encodes tagged markup on our behalf with no font control, so that path must keep
+ * composing at the paper width or every line would overrun and wrap.
+ */
+const columnsFor = (config: PrinterConfig): number => {
+  const paperColumns = config.columns ?? 32;
+  const emitsOwnBytes = config.type === 'wifi' || (config.type === 'bluetooth' && BluetoothPrinter.printsCompactFont);
+  return emitsOwnBytes ? toFontBColumns(paperColumns) : paperColumns;
+};
+
 /** Routes an already-built line model to whichever printer is configured on this
  * device — WiFi goes through the backend relay (works on both mobile and web, see
  * PrintController.cs), Bluetooth talks straight to the printer: via BLEPrinter on native,
@@ -17,7 +33,7 @@ export interface PrintResult {
  * same transports, different content. `config` defaults to this device's single global
  * printer; printKot passes a station-specific one when routing a split ticket. */
 async function printLines(lines: ReceiptLine[], config: PrinterConfig = getPrinterConfig()): Promise<PrintResult> {
-  const columns = config.columns ?? 32;
+  const columns = columnsFor(config);
 
   if (config.type === 'none') {
     return { ok: false, message: 'No printer set up yet. Go to Printer Settings to add one.' };
@@ -56,7 +72,7 @@ export const PrinterService = {
    * station-scoped config instead of this device's stored default. */
   printReceipt(receipt: PrintableReceipt, configOverride?: PrinterConfig): Promise<PrintResult> {
     const config = configOverride ?? getPrinterConfig();
-    return printLines(buildReceiptLines(receipt, config.columns ?? 32), config);
+    return printLines(buildReceiptLines(receipt, columnsFor(config)), config);
   },
   /** Kitchen ticket — items only, no prices. See Token Dashboard's "Print KOT". When the
    * order's items span more than one kitchen station (see PrintableKotItem.stationName),
@@ -76,13 +92,13 @@ export const PrinterService = {
     if (groups.size <= 1) {
       const stationName = kot.items[0]?.stationName;
       const config = getEffectivePrinterConfig(stationName);
-      return printLines(buildKotLines(kot, config.columns ?? 32), config);
+      return printLines(buildKotLines(kot, columnsFor(config)), config);
     }
 
     const results: { station: string; result: PrintResult }[] = [];
     for (const [stationName, items] of groups) {
       const config = getEffectivePrinterConfig(stationName || undefined);
-      const result = await printLines(buildKotLines({ ...kot, items }, config.columns ?? 32), config);
+      const result = await printLines(buildKotLines({ ...kot, items }, columnsFor(config)), config);
       results.push({ station: stationName || 'Kitchen', result });
     }
 
@@ -96,7 +112,7 @@ export const PrinterService = {
    * for the customer, not any one kitchen station). */
   printTokenSlip(slip: PrintableTokenSlip, configOverride?: PrinterConfig): Promise<PrintResult> {
     const config = configOverride ?? getPrinterConfig();
-    return printLines(buildTokenSlipLines(slip, config.columns ?? 32), config);
+    return printLines(buildTokenSlipLines(slip, columnsFor(config)), config);
   },
 };
 

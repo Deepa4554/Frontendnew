@@ -138,6 +138,48 @@ export const toPrinterAscii = (s: string): string =>
     .replace(/[“”]/g, '"')
     .replace(/[^\x00-\x7E\n]/g, '?');
 
+/**
+ * Splits text that's wider than the paper into pieces that each fit `width` columns,
+ * breaking at a space wherever possible. A printer given an over-long line wraps it itself,
+ * but only ever mid-character-count — a real 58mm KOT printed "[N] 1x Chicken B" / "iryani".
+ * A single word longer than the whole line still has to be cut hard; there's nowhere else to
+ * break it. Leading indentation is repeated on continuation lines so a wrapped add-on stays
+ * visually attached to the item it belongs to.
+ */
+export const wrapToWidth = (text: string, width: number): string[] => {
+  if (width <= 0 || text.length <= width) return [text];
+  const indent = /^ */.exec(text)![0];
+  const pieces: string[] = [];
+  let rest = text;
+  while (rest.length > width) {
+    // lastIndexOf from `width` finds the last space that still fits. Landing inside the
+    // indent means the first word alone overflows the line — cut at the margin instead.
+    let cut = rest.lastIndexOf(' ', width);
+    if (cut <= indent.length) cut = width;
+    pieces.push(rest.slice(0, cut).trimEnd());
+    const remainder = rest.slice(cut).trimStart();
+    // Re-indenting can't be allowed to eat the whole line, or this would never terminate.
+    rest = indent.length < width ? indent + remainder : remainder;
+  }
+  if (rest.length) pieces.push(rest);
+  return pieces;
+};
+
+/**
+ * Every build*Lines below funnels its lines through one of these. It sanitizes the text
+ * once, here, so neither renderer (escpos.ts, blePrinterMarkup.ts) has to remember to —
+ * free-text fields like the footer or a guest/item name aren't guaranteed ASCII-safe the way
+ * the money helper is — and wraps anything wider than the paper at a space (see wrapToWidth).
+ * Lines built by twoCol are already exactly `columns` wide, so they pass through untouched.
+ */
+const makePush = (lines: ReceiptLine[], columns: number) => (line: ReceiptLine) => {
+  if (line.kind !== 'text') {
+    lines.push(line);
+    return;
+  }
+  for (const text of wrapToWidth(toPrinterAscii(line.text), columns)) lines.push({ ...line, text });
+};
+
 /** Pads/truncates a left+right pair to fit exactly `width` columns, right-aligning the value. */
 const twoCol = (left: string, right: string, width: number): string => {
   const truncatedLeft = left.length > width - right.length - 1 ? left.slice(0, Math.max(0, width - right.length - 1)) : left;
@@ -148,10 +190,7 @@ const twoCol = (left: string, right: string, width: number): string => {
 /** 32 columns fits most 58mm thermal printers (the common size for small cafes); pass 48 for 80mm. */
 export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): ReceiptLine[] {
   const lines: ReceiptLine[] = [];
-  // Sanitizes every line's text here, once, so neither renderer (escpos.ts,
-  // blePrinterMarkup.ts) has to remember to do it — free-text fields like the footer
-  // or a guest/item name aren't guaranteed ASCII-safe the way the money helper above is.
-  const push = (l: ReceiptLine) => lines.push(l.kind === 'text' ? { ...l, text: toPrinterAscii(l.text) } : l);
+  const push = makePush(lines, columns);
 
   push({ kind: 'text', text: receipt.businessName, align: 'center', bold: true, big: true });
   if (receipt.addressLine && receipt.showAddress !== false) push({ kind: 'text', text: receipt.addressLine, align: 'center' });
@@ -265,7 +304,7 @@ export interface PrintableTokenSlip {
 
 export function buildTokenSlipLines(slip: PrintableTokenSlip, columns = 32): ReceiptLine[] {
   const lines: ReceiptLine[] = [];
-  const push = (l: ReceiptLine) => lines.push(l.kind === 'text' ? { ...l, text: toPrinterAscii(l.text) } : l);
+  const push = makePush(lines, columns);
 
   push({ kind: 'text', text: slip.businessName, align: 'center', bold: true });
   push({ kind: 'feed' });
@@ -309,7 +348,7 @@ export interface PrintableKot {
 
 export function buildKotLines(kot: PrintableKot, columns = 32): ReceiptLine[] {
   const lines: ReceiptLine[] = [];
-  const push = (l: ReceiptLine) => lines.push(l.kind === 'text' ? { ...l, text: toPrinterAscii(l.text) } : l);
+  const push = makePush(lines, columns);
 
   push({ kind: 'text', text: 'KITCHEN ORDER TICKET', align: 'center', bold: true });
   push({ kind: 'feed' });
