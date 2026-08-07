@@ -14,6 +14,12 @@ export interface User {
    * immediately, without requiring a re-login. See core/auth/permissions.ts. */
   screenAccessMode?: 'Automatic' | 'Custom';
   allowedScreens?: string[] | null;
+  /** Cafe-level ceiling a platform admin can set for the whole tenant — one level above
+   * screenAccessMode/allowedScreens, same shape. PlanDefault (every cafe until a platform
+   * admin opts one into Custom) means every plan screen is available; Custom means only
+   * tenantEnabledScreens. See core/auth/permissions.ts's isScreenEnabledForTenant. */
+  tenantScreenMode?: 'PlanDefault' | 'Custom';
+  tenantEnabledScreens?: string[] | null;
   /** Server-side KDS station pin — see core/api/authApi.ts's ApiUser.assignedStationId. */
   assignedStationId?: number | null;
 }

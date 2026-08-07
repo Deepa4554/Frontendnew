@@ -16,6 +16,10 @@ export interface ApiUser {
    * See core/auth/permissions.ts and the Staff Access screen. */
   accessMode: StaffAccessMode;
   allowedScreens: string[] | null;
+  /** Cafe-level ceiling set by a platform admin — see core/auth/permissions.ts's
+   * isScreenEnabledForTenant and the backend's Tenant.ScreenMode/EnabledScreens. */
+  tenantScreenMode: 'PlanDefault' | 'Custom';
+  tenantEnabledScreens: string[] | null;
   /** Which kitchen station's KOTs the KDS screen should pin this login to — set by an
    * Owner/Manager from the Staff Profile screen, not by this login itself. Null means no
    * server-side pin (falls back to this device's own remembered station). Owner logins

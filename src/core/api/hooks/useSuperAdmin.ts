@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { superAdminApi, CreatePlatformExpenseRequest } from '../superAdminApi';
+import { superAdminApi, CreatePlatformExpenseRequest, UpdateTenantScreenAccessRequest } from '../superAdminApi';
 import { SubscriptionTier } from '../subscriptionApi';
 import { queryKeys } from './queryKeys';
 
@@ -38,5 +38,21 @@ export const useRemovePlatformExpense = () => {
   return useMutation({
     mutationFn: (id: number) => superAdminApi.removeExpense(id),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['superadmin-expenses'] }),
+  });
+};
+
+export const useTenantScreenAccess = (tenantId: number | null) =>
+  useQuery({
+    queryKey: ['superadmin', 'tenant-screen-access', tenantId ?? -1],
+    queryFn: () => superAdminApi.tenantScreenAccess(tenantId as number),
+    enabled: tenantId !== null,
+  });
+
+export const useUpdateTenantScreenAccess = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tenantId, req }: { tenantId: number; req: UpdateTenantScreenAccessRequest }) =>
+      superAdminApi.updateTenantScreenAccess(tenantId, req),
+    onSuccess: (_data, { tenantId }) => qc.invalidateQueries({ queryKey: ['superadmin', 'tenant-screen-access', tenantId] }),
   });
 };

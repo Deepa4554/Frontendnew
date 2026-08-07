@@ -54,6 +54,8 @@ const toUser = (apiUser: ApiUser): User => ({
   isPlatformAdmin: apiUser.isPlatformAdmin,
   screenAccessMode: apiUser.accessMode,
   allowedScreens: apiUser.allowedScreens,
+  tenantScreenMode: apiUser.tenantScreenMode,
+  tenantEnabledScreens: apiUser.tenantEnabledScreens,
   assignedStationId: apiUser.assignedStationId,
 });
 

@@ -89,12 +89,25 @@ const authSlice = createSlice({
     // (rare, but e.g. a profile-photo upload mid-flight) never gets clobbered by a
     // background poll tick. Role rides along too since an Owner can change a staff
     // member's role from the same Staff Profile screen this access lives on.
-    syncAccess: (state, action: PayloadAction<{ role: User['role']; isPlatformAdmin: boolean; screenAccessMode: User['screenAccessMode']; allowedScreens: User['allowedScreens']; assignedStationId: User['assignedStationId'] }>) => {
+    syncAccess: (
+      state,
+      action: PayloadAction<{
+        role: User['role'];
+        isPlatformAdmin: boolean;
+        screenAccessMode: User['screenAccessMode'];
+        allowedScreens: User['allowedScreens'];
+        tenantScreenMode: User['tenantScreenMode'];
+        tenantEnabledScreens: User['tenantEnabledScreens'];
+        assignedStationId: User['assignedStationId'];
+      }>,
+    ) => {
       if (!state.user) return;
       state.user.role = action.payload.role;
       state.user.isPlatformAdmin = action.payload.isPlatformAdmin;
       state.user.screenAccessMode = action.payload.screenAccessMode;
       state.user.allowedScreens = action.payload.allowedScreens;
+      state.user.tenantScreenMode = action.payload.tenantScreenMode;
+      state.user.tenantEnabledScreens = action.payload.tenantEnabledScreens;
       state.user.assignedStationId = action.payload.assignedStationId;
     },
   },

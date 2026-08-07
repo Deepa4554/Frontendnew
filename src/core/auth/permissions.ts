@@ -1,6 +1,6 @@
 import { User } from '../../features/auth/domain/entities/User';
 import { PlanCategory, categoryMeetsMin } from '../plan/planCategory';
-import { SCREEN_MIN_PLAN } from './screenCatalog';
+import { SCREEN_MIN_PLAN, ancestorsOf } from './screenCatalog';
 import { ApiSettings } from '../api/settingsApi';
 
 export type AppRole = User['role'];
@@ -84,26 +84,38 @@ export interface AccessUser {
   isPlatformAdmin?: boolean;
   screenAccessMode?: User['screenAccessMode'];
   allowedScreens?: User['allowedScreens'];
+  /** Cafe-level ceiling set by a platform admin — see User['tenantScreenMode'] and the
+   * matching Tenant.ScreenMode on the backend. */
+  tenantScreenMode?: User['tenantScreenMode'];
+  tenantEnabledScreens?: User['tenantEnabledScreens'];
 }
 
 /**
- * Whether `user` can see `route`, given the cafe's current plan. Combines four
- * independent gates, all of which must pass:
- *  1. Platform-admin routes (SuperAdmin) — always role/mode-independent.
- *  2. Plan — a screen below the tenant's current plan is invisible to EVERYONE,
- *     Owner included (this is SaaS packaging, not a staff restriction).
- *  3. Owner/Manager-only routes (OWNER_MANAGER_ONLY_ROUTES) — never overridable by
- *     a Custom Screen Access grant, since these mutate other staff members' access.
- *  4. Role/custom access — Owner always passes; everyone else follows either the
- *     Automatic role default (FLOOR_STAFF_HIDDEN_ROUTES) or, in Custom mode, only
- *     what's in their own allowedScreens.
+ * Whether `route` is included in the cafe's own plan-screen setup — the containment level
+ * ABOVE role/staff access (plan → tenant → role/staff, see docs/screen-access-plan.md).
+ * PlanDefault (every existing cafe, until a platform admin opts one into Custom) means
+ * "everything the plan includes"; Custom means only tenantEnabledScreens. Applies to EVERY
+ * login in the cafe, Owner included — this is platform packaging, not a staff restriction —
+ * except the platform operator's own login, which always bypasses it (mirrors
+ * ScreenAccessFilter's isPlatformAdmin bypass on the backend).
  */
-export function canAccessRoute(user: AccessUser | undefined, route: string, planCategory: PlanCategory): boolean {
+export function isScreenEnabledForTenant(user: AccessUser | undefined, route: string): boolean {
+  if (!user) return false;
+  if (user.isPlatformAdmin) return true;
+  if (user.tenantScreenMode !== 'Custom') return true;
+  return (user.tenantEnabledScreens ?? []).includes(route);
+}
+
+/** canAccessRoute's per-key checks, without the ancestor-chain cascade — see canAccessRoute
+ * for why the cascade has to be a separate outer step rather than folded in here. */
+function canAccessRouteSelf(user: AccessUser | undefined, route: string, planCategory: PlanCategory): boolean {
   if (!user?.role) return false;
   if (PLATFORM_ADMIN_ONLY_ROUTES.has(route) && !user.isPlatformAdmin) return false;
 
   const minPlan = SCREEN_MIN_PLAN[route];
   if (minPlan && !categoryMeetsMin(planCategory, minPlan)) return false;
+
+  if (!isScreenEnabledForTenant(user, route)) return false;
 
   if (user.role === 'Owner') return true;
 
@@ -115,6 +127,33 @@ export function canAccessRoute(user: AccessUser | undefined, route: string, plan
 
   if (FLOOR_STAFF_ROLES.has(user.role) && FLOOR_STAFF_HIDDEN_ROUTES.has(route)) return false;
   return true;
+}
+
+/**
+ * Whether `user` can see `route`, given the cafe's current plan. Combines five
+ * independent gates, all of which must pass:
+ *  1. Platform-admin routes (SuperAdmin) — always role/mode-independent.
+ *  2. Plan — a screen below the tenant's current plan is invisible to EVERYONE,
+ *     Owner included (this is SaaS packaging, not a staff restriction).
+ *  3. Tenant — a screen a platform admin switched off for this cafe (Custom mode) is
+ *     invisible to EVERYONE in it, Owner included, same reasoning as the plan gate.
+ *  4. Owner/Manager-only routes (OWNER_MANAGER_ONLY_ROUTES) — never overridable by
+ *     a Custom Screen Access grant, since these mutate other staff members' access.
+ *  5. Role/custom access — Owner always passes; everyone else follows either the
+ *     Automatic role default (FLOOR_STAFF_HIDDEN_ROUTES) or, in Custom mode, only
+ *     what's in their own allowedScreens.
+ *
+ * Then cascades up: a screen is only really reachable if every ancestor it's nested under
+ * (see screenCatalog.ts's `parent` field / ancestorsOf) passes the same checks too — e.g.
+ * PurchaseOrders is unreachable the moment Inventory itself fails any gate above, even if
+ * PurchaseOrders' own key would otherwise pass. Mirrors ScreenCatalog.Normalize's
+ * write-time cascade on the backend; this is the read-time half of the same rule, and
+ * catches cases Normalize can't (e.g. Inventory failing the PLAN gate, which isn't stored
+ * data at all).
+ */
+export function canAccessRoute(user: AccessUser | undefined, route: string, planCategory: PlanCategory): boolean {
+  if (!canAccessRouteSelf(user, route, planCategory)) return false;
+  return ancestorsOf(route).every((ancestor) => canAccessRouteSelf(user, ancestor, planCategory));
 }
 
 // Routes whose entire purpose is dine-in table service — nothing left to show once

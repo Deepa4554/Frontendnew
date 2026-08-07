@@ -2,15 +2,16 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { getApiErrorMessage } from '../../../../../core/network/api';
 import { useStaffScreenAccess, useUpdateStaffScreenAccess } from '../../../../../core/api/hooks/useStaff';
 import { usePlanCategory, PLAN_CATEGORY_LABEL, categoryMeetsMin } from '../../../../../core/plan/planCategory';
-import { PARENT_SCREENS, childrenOf, SCREEN_CATALOG, SCREEN_MIN_PLAN, isValidScreenKey } from '../../../../../core/auth/screenCatalog';
-import { AppRole, ROLE_LABELS, isScreenInRoleDefault } from '../../../../../core/auth/permissions';
+import { PARENT_SCREENS, childrenOf, ancestorsOf, SCREEN_CATALOG, SCREEN_MIN_PLAN, isValidScreenKey } from '../../../../../core/auth/screenCatalog';
+import { AppRole, ROLE_LABELS, isScreenInRoleDefault, isScreenEnabledForTenant } from '../../../../../core/auth/permissions';
 import { StaffAccessMode } from '../../../../../core/api/staffApi';
+import { RootState } from '../../../../../core/store/rootReducer';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
@@ -40,6 +41,20 @@ export const StaffAccessScreen = ({ navigation, route }: any) => {
   const { data, isLoading, isError, refetch } = useStaffScreenAccess(staffId ?? null);
   const updateAccess = useUpdateStaffScreenAccess();
 
+  // Whatever the platform admin has switched off for this cafe (see
+  // TenantScreenAccessModal on the SuperAdmin side) is invisible here too — granting a
+  // staff member a screen the cafe itself doesn't have would just be a dead tick that
+  // never resolves to anything in canAccessRoute.
+  const currentUser = useSelector((s: RootState) => s.auth.user);
+  const isTenantEnabled = (key: string) =>
+    isScreenEnabledForTenant(currentUser ?? undefined, key) &&
+    ancestorsOf(key).every((ancestor) => isScreenEnabledForTenant(currentUser ?? undefined, ancestor));
+  const tenantHiddenCount = useMemo(
+    () => SCREEN_CATALOG.filter((s) => !isTenantEnabled(s.key)).length,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [currentUser?.tenantScreenMode, currentUser?.tenantEnabledScreens],
+  );
+
   const [mode, setMode] = useState<StaffAccessMode>('Automatic');
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const hydrated = useRef(false);
@@ -61,9 +76,11 @@ export const StaffAccessScreen = ({ navigation, route }: any) => {
    * resolves to right now. Doubles as the seed when an owner first switches to Custom. */
   const roleDefaultScreens = useMemo(
     () =>
-      SCREEN_CATALOG.filter((s) => categoryMeetsMin(planCategory, s.minPlan) && isScreenInRoleDefault(staffRole, s.key))
-        .map((s) => s.key),
-    [planCategory, staffRole],
+      SCREEN_CATALOG.filter(
+        (s) => categoryMeetsMin(planCategory, s.minPlan) && isScreenInRoleDefault(staffRole, s.key) && isTenantEnabled(s.key),
+      ).map((s) => s.key),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [planCategory, staffRole, currentUser?.tenantScreenMode, currentUser?.tenantEnabledScreens],
   );
 
   // Switching to Custom used to drop the owner into an empty allow-list, i.e. "this login
@@ -218,8 +235,8 @@ export const StaffAccessScreen = ({ navigation, route }: any) => {
             </View>
 
             <View style={styles.listCard}>
-              {PARENT_SCREENS.map((parent) => {
-                const children = childrenOf(parent.key);
+              {PARENT_SCREENS.filter((parent) => isTenantEnabled(parent.key)).map((parent) => {
+                const children = childrenOf(parent.key).filter((child) => isTenantEnabled(child.key));
                 return (
                   <View key={parent.key}>
                     {renderRow(parent.key, parent.label, parent.icon, false)}
@@ -228,6 +245,13 @@ export const StaffAccessScreen = ({ navigation, route }: any) => {
                 );
               })}
             </View>
+
+            {tenantHiddenCount > 0 && (
+              <Text style={styles.tenantHiddenNote}>
+                {tenantHiddenCount} screen{tenantHiddenCount === 1 ? '' : 's'} aren't part of this cafe's current setup, so they
+                aren't listed here — contact the platform admin if one of these should be available.
+              </Text>
+            )}
           </ScrollView>
 
           <View style={[styles.saveBar, { paddingBottom: insets.bottom + 14 }]}>
@@ -291,6 +315,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     backgroundColor: COLORS.cardAlt,
     borderRadius: 8,
     overflow: 'hidden',
+  },
+  tenantHiddenNote: {
+    fontSize: 11,
+    color: COLORS.muted,
+    lineHeight: 16,
+    marginTop: isDesktopWeb ? 10 : 8,
   },
   row: {
     flexDirection: 'row',

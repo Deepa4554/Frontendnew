@@ -2,10 +2,15 @@ import React, { useEffect, useState } from 'react';
 import { View, StyleSheet, Text, TextInput, TouchableOpacity, ScrollView, Modal, Platform, Pressable } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../../core/store/rootReducer';
 import { useSearch } from '../../../core/api/hooks/useSearch';
 import { SearchResult } from '../../../core/api/searchApi';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
+import { usePlanCategory } from '../../../core/plan/planCategory';
+import { useSettings } from '../../../core/api/hooks/useSettings';
+import { searchScreens, ScreenSearchEntry } from '../../../core/navigation/screenSearchIndex';
 
 const TYPE_ICON: Record<SearchResult['category'], string> = {
   Orders: 'receipt',
@@ -45,6 +50,9 @@ export const GlobalSearchTrigger: React.FC<Props> = ({ navigation, iconColor, ic
   const [visible, setVisible] = useState(false);
   const [query, setQuery] = useState('');
   const [debounced, setDebounced] = useState('');
+  const user = useSelector((s: RootState) => s.auth.user);
+  const { category: planCategory } = usePlanCategory();
+  const { data: settings } = useSettings();
 
   useEffect(() => {
     const t = setTimeout(() => setDebounced(query), 300);
@@ -53,6 +61,7 @@ export const GlobalSearchTrigger: React.FC<Props> = ({ navigation, iconColor, ic
 
   const { data: results = [], isFetching } = useSearch(debounced);
   const isSearching = query.trim().length >= 2;
+  const screenResults = isSearching ? searchScreens(query, { user: user ?? undefined, planCategory, settings }) : [];
 
   const close = () => {
     setVisible(false);
@@ -62,6 +71,11 @@ export const GlobalSearchTrigger: React.FC<Props> = ({ navigation, iconColor, ic
   const goTo = (item: SearchResult) => {
     close();
     navigation.navigate(ROUTE_FOR[item.category]);
+  };
+
+  const goToScreen = (entry: ScreenSearchEntry) => {
+    close();
+    entry.navigate(navigation);
   };
 
   return (
@@ -98,10 +112,21 @@ export const GlobalSearchTrigger: React.FC<Props> = ({ navigation, iconColor, ic
             {isSearching && (
               isFetching ? (
                 <Text style={styles.status}>Searching…</Text>
-              ) : results.length === 0 ? (
+              ) : results.length === 0 && screenResults.length === 0 ? (
                 <Text style={styles.status}>No results for "{query}"</Text>
               ) : (
                 <ScrollView style={styles.resultsScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+                  {screenResults.map((entry) => (
+                    <TouchableOpacity key={`screen_${entry.id}`} style={styles.resultRow} onPress={() => goToScreen(entry)} activeOpacity={0.7}>
+                      <View style={styles.resultIcon}>
+                        <Icon name={entry.icon} size={18} color={COLORS.muted} />
+                      </View>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.resultTitle} numberOfLines={1}>{entry.label}</Text>
+                      </View>
+                      <Text style={styles.resultCategory}>SCREEN</Text>
+                    </TouchableOpacity>
+                  ))}
                   {results.map((item) => (
                     <TouchableOpacity key={`${item.category}_${item.id}`} style={styles.resultRow} onPress={() => goTo(item)} activeOpacity={0.7}>
                       <View style={styles.resultIcon}>

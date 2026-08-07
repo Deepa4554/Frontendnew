@@ -37,6 +37,8 @@ export const useLiveAccessSync = () => {
         isPlatformAdmin: data.isPlatformAdmin,
         screenAccessMode: data.accessMode,
         allowedScreens: data.allowedScreens,
+        tenantScreenMode: data.tenantScreenMode,
+        tenantEnabledScreens: data.tenantEnabledScreens,
         assignedStationId: data.assignedStationId,
       }),
     );

@@ -96,3 +96,20 @@ export const childrenOf = (parentKey: string): ScreenCatalogEntry[] =>
   SCREEN_CATALOG.filter((s) => s.parent === parentKey);
 
 export const isValidScreenKey = (key: string): boolean => key in SCREEN_MIN_PLAN;
+
+const PARENT_OF: Record<string, string | undefined> = Object.fromEntries(
+  SCREEN_CATALOG.map((s) => [s.key, s.parent]),
+);
+
+/** Walks `key`'s parent chain up to the top-level screen, nearest first. Empty for a
+ * key with no parent. Mirrors CafePosApi/Infrastructure/ScreenCatalog.cs's AncestorsOf
+ * exactly — both sides must agree on what "reachable" means for a child screen. */
+export const ancestorsOf = (key: string): string[] => {
+  const chain: string[] = [];
+  let current = PARENT_OF[key];
+  while (current) {
+    chain.push(current);
+    current = PARENT_OF[current];
+  }
+  return chain;
+};

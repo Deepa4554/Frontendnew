@@ -12,6 +12,7 @@ import { useApprovals } from '../../../core/api/hooks/useApprovals';
 import { useSettings } from '../../../core/api/hooks/useSettings';
 import { useSearch } from '../../../core/api/hooks/useSearch';
 import { SearchResult } from '../../../core/api/searchApi';
+import { searchScreens, ScreenSearchEntry } from '../../../core/navigation/screenSearchIndex';
 import { logout } from '../../../features/auth/presentation/viewmodels/authSlice';
 import { confirmAlert } from '../ConfirmDialogHost';
 import { showToast, setSidebarCollapsed } from '../../../core/store/uiSlice';
@@ -153,11 +154,20 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
 
   const { data: searchResults = [], isFetching: searchFetching } = useSearch(searchDebounced);
   const isSearchingLive = searchQuery.trim().length >= 2;
+  const screenResults = isSearchingLive
+    ? searchScreens(searchQuery, { user: user ?? undefined, planCategory, settings })
+    : [];
 
   const goToSearchResult = (item: SearchResult) => {
     setSearchDropdownOpen(false);
     setSearchQuery('');
     navigation.navigate(SEARCH_ROUTE_FOR[item.category]);
+  };
+
+  const goToScreenResult = (entry: ScreenSearchEntry) => {
+    setSearchDropdownOpen(false);
+    setSearchQuery('');
+    entry.navigate(navigation);
   };
 
   const canOpen = (routeKey: string) =>
@@ -333,10 +343,24 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
               <View style={styles.searchDropdown}>
                 {searchFetching ? (
                   <Text style={styles.searchDropdownStatus}>Searching…</Text>
-                ) : searchResults.length === 0 ? (
+                ) : searchResults.length === 0 && screenResults.length === 0 ? (
                   <Text style={styles.searchDropdownStatus}>No results for "{searchQuery}"</Text>
                 ) : (
                   <ScrollView style={styles.searchResultsScroll} showsVerticalScrollIndicator={false}>
+                    {screenResults.map((entry) => (
+                      <TouchableOpacity
+                        key={`screen_${entry.id}`}
+                        style={styles.searchResultRow}
+                        onPress={() => goToScreenResult(entry)}
+                        activeOpacity={0.7}
+                      >
+                        <Icon name={entry.icon} size={16} color={COLORS.muted} />
+                        <View style={{ flex: 1, minWidth: 0 }}>
+                          <Text style={styles.searchResultTitle} numberOfLines={1}>{entry.label}</Text>
+                        </View>
+                        <Text style={styles.searchResultCategory}>Screen</Text>
+                      </TouchableOpacity>
+                    ))}
                     {searchResults.map((item) => (
                       <TouchableOpacity
                         key={`${item.category}_${item.id}`}

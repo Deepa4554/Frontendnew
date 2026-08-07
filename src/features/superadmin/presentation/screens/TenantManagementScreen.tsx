@@ -7,6 +7,7 @@ import { confirmAlert } from '../../../../shared/components/ConfirmDialogHost';
 import { useDispatch } from 'react-redux';
 import { WarmColors as COLORS } from '../../../../shared/design/warmTheme';
 import { useSuperAdminTenants, useChangeTenantPlan, useTenantSales } from '../../../../core/api/hooks/useSuperAdmin';
+import { TenantScreenAccessModal } from './TenantScreenAccessModal';
 import { ApiTenantSummary } from '../../../../core/api/superAdminApi';
 import { SubscriptionTier } from '../../../../core/api/subscriptionApi';
 import { getApiErrorMessage } from '../../../../core/network/api';
@@ -49,6 +50,7 @@ export const TenantManagementScreen = () => {
   const [search, setSearch] = useState('');
   const [managing, setManaging] = useState<ApiTenantSummary | null>(null);
   const [viewingSales, setViewingSales] = useState<ApiTenantSummary | null>(null);
+  const [managingScreens, setManagingScreens] = useState<ApiTenantSummary | null>(null);
   const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
 
@@ -144,6 +146,10 @@ export const TenantManagementScreen = () => {
                       <TouchableOpacity style={styles.salesBtn} onPress={() => setViewingSales(tenant)}>
                         <Icon name="chart-line" size={13} color={COLORS.heading} />
                         <Text style={styles.salesBtnText}>Sales</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.salesBtn} onPress={() => setManagingScreens(tenant)}>
+                        <Icon name="shield-account-outline" size={13} color={COLORS.heading} />
+                        <Text style={styles.salesBtnText}>Screens</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.manageBtn} onPress={() => setManaging(tenant)}>
                         <Text style={styles.manageBtnText}>Change Plan</Text>
@@ -268,6 +274,8 @@ export const TenantManagementScreen = () => {
           </View>
         </View>
       </Modal>
+
+      <TenantScreenAccessModal tenant={managingScreens} onClose={() => setManagingScreens(null)} />
     </View>
   );
 };

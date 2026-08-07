@@ -13,9 +13,10 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { showToast } from '../../../../../core/store/uiSlice';
+import { RootState } from '../../../../../core/store/rootReducer';
 import { ReportExportService, ReportDefinition } from '../../../../../core/utils/reportExport';
 import { useDashboardAnalytics } from '../../../../../core/api/hooks/useDashboard';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
@@ -144,7 +145,10 @@ export const DashboardScreen = () => {
   const [customTo, setCustomTo] = useState('');
   const range = rangeForPreset(preset, customFrom, customTo);
   const rangeLabel = rangeLabelFor(preset, customFrom, customTo);
-  const { data, isLoading, isError, refetch } = useDashboardAnalytics(range);
+  // null = "All Branches" (the default) — same app-wide selection Inventory/Orders/
+  // Reports read, set from Cafe Settings > Active Branch.
+  const activeBranchId = useSelector((s: RootState) => s.branch.activeBranchId);
+  const { data, isLoading, isError, refetch } = useDashboardAnalytics({ ...range, branchId: activeBranchId });
   const { data: settings } = useSettings();
 
   const buildReportDefinition = (d: NonNullable<typeof data>): ReportDefinition => ({

@@ -12,10 +12,12 @@ import {
 import { notificationCategoryLabel } from '../../../../../core/notifications/categoryLabels';
 import { getApiErrorMessage } from '../../../../../core/network/api';
 import { RootState } from '../../../../../core/store/rootReducer';
-import { canAccessRoute } from '../../../../../core/auth/permissions';
-import { usePlanCategory } from '../../../../../core/plan/planCategory';
+import { canAccessRoute, isOwnerOrManager } from '../../../../../core/auth/permissions';
+import { usePlanCategory, categoryMeetsMin, PlanCategory } from '../../../../../core/plan/planCategory';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { showToast } from '../../../../../core/store/uiSlice';
+import { useBranches } from '../../../../../core/api/hooks/useBranches';
+import { setActiveBranch } from '../../../../../core/store/branchSlice';
 import { SkeletonRow, SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { LoadingOverlay } from '../../../../../shared/components/atoms/LoadingOverlay';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
@@ -27,14 +29,14 @@ import { modalHeadingOverride } from '../../../../../shared/design/commonStyles'
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 
-type SettingId = /* 'security' | */ 'taxSlabs' | 'receipt' | 'receiptBuilder' | 'notif' | 'lang' | 'printer' | 'kitchen' | 'stations' | 'orderTypes' | 'autoCharges';
+type SettingId = /* 'security' | */ 'taxSlabs' | 'receipt' | 'receiptBuilder' | 'notif' | 'lang' | 'printer' | 'kitchen' | 'stations' | 'orderTypes' | 'autoCharges' | 'activeBranch';
 
 /** `route` is the screen-catalog key for tiles that push their own Stack screen — each one
  * is separately grantable under Custom Screen Access, so the tile has to be filtered by the
  * same canAccessRoute the route guard uses. Without it a revoked tile still rendered here
  * and tapping it bounced silently back to MainTabs. Tiles that open an in-place modal
  * (receipt/notif/lang) have no route: they're part of Cafe Settings itself. */
-const SETTINGS: { id: SettingId; title: string; desc: string; icon: string; ownerOnly?: boolean; route?: string }[] = [
+const SETTINGS: { id: SettingId; title: string; desc: string; icon: string; ownerOnly?: boolean; ownerOrManagerOnly?: boolean; minPlan?: PlanCategory; route?: string }[] = [
   // Account Security — commented out for now, see the matching Modal below.
   // { id: 'security', title: 'Account Security', desc: 'Manage 2FA and terminal passcodes', icon: 'shield-outline' },
   { id: 'taxSlabs', title: 'Tax & GST Configuration', desc: 'Set the default tax rate and charge different GST rates per item (5% food, 12% packaged), with a per-rate split on the bill', icon: 'percent-outline', ownerOnly: true, route: 'TaxSlabManagement' },
@@ -45,6 +47,12 @@ const SETTINGS: { id: SettingId; title: string; desc: string; icon: string; owne
   { id: 'stations', title: 'Kitchen Stations', desc: 'Set up prep stations (Main Kitchen, Bar, Dessert) for KDS filtering and KOT routing', icon: 'chef-hat', ownerOnly: true, route: 'StationManagement' },
   { id: 'orderTypes', title: 'Order Types', desc: 'Choose which order types POS offers (Dine In/Takeaway/Delivery/Token)', icon: 'silverware-fork-knife', ownerOnly: true, route: 'OrderTypesSettings' },
   { id: 'autoCharges', title: 'Auto Charges', desc: 'Set default Service/Packing/Delivery charges that apply automatically by order type', icon: 'cash-plus', ownerOnly: true, route: 'AutoChargesSettings' },
+  // Not gated by `route`/canAccessRoute like the tiles above — this opens an in-place
+  // modal (no Stack screen of its own), so it needs its own role+plan check mirroring
+  // BranchesController's actual server-side gate (Policies.OwnerOrManager + RequirePlus)
+  // exactly, otherwise the tile would show for a login that gets a 403 the moment it
+  // tries to list branches.
+  { id: 'activeBranch', title: 'Active Branch', desc: "Switch which branch POS, Inventory, Dashboard, and Reports show — or view every location combined", icon: 'storefront-outline', ownerOrManagerOnly: true, minPlan: 'PLUS' },
   { id: 'notif', title: 'Notification Preferences', desc: 'Order, inventory, and shift alerts', icon: 'bell-outline' },
   { id: 'lang', title: 'Language & Region', desc: 'Default currency and local time', icon: 'web' },
 ];
@@ -73,6 +81,21 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
   const role = user?.role;
   const { category: planCategory } = usePlanCategory();
 
+  // Matches BranchesController's backend gate (OwnerOrManager + Plus) exactly — a
+  // Cashier/Accountant login would otherwise see the tile and hit a silent 403 the
+  // moment it opens (they're not in canAccessRoute's floor-staff hidden set, so that
+  // check alone isn't enough). ANDed with canAccessRoute so a Manager who's had
+  // 'Branches' explicitly revoked under Custom Screen Access still loses this tile too.
+  const branchSwitcherEligible =
+    isOwnerOrManager(role) && categoryMeetsMin(planCategory, 'PLUS') && canAccessRoute(user ?? undefined, 'Branches', planCategory);
+  const activeBranchId = useSelector((s: RootState) => s.branch.activeBranchId);
+  const {
+    data: branches = [],
+    isLoading: branchesLoading,
+    isError: branchesError,
+    refetch: refetchBranches,
+  } = useBranches({ enabled: branchSwitcherEligible });
+
   const [nameDraft, setNameDraft] = useState('');
   const [footerDraft, setFooterDraft] = useState('');
 
@@ -85,6 +108,8 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
 
   const filteredSettings = SETTINGS.filter(
     (s) => (!s.ownerOnly || role === 'Owner')
+      && (!s.ownerOrManagerOnly || isOwnerOrManager(role))
+      && (!s.minPlan || categoryMeetsMin(planCategory, s.minPlan))
       && (!s.route || canAccessRoute(user ?? undefined, s.route, planCategory))
       && (s.title.toLowerCase().includes(search.toLowerCase()) || s.desc.toLowerCase().includes(search.toLowerCase())),
   );
@@ -116,6 +141,10 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
     }
     if (id === 'receiptBuilder') {
       navigation.navigate('ReceiptBuilder');
+      return;
+    }
+    if (id === 'activeBranch') {
+      setOpenModal(id);
       return;
     }
     if (!settings) return;
@@ -157,6 +186,15 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
 
   const selectRegion = (opt: { currency: string; region: string }) => {
     updateSettings.mutate({ currency: opt.currency, region: opt.region });
+  };
+
+  // null = "All Branches" — the same activeBranchId POS/Inventory/Dashboard/Reports
+  // all read (see branchSlice). Left selectable even for an inactive branch (matches
+  // the Branches screen's own switch buttons, which allow the same thing so a closed
+  // location's historical data stays reachable).
+  const selectActiveBranch = (id: number | null, name: string) => {
+    dispatch(setActiveBranch(id));
+    dispatch(showToast({ message: `Now viewing ${name}`, icon: 'storefront-outline', tone: 'success' }));
   };
 
   if (isError && !settings) {
@@ -488,6 +526,88 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      {/* ---------- Active Branch ---------- */}
+      <Modal visible={openModal === 'activeBranch'} transparent animationType="fade" onRequestClose={() => setOpenModal(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Active Branch</Text>
+              <TouchableOpacity onPress={() => setOpenModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Icon name="close" size={18} color={COLORS.muted} />
+              </TouchableOpacity>
+            </View>
+            <Text style={styles.helperText}>
+              POS, Inventory, Dashboard, and Reports will only show this branch's data. Pick "All Branches" to see every location combined.
+            </Text>
+
+            {branchesError && branches.length === 0 ? (
+              <ErrorState
+                title="Couldn't load branches"
+                message="Check your connection and try again."
+                onRetry={() => refetchBranches()}
+              />
+            ) : branchesLoading ? (
+              <SkeletonList rows={3} />
+            ) : branches.length === 0 ? (
+              <View style={styles.branchEmptyState}>
+                <Icon name="storefront-outline" size={28} color={COLORS.muted} />
+                <Text style={styles.branchEmptyText}>
+                  You haven't added any branches yet. Add one from Business &gt; Branches, then come back here to switch between them.
+                </Text>
+                <TouchableOpacity
+                  style={styles.modalDoneBtn}
+                  onPress={() => {
+                    setOpenModal(null);
+                    navigation?.navigate?.('Branches');
+                  }}
+                >
+                  <Text style={styles.modalDoneText}>Go to Branches</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <>
+                <TouchableOpacity
+                  style={[styles.regionRow, activeBranchId === null && styles.regionRowActive]}
+                  onPress={() => selectActiveBranch(null, 'All Branches')}
+                >
+                  <View style={{ flex: 1 }}>
+                    <Text style={[styles.regionText, activeBranchId === null && styles.regionTextActive]}>All Branches</Text>
+                    <Text style={[styles.regionSub, activeBranchId === null && styles.regionTextActive]}>Combined data from every location</Text>
+                  </View>
+                  {activeBranchId === null && <Icon name="check-circle" size={14} color="#FFFFFF" />}
+                </TouchableOpacity>
+
+                {branches.map((b) => {
+                  const active = activeBranchId === b.id;
+                  return (
+                    <TouchableOpacity
+                      key={b.id}
+                      style={[styles.regionRow, active && styles.regionRowActive]}
+                      onPress={() => selectActiveBranch(b.id, b.name)}
+                    >
+                      <View style={{ flex: 1 }}>
+                        <Text style={[styles.regionText, active && styles.regionTextActive]}>
+                          {b.name}
+                          {!b.isActive ? '  ·  Inactive' : ''}
+                        </Text>
+                        {!!b.address && (
+                          <Text style={[styles.regionSub, active && styles.regionTextActive]}>{b.address}</Text>
+                        )}
+                      </View>
+                      {active && <Icon name="check-circle" size={14} color="#FFFFFF" />}
+                    </TouchableOpacity>
+                  );
+                })}
+              </>
+            )}
+
+            <TouchableOpacity style={styles.modalDoneBtn} onPress={() => setOpenModal(null)}>
+              <Text style={styles.modalDoneText}>Done</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -625,4 +745,6 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   regionText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
   regionSub: { fontSize: 12, color: COLORS.muted },
   regionTextActive: { color: '#FFFFFF' },
+  branchEmptyState: { alignItems: 'center', gap: 8, paddingVertical: 16 },
+  branchEmptyText: { fontSize: 12, color: COLORS.muted, textAlign: 'center', lineHeight: 17 },
 });

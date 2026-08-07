@@ -67,6 +67,21 @@ export interface CreatePlatformExpenseRequest {
   spentAt?: string;
 }
 
+/** Cafe-level screen ceiling — see core/auth/permissions.ts's isScreenEnabledForTenant
+ * and the backend's Tenant.ScreenMode/EnabledScreens. `plan` rides along read-only so the
+ * picker can grey out screens above what this cafe is currently subscribed to. */
+export interface TenantScreenAccess {
+  tenantId: number;
+  screenMode: 'PlanDefault' | 'Custom';
+  enabledScreens: string[];
+  plan: 'NORMAL' | 'PLUS' | 'PREMIUM';
+}
+
+export interface UpdateTenantScreenAccessRequest {
+  screenMode: 'PlanDefault' | 'Custom';
+  enabledScreens?: string[];
+}
+
 export const superAdminApi = {
   listTenants: () => apiClient.get<ApiTenantSummary[]>('/superadmin/tenants').then((r) => r.data),
   changeTenantPlan: (tenantId: number, plan: SubscriptionTier) =>
@@ -77,4 +92,8 @@ export const superAdminApi = {
   listExpenses: () => apiClient.get<PlatformExpenseSummary>('/superadmin/expenses').then((r) => r.data),
   addExpense: (req: CreatePlatformExpenseRequest) => apiClient.post<PlatformExpense>('/superadmin/expenses', req).then((r) => r.data),
   removeExpense: (id: number) => apiClient.delete<void>(`/superadmin/expenses/${id}`).then((r) => r.data),
+  tenantScreenAccess: (tenantId: number) =>
+    apiClient.get<TenantScreenAccess>(`/superadmin/tenants/${tenantId}/screen-access`).then((r) => r.data),
+  updateTenantScreenAccess: (tenantId: number, req: UpdateTenantScreenAccessRequest) =>
+    apiClient.patch<TenantScreenAccess>(`/superadmin/tenants/${tenantId}/screen-access`, req).then((r) => r.data),
 };
