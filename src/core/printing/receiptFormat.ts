@@ -180,6 +180,31 @@ const makePush = (lines: ReceiptLine[], columns: number) => (line: ReceiptLine) 
   for (const text of wrapToWidth(toPrinterAscii(line.text), columns)) lines.push({ ...line, text });
 };
 
+/**
+ * A money row — a label on the left, an amount right-aligned against the margin.
+ *
+ * When both fit on one line this is just twoCol. When they don't, twoCol would keep the
+ * amount and truncate the label to whatever's left, which on a 58mm bill turns
+ * "[V] 2x Paneer Butter Masala (Full)" into "[V] 2x Paneer Butter M" — the guest can't tell
+ * which item they're being charged for. So the label instead gets the full width to itself
+ * (makePush wraps it at a space) and the amount drops to its own line beneath, still against
+ * the right margin so the column of figures stays readable down the bill.
+ */
+const pushAmountRow = (
+  push: (line: ReceiptLine) => void,
+  label: string,
+  amount: string,
+  columns: number,
+  bold = false,
+) => {
+  if (label.length + amount.length + 1 <= columns) {
+    push({ kind: 'text', text: twoCol(label, amount, columns), bold });
+    return;
+  }
+  push({ kind: 'text', text: label, bold });
+  push({ kind: 'text', text: twoCol('', amount, columns), bold });
+};
+
 /** Pads/truncates a left+right pair to fit exactly `width` columns, right-aligning the value. */
 const twoCol = (left: string, right: string, width: number): string => {
   const truncatedLeft = left.length > width - right.length - 1 ? left.slice(0, Math.max(0, width - right.length - 1)) : left;
@@ -205,7 +230,7 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): Rece
   push({ kind: 'dashes' });
 
   for (const item of receipt.items) {
-    push({ kind: 'text', text: twoCol(`${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, money(item.price * item.qty), columns) });
+    pushAmountRow(push, `${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, money(item.price * item.qty), columns);
     for (const addOn of item.selectedModifiers ?? []) {
       push({ kind: 'text', text: `  + ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
     }
@@ -213,20 +238,20 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): Rece
   }
   push({ kind: 'dashes' });
 
-  push({ kind: 'text', text: twoCol('Subtotal', money(receipt.subtotal), columns) });
+  pushAmountRow(push, 'Subtotal', money(receipt.subtotal), columns);
   if (receipt.discountPct && receipt.discountAmount) {
-    push({ kind: 'text', text: twoCol(`Discount (${receipt.discountPct}%)`, `-${money(receipt.discountAmount)}`, columns) });
+    pushAmountRow(push, `Discount (${receipt.discountPct}%)`, `-${money(receipt.discountAmount)}`, columns);
   }
   // One row per slab when the bill mixes rates; otherwise the original single Tax line.
   const taxBreakdown = buildTaxBreakdown(receipt.items, receipt.taxRatePct);
   if (taxBreakdown.length > 1) {
     for (const slab of taxBreakdown) {
-      push({ kind: 'text', text: twoCol(`Tax ${slab.ratePct}% on ${money(slab.taxableAmount)}`, money(slab.taxAmount), columns) });
+      pushAmountRow(push, `Tax ${slab.ratePct}% on ${money(slab.taxableAmount)}`, money(slab.taxAmount), columns);
     }
   } else {
-    push({ kind: 'text', text: twoCol(`Tax (${taxBreakdown[0]?.ratePct ?? receipt.taxRatePct}%)`, money(receipt.tax), columns) });
+    pushAmountRow(push, `Tax (${taxBreakdown[0]?.ratePct ?? receipt.taxRatePct}%)`, money(receipt.tax), columns);
   }
-  push({ kind: 'text', text: twoCol('TOTAL', money(receipt.total), columns), bold: true });
+  pushAmountRow(push, 'TOTAL', money(receipt.total), columns, true);
   push({ kind: 'dashes' });
 
   // Scan-to-pay block, printed only once the cafe has a UPI address configured. Sits
@@ -359,7 +384,11 @@ export function buildKotLines(kot: PrintableKot, columns = 32): ReceiptLine[] {
   push({ kind: 'dashes' });
 
   for (const item of kot.items) {
-    push({ kind: 'text', text: `${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, big: true });
+    // Bold, not `big`: a double-height line eats ~7mm of paper against a normal line's ~4mm,
+    // and an item list is the one part of this ticket that grows without limit — a ten-item
+    // order ran to 12cm. The title above stays big so the ticket is still identifiable at a
+    // glance on the rail; the items only have to be readable, and bold does that.
+    push({ kind: 'text', text: `${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, bold: true });
     for (const addOn of item.selectedModifiers ?? []) {
       push({ kind: 'text', text: `  + ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
     }
