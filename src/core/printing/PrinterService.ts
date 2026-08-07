@@ -1,5 +1,5 @@
 import { getPrinterConfig, getEffectivePrinterConfig, PrinterConfig } from './printerConfig';
-import { buildEscPosFromLines, escPosToBase64, toFontBColumns } from './escpos';
+import { buildEscPosFromLines, escPosToBase64 } from './escpos';
 import { PrintableKot, PrintableKotItem, PrintableReceipt, PrintableTokenSlip, ReceiptLine, buildKotLines, buildReceiptLines, buildTokenSlipLines } from './receiptFormat';
 import { printApi } from '../api/printApi';
 import { BluetoothPrinter } from './BluetoothPrinter';
@@ -13,17 +13,12 @@ export interface PrintResult {
  * How many characters a line may hold on this printer — the single number every build*Lines
  * call composes against, so it has to be decided before any line exists, not at render time.
  *
- * The paper's own width (config.columns: 32 for 58mm, 48 for 80mm) is the Font A figure.
- * Whichever transport emits ESC/POS bytes itself selects the smaller Font B (see escpos.ts),
- * which fits noticeably more per line — so those get the wider count. The native Bluetooth
- * library encodes tagged markup on our behalf with no font control, so that path must keep
- * composing at the paper width or every line would overrun and wrap.
+ * This is simply the paper's own width (config.columns: 32 for 58mm, 48 for 80mm), because
+ * every transport prints at the printer's default Font A. Selecting the narrower Font B on
+ * the ESC/POS paths would fit ~42 characters instead, but it prints too faintly to rely on —
+ * see the note in escpos.ts's CMD.
  */
-const columnsFor = (config: PrinterConfig): number => {
-  const paperColumns = config.columns ?? 32;
-  const emitsOwnBytes = config.type === 'wifi' || (config.type === 'bluetooth' && BluetoothPrinter.printsCompactFont);
-  return emitsOwnBytes ? toFontBColumns(paperColumns) : paperColumns;
-};
+const columnsFor = (config: PrinterConfig): number => config.columns ?? 32;
 
 /** Routes an already-built line model to whichever printer is configured on this
  * device — WiFi goes through the backend relay (works on both mobile and web, see

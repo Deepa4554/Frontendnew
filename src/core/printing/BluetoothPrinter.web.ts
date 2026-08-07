@@ -189,11 +189,6 @@ export const BluetoothPrinter = {
    * has no Web Bluetooth" (Safari, Firefox) and "page isn't on https". */
   isSupported: () => !!bluetoothApi(),
 
-  /** True: this path writes raw ESC/POS itself (see printLines below), so buildEscPosFromLines
-   * selects Font B and lines can be composed at the wider Font-B width. See PrinterService's
-   * columnsFor(), and BluetoothPrinter.ts for why the native path can't do the same. */
-  printsCompactFont: true,
-
   /** Opens the chooser and returns the one device the user picked, or [] if they dismissed it.
    * Unlike the native implementation this can't enumerate paired devices — see the file header. */
   async scanDevices(): Promise<BluetoothPrinterDevice[]> {
