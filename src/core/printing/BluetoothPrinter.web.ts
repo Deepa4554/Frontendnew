@@ -41,7 +41,7 @@
  */
 import { ReceiptLine } from './receiptFormat';
 import { buildEscPosFromLines } from './escpos';
-import { getPrinterConfig } from './printerConfig';
+import { getPrinterConfig, findSavedPrinterName } from './printerConfig';
 
 export interface BluetoothPrinterDevice {
   /** Web Bluetooth's per-origin opaque device id, NOT a MAC address (browsers never expose
@@ -138,6 +138,11 @@ const bluetoothApi = (): BtApi | undefined =>
  * page reload, which is what restoreSavedPrinter() tries to paper over. */
 let pairedDevice: BtDevice | null = null;
 let writeCharacteristic: BtCharacteristic | null = null;
+/** The configured address `pairedDevice` was resolved for, which is not always the device's own
+ * id — findPermittedDevice can match on name instead. Comparing against this rather than
+ * `pairedDevice.id` is what stops a name-matched printer being thrown away and re-resolved on
+ * every single print. */
+let attachedForAddress: string | null = null;
 const disconnectHandlerAttached = new WeakSet<BtDevice>();
 
 /** The printer this page is meant to stay attached to. Set once a connection has succeeded (or
@@ -247,8 +252,9 @@ function installListeners() {
   }
 }
 
-function remember(device: BtDevice) {
+function remember(device: BtDevice, forAddress?: string) {
   pairedDevice = device;
+  attachedForAddress = forAddress ?? device.id;
   writeCharacteristic = null;
   if (!disconnectHandlerAttached.has(device)) {
     // The characteristic handle goes stale the moment GATT drops (printer powered off, out of
@@ -284,16 +290,33 @@ async function pickDevice(): Promise<BtDevice | null> {
  * gesture — the one mechanism that lets a printer survive a page reload. Bluefy implements it
  * (since 3.0), which is what makes "reopen the browser and it's just connected" work on iOS;
  * Chrome needs chrome://flags/#enable-web-bluetooth-new-permissions-backend. Absent or failing,
- * this returns null and the caller falls back to prompting. */
+ * this returns null and the caller falls back to prompting.
+ *
+ * Matching is deliberately not just on the saved address. `id` is the browser's own opaque
+ * handle, and nothing in the spec promises it's minted identically once the app has been closed
+ * and reopened — so an exact match is tried first, then the name the printer was saved under,
+ * and finally a lone permitted device. That last one is safe because permission is only ever
+ * granted through the chooser: if this origin knows exactly one device, it is the printer the
+ * cashier picked. */
 async function findPermittedDevice(address: string): Promise<BtDevice | null> {
   const bt = bluetoothApi();
   if (!bt?.getDevices) return null;
+
+  let devices: BtDevice[];
   try {
-    const devices = await bt.getDevices();
-    return devices.find((d) => d.id === address) ?? null;
+    devices = await bt.getDevices();
   } catch {
     return null;
   }
+
+  const byId = devices.find((d) => d.id === address);
+  if (byId) return byId;
+
+  const savedName = findSavedPrinterName(address);
+  const byName = savedName ? devices.find((d) => d.name === savedName) : undefined;
+  if (byName) return byName;
+
+  return devices.length === 1 ? devices[0] : null;
 }
 
 /** Gets `pairedDevice` pointing at `address` without any UI: the handle already held by this
@@ -302,13 +325,13 @@ async function findPermittedDevice(address: string): Promise<BtDevice | null> {
 async function attachSilently(address: string): Promise<boolean> {
   // Saved config points at a different printer than the one attached in this tab (station
   // printers, or the user re-scanned) — drop the stale handle and re-resolve.
-  if (pairedDevice && pairedDevice.id !== address) {
+  if (pairedDevice && attachedForAddress !== address) {
     pairedDevice = null;
     writeCharacteristic = null;
   }
   if (!pairedDevice) {
     const permitted = await findPermittedDevice(address);
-    if (permitted) remember(permitted);
+    if (permitted) remember(permitted, address);
   }
   return !!pairedDevice;
 }
@@ -434,6 +457,55 @@ export const BluetoothPrinter = {
     }
 
     await openGatt();
+  },
+
+  /**
+   * Plain-text account of what this browser is actually willing to remember, for the
+   * "Check connection" button in Printer Settings. Auto-reconnect stands entirely on
+   * getDevices(), and when it fails to produce the printer there is no way to tell from the
+   * outside whether the method is missing, returns nothing, throws, or returns the device under
+   * an id that no longer matches what was saved — the four have completely different fixes.
+   * This reports which one it is, from the till that's failing.
+   */
+  async describeConnection(): Promise<string> {
+    const bt = bluetoothApi();
+    if (!bt) {
+      return 'Web Bluetooth: not available here.\nNeeds https, and either Chrome on Android/desktop or Bluefy on iPhone/iPad.';
+    }
+
+    const config = getPrinterConfig();
+    const lines = [
+      `Saved printer: ${config.bluetoothName || '(none)'}`,
+      `Saved address: ${config.bluetoothAddress || '(none)'}`,
+      `Live link: ${writeCharacteristic && pairedDevice?.gatt?.connected ? 'connected' : 'not connected'}`,
+    ];
+
+    if (!bt.getDevices) {
+      lines.push('getDevices(): NOT supported by this browser.');
+      lines.push('So the printer can’t survive a reload here — tap Scan once after each reload.');
+      return lines.join('\n');
+    }
+
+    try {
+      const devices = await bt.getDevices();
+      lines.push(`getDevices(): ${devices.length} remembered device(s)`);
+      for (const d of devices) lines.push(`  • ${d.name || '(no name)'} — ${d.id}`);
+
+      if (devices.length === 0) {
+        lines.push('Nothing remembered — this browser drops Bluetooth permission when it closes.');
+      } else if (config.bluetoothAddress) {
+        const matched = devices.some((d) => d.id === config.bluetoothAddress);
+        lines.push(
+          matched
+            ? 'Saved address matches — auto-reconnect should work.'
+            : 'Saved address matches none of the above; reconnect falls back to the name, then to a lone device.',
+        );
+      }
+    } catch (err) {
+      lines.push(`getDevices() threw: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    return lines.join('\n');
   },
 
   /** Renders straight to ESC/POS bytes rather than the native build's tagged markup (that

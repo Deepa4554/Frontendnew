@@ -53,6 +53,9 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
   const [devices, setDevices] = useState<BluetoothPrinterDevice[]>([]);
   const [testing, setTesting] = useState(false);
   const [saved, setSaved] = useState(false);
+  // Filled by "Check connection" below. Null until asked for, so the panel stays out of the way
+  // on a till where Bluetooth is simply working.
+  const [diagnostic, setDiagnostic] = useState<string | null>(null);
 
   const save = () => {
     if (type === 'wifi') {
@@ -110,6 +113,18 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
       dispatch(showToast({ message: err instanceof Error ? err.message : 'Could not scan for Bluetooth devices.', icon: 'alert-circle-outline', tone: 'danger' }));
     } finally {
       setScanning(false);
+    }
+  };
+
+  /** Reports what the browser will and won't remember about the printer. Auto-reconnect after a
+   * reload rests on Web Bluetooth's getDevices(), which behaves differently in every browser
+   * that has it — when reconnecting silently fails there is nothing on screen to say why, and
+   * this is how the till itself answers that. */
+  const checkConnection = async () => {
+    try {
+      setDiagnostic(await BluetoothPrinter.describeConnection());
+    } catch (err) {
+      setDiagnostic(err instanceof Error ? err.message : 'Could not read the Bluetooth status.');
     }
   };
 
@@ -246,6 +261,17 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
               </View>
             )}
 
+            <TouchableOpacity style={styles.diagnosticBtn} onPress={checkConnection}>
+              <Icon name="stethoscope" size={15} color={COLORS.muted} />
+              <Text style={styles.diagnosticBtnText}>Check connection</Text>
+            </TouchableOpacity>
+
+            {diagnostic !== null && (
+              <Text style={styles.diagnosticBox} selectable>
+                {diagnostic}
+              </Text>
+            )}
+
             <Text style={styles.hint}>
               {isWeb
                 ? 'Chrome on Android/desktop over https, or the Bluefy browser on iPhone/iPad — Safari can’t do Bluetooth at all. Only BLE printers work here; older Bluetooth Classic units need the mobile app. Pick the printer once: switching apps, sleeping the screen, even closing and reopening the browser will drop the connection, and it reconnects by itself each time you come back. Tap Scan again only if a print says the printer was forgotten.'
@@ -309,6 +335,15 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   deviceName: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '700', color: COLORS.heading },
   deviceAddress: { fontSize: 11, color: COLORS.muted, marginTop: isDesktopWeb ? 0.75 : 0.75 },
   deviceTextActive: { color: '#FFFFFF' },
+  diagnosticBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderWidth: 1, borderColor: COLORS.divider, borderRadius: 6, paddingVertical: 7.5, marginTop: 3,
+  },
+  diagnosticBtnText: { fontSize: 11, fontWeight: '700', color: COLORS.muted },
+  diagnosticBox: {
+    fontSize: 11, lineHeight: 16, color: COLORS.heading, backgroundColor: COLORS.background,
+    borderRadius: 6, padding: 9, marginTop: 6, fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+  },
   testBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 6 : 6,
     borderWidth: 1, borderColor: COLORS.divider, borderRadius: 6, paddingVertical: isDesktopWeb ? 10.5 : 10.5, marginBottom: isDesktopWeb ? 9 : 9,

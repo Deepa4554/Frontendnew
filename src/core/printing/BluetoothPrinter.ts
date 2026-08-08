@@ -38,6 +38,18 @@ export const BluetoothPrinter = {
     await BLEPrinter.connectPrinter(address);
   },
 
+  /** Counterpart of the web build's diagnostic (see BluetoothPrinter.web.ts), so Printer
+   * Settings can offer the same button on both platforms. There's far less to report here:
+   * pairing is the OS's business on native, not something this app has to remember itself. */
+  async describeConnection(): Promise<string> {
+    const devices = await this.scanDevices().catch(() => [] as BluetoothPrinterDevice[]);
+    return [
+      'Native app — pairing is handled by your phone’s Bluetooth settings.',
+      `Paired devices visible to the app: ${devices.length}`,
+      ...devices.map((d) => `  • ${d.name} — ${d.address}`),
+    ].join('\n');
+  },
+
   /** Rendering lives behind this call rather than in PrinterService because the two platforms
    * need different output for the same lines: BLEPrinter does its own ESC/POS encoding and
    * wants tagged markup, while the browser has to emit raw bytes (see BluetoothPrinter.web.ts). */

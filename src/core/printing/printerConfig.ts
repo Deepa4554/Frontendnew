@@ -68,6 +68,16 @@ export const clearStationPrinterConfig = (stationName: string) => {
   setItem(STATION_STORAGE_KEY, JSON.stringify(all));
 };
 
+/** The name a Bluetooth printer was saved under, looked up by address across this device's
+ * default printer and every per-station one. The web build needs it to recognise a printer the
+ * browser hands back under a freshly minted id — see BluetoothPrinter.web.ts's
+ * findPermittedDevice, where an address that no longer matches is the normal case after the
+ * browser has been closed and reopened. */
+export const findSavedPrinterName = (address: string): string | undefined => {
+  const all: PrinterConfig[] = [getPrinterConfig(), ...Object.values(readStationConfigs())];
+  return all.find((c) => c.bluetoothAddress === address)?.bluetoothName;
+};
+
 /** Resolves which printer a KOT line for `stationName` should route to: that station's
  * own printer if this device has one configured, otherwise this device's default
  * printer (getPrinterConfig()) — so a cafe that never sets up per-station printers keeps
