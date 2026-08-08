@@ -56,6 +56,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
   // Filled by "Check connection" below. Null until asked for, so the panel stays out of the way
   // on a till where Bluetooth is simply working.
   const [diagnostic, setDiagnostic] = useState<string | null>(null);
+  const [checking, setChecking] = useState(false);
 
   const save = () => {
     if (type === 'wifi') {
@@ -121,10 +122,16 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
    * that has it — when reconnecting silently fails there is nothing on screen to say why, and
    * this is how the till itself answers that. */
   const checkConnection = async () => {
+    // Slow on purpose — it waits for the printer to advertise itself before giving up, so this
+    // can run the better part of half a minute against a printer that's switched off.
+    setChecking(true);
+    setDiagnostic(null);
     try {
       setDiagnostic(await BluetoothPrinter.describeConnection());
     } catch (err) {
       setDiagnostic(err instanceof Error ? err.message : 'Could not read the Bluetooth status.');
+    } finally {
+      setChecking(false);
     }
   };
 
@@ -261,9 +268,11 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
               </View>
             )}
 
-            <TouchableOpacity style={styles.diagnosticBtn} onPress={checkConnection}>
-              <Icon name="stethoscope" size={15} color={COLORS.muted} />
-              <Text style={styles.diagnosticBtnText}>Check connection</Text>
+            <TouchableOpacity style={styles.diagnosticBtn} onPress={checkConnection} disabled={checking}>
+              {checking ? <ActivityIndicator size="small" color={COLORS.muted} /> : <Icon name="stethoscope" size={15} color={COLORS.muted} />}
+              <Text style={styles.diagnosticBtnText}>
+                {checking ? 'Checking — this can take up to 30s…' : 'Check connection'}
+              </Text>
             </TouchableOpacity>
 
             {diagnostic !== null && (

@@ -75,6 +75,11 @@ interface BtDevice extends EventTarget {
   id: string;
   name?: string;
   gatt?: BtServer;
+  /** Starts delivering `advertisementreceived` for this device. Optional — Chrome gates it
+   * behind a flag, Bluefy has it from 3.8.1, and the reconnect path degrades to a plain
+   * connect() where it's missing. See waitUntilInRange. */
+  watchAdvertisements?(): Promise<void>;
+  unwatchAdvertisements?(): void;
 }
 interface BtApi {
   requestDevice(options: { acceptAllDevices?: boolean; optionalServices?: string[] }): Promise<BtDevice>;
@@ -120,6 +125,11 @@ const RECONNECT_DELAYS_MS = [0, 500, 1500, 3000, 6000, 10000, 15000, 15000, 1500
  * enough for a slow BLE stack to finish service discovery, short enough that the backoff
  * ladder above still means something. */
 const CONNECT_TIMEOUT_MS = 10000;
+/** How long to wait for the printer to advertise itself before the second connect attempt.
+ * A BLE peripheral advertises every couple of hundred milliseconds while it's idle and
+ * unconnected, so anything arriving at all arrives quickly; this is mostly budget for a printer
+ * that's simply switched off, and it's why the value is bounded rather than open-ended. */
+const ADVERTISEMENT_WAIT_MS = 8000;
 
 const NO_SUPPORT_MESSAGE =
   'This browser can’t do Bluetooth. Use Chrome on Android (over https), Bluefy on iPhone/iPad, a WiFi/LAN printer, or the mobile app.';
@@ -336,15 +346,40 @@ async function attachSilently(address: string): Promise<boolean> {
   return !!pairedDevice;
 }
 
-/** Brings the already-attached `pairedDevice` up to a usable write channel, and from here on
- * this page keeps that printer alive. */
-async function openGatt(): Promise<void> {
-  const device = pairedDevice;
-  if (!device) throw new Error(RE_PICK_MESSAGE);
-  if (!device.gatt) throw new Error(NOT_A_PRINTER_MESSAGE);
-  const gatt = device.gatt;
+/**
+ * Waits until the printer is actually on the air. A device handed back by getDevices() is a
+ * valid handle to a device the radio may not have seen since the app restarted, and connecting
+ * to one the stack hasn't observed can simply never complete — the promise neither resolves nor
+ * rejects, because there is nothing to connect to yet. watchAdvertisements() is the way to ask
+ * "tell me when it's really in range", and an advertisement is the signal that a connect will
+ * now land.
+ *
+ * Resolves either way: the point is to *delay* the next connect attempt until it has a chance,
+ * not to decide whether to make it. If advertisements aren't supported, or the browser refuses
+ * to start them, the caller should still go ahead and try.
+ */
+async function waitUntilInRange(device: BtDevice): Promise<void> {
+  if (!device.watchAdvertisements) return;
+  await new Promise<void>((resolve) => {
+    const finish = () => {
+      clearTimeout(timer);
+      device.removeEventListener('advertisementreceived', finish);
+      try {
+        device.unwatchAdvertisements?.();
+      } catch {
+        // Vendor-optional; nothing to do if it won't stop.
+      }
+      resolve();
+    };
+    const timer = setTimeout(finish, ADVERTISEMENT_WAIT_MS);
+    device.addEventListener('advertisementreceived', finish);
+    device.watchAdvertisements!().catch(finish);
+  });
+}
 
-  await withTimeout(
+/** One pass at connecting and finding the write channel, bounded so it can't hang forever. */
+function connectAndDiscover(gatt: BtServer): Promise<void> {
+  return withTimeout(
     (async () => {
       if (!gatt.connected) {
         writeCharacteristic = null;
@@ -355,6 +390,25 @@ async function openGatt(): Promise<void> {
     CONNECT_TIMEOUT_MS,
     UNREACHABLE_MESSAGE,
   );
+}
+
+/** Brings the already-attached `pairedDevice` up to a usable write channel, and from here on
+ * this page keeps that printer alive. Tries the direct connect first because that's all it
+ * takes when the device was just picked from the chooser, or was seen earlier in this session;
+ * only when that fails is it worth paying for the advertisement wait. */
+async function openGatt(): Promise<void> {
+  const device = pairedDevice;
+  if (!device) throw new Error(RE_PICK_MESSAGE);
+  if (!device.gatt) throw new Error(NOT_A_PRINTER_MESSAGE);
+  const gatt = device.gatt;
+
+  try {
+    await connectAndDiscover(gatt);
+  } catch (err) {
+    if (!device.watchAdvertisements) throw err;
+    await waitUntilInRange(device);
+    await connectAndDiscover(gatt);
+  }
 
   activeAddress = device.id;
   installListeners();
@@ -497,12 +551,33 @@ export const BluetoothPrinter = {
         const matched = devices.some((d) => d.id === config.bluetoothAddress);
         lines.push(
           matched
-            ? 'Saved address matches — auto-reconnect should work.'
+            ? 'Saved address matches one of the above.'
             : 'Saved address matches none of the above; reconnect falls back to the name, then to a lone device.',
         );
       }
+      lines.push(`watchAdvertisements(): ${devices.some((d) => d.watchAdvertisements) ? 'supported' : 'NOT supported'}`);
     } catch (err) {
       lines.push(`getDevices() threw: ${err instanceof Error ? err.message : String(err)}`);
+    }
+
+    // Finding the device and being able to talk to it are two different things, and the gap
+    // between them is exactly where a silent reconnect dies. So this doesn't just report state,
+    // it runs the real reconnect — the same silent path a page load takes, chooser excluded —
+    // and reports what came back. "Connected fine here" and "connect failed with X" send the
+    // investigation to completely different places.
+    if (!config.bluetoothAddress) {
+      lines.push('Connect test: skipped, no printer saved on this device.');
+      return lines.join('\n');
+    }
+    try {
+      if (await attachSilently(config.bluetoothAddress)) {
+        await openGatt();
+        lines.push('Connect test: SUCCESS — the printer is connected now.');
+      } else {
+        lines.push('Connect test: the saved printer wasn’t among the remembered devices.');
+      }
+    } catch (err) {
+      lines.push(`Connect test FAILED: ${err instanceof Error ? err.message : String(err)}`);
     }
 
     return lines.join('\n');
