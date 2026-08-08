@@ -88,7 +88,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
     if (!BluetoothPrinter.isSupported()) {
       dispatch(showToast({
         message: isWeb
-          ? 'This browser can’t do Bluetooth. Use Chrome on Android, a WiFi printer, or the mobile app.'
+          ? 'This browser can’t do Bluetooth. Use Chrome on Android, Bluefy on iPhone/iPad, a WiFi printer, or the mobile app.'
           : 'Bluetooth printing isn’t available on this device.',
         icon: 'information-outline',
         tone: 'info',
@@ -248,7 +248,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
 
             <Text style={styles.hint}>
               {isWeb
-                ? 'Chrome on Android/desktop only, over https — iPhone browsers can’t do Bluetooth at all. Only BLE printers work here; older Bluetooth Classic units need the mobile app. The browser forgets the printer on every page reload, so tap Scan once after reloading.'
+                ? 'Chrome on Android/desktop over https, or the Bluefy browser on iPhone/iPad — Safari can’t do Bluetooth at all. Only BLE printers work here; older Bluetooth Classic units need the mobile app. Pick the printer once: switching apps, sleeping the screen, even closing and reopening the browser will drop the connection, and it reconnects by itself each time you come back. Tap Scan again only if a print says the printer was forgotten.'
                 : 'Pair the printer in your phone’s Bluetooth settings first, then scan here to pick it.'}
             </Text>
           </View>
