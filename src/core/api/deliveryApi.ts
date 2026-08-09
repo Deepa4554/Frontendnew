@@ -15,6 +15,9 @@ export interface DeliverySettings {
   hasAuthToken: boolean;
   useTestEnvironment: boolean;
   passFeeToCustomer: boolean;
+  /** Whether the rider collects cash at the door for unpaid orders — needs Borzo's COD
+   * agreement on the account, so off by default. */
+  collectCod: boolean;
   pickupAddress: string | null;
   pickupLatitude: number | null;
   pickupLongitude: number | null;
@@ -33,6 +36,7 @@ export interface UpdateDeliverySettingsRequest {
   authToken?: string;
   useTestEnvironment?: boolean;
   passFeeToCustomer?: boolean;
+  collectCod?: boolean;
   pickupAddress?: string;
   pickupLatitude?: number;
   pickupLongitude?: number;

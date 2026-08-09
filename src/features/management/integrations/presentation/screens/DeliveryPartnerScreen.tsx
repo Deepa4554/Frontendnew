@@ -271,6 +271,24 @@ export const DeliveryPartnerScreen = ({ navigation }: any) => {
               </View>
             </View>
 
+            <View style={styles.card}>
+              <View style={styles.switchRow}>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.switchLabel}>Collect cash on delivery (COD)</Text>
+                  <Text style={styles.hint}>
+                    {settings.collectCod
+                      ? 'The rider collects the order total in cash for unpaid orders. Needs COD enabled on your Borzo account, or the booking is rejected.'
+                      : 'Off — the rider only delivers. Turn on only if Borzo has enabled COD for your account.'}
+                  </Text>
+                </View>
+                <Switch
+                  value={settings.collectCod}
+                  disabled={isPending}
+                  onValueChange={(v) => patch({ collectCod: v }, 'Saved.')}
+                />
+              </View>
+            </View>
+
             <View style={[styles.statusBanner, settings.readyToBook ? styles.statusOk : styles.statusBlocked]}>
               <Icon
                 name={settings.readyToBook ? 'check-circle' : 'alert-circle-outline'}
