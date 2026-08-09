@@ -383,17 +383,29 @@ export function buildKotLines(kot: PrintableKot, columns = 32): ReceiptLine[] {
   if (kot.guestName) push({ kind: 'text', text: kot.guestName, bold: true });
   push({ kind: 'dashes' });
 
-  for (const item of kot.items) {
+  // "1." through "9." are 2 chars, "10." is 3 — padding the number keeps every item name
+  // starting in the same column instead of the list stepping right at the tenth line.
+  const seqWidth = String(kot.items.length).length;
+
+  kot.items.forEach((item, i) => {
+    // A serial number the kitchen can call back ("number 3 ready") and tick off as each
+    // dish leaves the pass. It counts within this ticket only — printKot splits a
+    // multi-station order into one sub-ticket per station, and each of those is a separate
+    // piece of paper in a different hand, so each restarts at 1.
+    const seq = `${String(i + 1).padStart(seqWidth, ' ')}. `;
     // Bold, not `big`: a double-height line eats ~7mm of paper against a normal line's ~4mm,
     // and an item list is the one part of this ticket that grows without limit — a ten-item
     // order ran to 12cm. The title above stays big so the ticket is still identifiable at a
     // glance on the rail; the items only have to be readable, and bold does that.
-    push({ kind: 'text', text: `${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, bold: true });
+    push({ kind: 'text', text: `${seq}${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, bold: true });
+    // Add-ons and notes indent past the serial number so they hang under their item's text
+    // rather than under its number, which would read as another numbered line.
+    const indent = ' '.repeat(seq.length);
     for (const addOn of item.selectedModifiers ?? []) {
-      push({ kind: 'text', text: `  + ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
+      push({ kind: 'text', text: `${indent}+ ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
     }
-    if (item.modifier) push({ kind: 'text', text: `  >> ${item.modifier}` });
-  }
+    if (item.modifier) push({ kind: 'text', text: `${indent}>> ${item.modifier}` });
+  });
   push({ kind: 'dashes' });
   push({ kind: 'feed' });
 
