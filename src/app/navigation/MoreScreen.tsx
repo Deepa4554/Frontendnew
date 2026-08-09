@@ -106,6 +106,10 @@ export const MoreScreen = () => {
         // reach the setup screen. Premium cafes see both entries — harmless, the hub's
         // WhatsApp card routes to the same screen.
         { label: 'WhatsApp Business', icon: 'whatsapp', route: 'WhatsAppSetup' },
+        // Same reasoning as WhatsApp above: Plus feature, Premium hub. The Integrations hub
+        // also can't route here anyway — its cards are built from the server's Integration
+        // rows, and a courier partner isn't one of them.
+        { label: 'Delivery Partner', icon: 'moped', route: 'DeliveryPartner' },
         { label: 'Branches', icon: 'storefront', route: 'Branches' },
         { label: 'Expenses', icon: 'cash-minus', route: 'Expenses' },
         { label: 'Khatabook', icon: 'notebook-outline', route: 'Khatabook' },

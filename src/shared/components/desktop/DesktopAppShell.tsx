@@ -104,6 +104,7 @@ const NAV_GROUPS = (unreadCount: number, pendingApprovals: number): NavGroup[] =
       // Separate pill from Integrations — WhatsApp Business is Plus, the hub is Premium.
       // See the matching note in MoreScreen.
       { label: 'WhatsApp Business', icon: 'whatsapp', route: 'WhatsAppSetup' },
+      { label: 'Delivery Partner', icon: 'moped', route: 'DeliveryPartner' },
       { label: 'Branches', icon: 'storefront-outline', route: 'Branches' },
     ],
   },
