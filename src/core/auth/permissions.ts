@@ -111,14 +111,26 @@ export function isScreenEnabledForTenant(user: AccessUser | undefined, route: st
   return (user.tenantEnabledScreens ?? []).includes(route);
 }
 
-/** canAccessRoute's per-key checks, without the ancestor-chain cascade — see canAccessRoute
- * for why the cascade has to be a separate outer step rather than folded in here. */
-function canAccessRouteSelf(user: AccessUser | undefined, route: string, planCategory: PlanCategory): boolean {
+/**
+ * canAccessRoute's per-key checks, without the ancestor-chain cascade — see canAccessRoute for
+ * why the cascade has to be a separate outer step rather than folded in here.
+ *
+ * `checkPlan` defaults on for the route being checked directly, but canAccessRoute passes false
+ * when walking ancestors. A child can be deliberately packaged below its parent hub's plan —
+ * WhatsAppSetup and DeliveryPartner are both Plus, sitting under the Premium Integrations hub,
+ * by design (see the comment on WhatsAppSetup in screenCatalog.ts) — and re-applying the
+ * ancestor's own plan gate here would defeat exactly that packaging: every plan check the child
+ * needs is already its own minPlan above, so the ancestor walk only has to confirm the tenant/
+ * role gates a parent being switched off or hidden should still cascade down.
+ */
+function canAccessRouteSelf(user: AccessUser | undefined, route: string, planCategory: PlanCategory, checkPlan = true): boolean {
   if (!user?.role) return false;
   if (PLATFORM_ADMIN_ONLY_ROUTES.has(route) && !user.isPlatformAdmin) return false;
 
-  const minPlan = SCREEN_MIN_PLAN[route];
-  if (minPlan && !categoryMeetsMin(planCategory, minPlan)) return false;
+  if (checkPlan) {
+    const minPlan = SCREEN_MIN_PLAN[route];
+    if (minPlan && !categoryMeetsMin(planCategory, minPlan)) return false;
+  }
 
   if (!isScreenEnabledForTenant(user, route)) return false;
 
@@ -158,7 +170,7 @@ function canAccessRouteSelf(user: AccessUser | undefined, route: string, planCat
  */
 export function canAccessRoute(user: AccessUser | undefined, route: string, planCategory: PlanCategory): boolean {
   if (!canAccessRouteSelf(user, route, planCategory)) return false;
-  return ancestorsOf(route).every((ancestor) => canAccessRouteSelf(user, ancestor, planCategory));
+  return ancestorsOf(route).every((ancestor) => canAccessRouteSelf(user, ancestor, planCategory, /* checkPlan */ false));
 }
 
 // Routes whose entire purpose is dine-in table service — nothing left to show once
