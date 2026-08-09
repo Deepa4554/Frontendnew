@@ -48,8 +48,8 @@ const KIND_LABEL: Record<OrderKind, string> = { TAKEAWAY: 'Takeaway', DELIVERY: 
 export const TakeawayDeliveryScreen = ({ navigation }: any) => {
   const dispatch = useDispatch();
   const COLORS = useThemeColors();
-  const { isDesktopWeb } = useResponsive();
-  const styles = makeStyles(COLORS);
+  const { isDesktopWeb, isTablet } = useResponsive();
+  const styles = makeStyles(COLORS, isTablet);
   const insets = useSafeAreaInsets();
   const { data: settings } = useSettings();
 
@@ -183,10 +183,12 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string) => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }) => {
     if (!order) return;
     try {
-      await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial });
+      // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
+      // server needs them to open the customer's khata and rejects the settle without.
+      await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone });
       if (andThen === 'print') await printBill();
       else if (andThen === 'whatsapp') await sendViaWhatsApp(phoneOverride);
     } catch (err) {
@@ -334,10 +336,10 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
               >
                 <View style={styles.tileKindRow}>
                   <Icon name={KIND_ICON[kind]} size={13} color={COLORS.muted} />
-                  <Text style={styles.tileKindText}>{KIND_LABEL[kind]}</Text>
+                  <Text style={styles.tileKindText} numberOfLines={1}>{KIND_LABEL[kind]}</Text>
                 </View>
                 <View style={[styles.tileStatusBadge, { backgroundColor: `${tileColor}22` }]}>
-                  <Text style={[styles.tileStatusBadgeText, { color: tileColor }]}>{o.status}</Text>
+                  <Text style={[styles.tileStatusBadgeText, { color: tileColor }]} numberOfLines={1}>{o.status}</Text>
                 </View>
                 <Text style={styles.tileId} numberOfLines={1}>{o.number}</Text>
                 <Text style={styles.tileMeta} numberOfLines={1}>{o.guestName || 'Walk-in'} · {o.items.filter((i) => !i.voided).length} items</Text>
@@ -553,7 +555,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
   );
 };
 
-const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.create({
+const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isTablet: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingHorizontal: 16, paddingBottom: 12 },
   headerIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
@@ -575,10 +577,13 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     backgroundColor: COLORS.cardAlt,
     justifyContent: 'flex-end',
   },
-  tileDesktop: { width: '18%', minHeight: 105 },
-  tileKindRow: { flexDirection: 'row', alignItems: 'center', gap: 4, position: 'absolute', top: 12, left: 12 },
-  tileKindText: { fontSize: 10, fontWeight: '700', color: COLORS.muted },
-  tileStatusBadge: { position: 'absolute', top: 12, right: 12, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
+  // 3-up on a tablet-width browser, 5/6-up on real desktop — 18% cards were too
+  // narrow once the tablet content column shrank, pushing the kind label and
+  // status badge below into each other.
+  tileDesktop: { width: isTablet ? '31%' : '18%', minHeight: 105 },
+  tileKindRow: { flexDirection: 'row', alignItems: 'center', gap: 4, position: 'absolute', top: 12, left: 12, maxWidth: '55%' },
+  tileKindText: { fontSize: 10, fontWeight: '700', color: COLORS.muted, flexShrink: 1 },
+  tileStatusBadge: { position: 'absolute', top: 12, right: 12, maxWidth: '48%', paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999 },
   tileStatusBadgeText: { fontSize: 9, fontWeight: '800', letterSpacing: 0.3 },
   tileId: { fontSize: 18, fontWeight: 'bold', color: COLORS.heading, marginBottom: 6 },
   tileMeta: { fontSize: 12, color: COLORS.muted, marginBottom: 2 },

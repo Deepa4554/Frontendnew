@@ -96,8 +96,8 @@ type ItemWiseKotGroup = {
 export const KDSScreen = () => {
   const navigation = useNavigation<any>();
   const COLORS = useThemeColors();
-  const { isDesktopWeb } = useResponsive();
-  const styles = makeStyles(COLORS, isDesktopWeb);
+  const { isDesktopWeb, isTablet } = useResponsive();
+  const styles = makeStyles(COLORS, isDesktopWeb, isTablet);
   const insets = useSafeAreaInsets();
   // Shared status color language across all three views (New/Preparing/Ready) — a ticket
   // or item's own current stage always reads the same color everywhere in the screen.
@@ -726,7 +726,7 @@ export const KDSScreen = () => {
   );
 };
 
-const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
+const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean, isTablet: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 12 : 9, paddingBottom: isDesktopWeb ? 12 : 9 },
   brandTitle: { fontSize: 22, fontWeight: 'bold', color: COLORS.heading, flex: 1 },
@@ -747,7 +747,9 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   ticketList: { paddingHorizontal: isDesktopWeb ? 16 : 12, gap: isDesktopWeb ? 10 : 7.5 },
   ticketListDesktop: { paddingHorizontal: isDesktopWeb ? 18 : 18, flexDirection: 'row', flexWrap: 'wrap', gap: isDesktopWeb ? 11 : 12 },
   ticketCard: { flexDirection: 'row', backgroundColor: COLORS.cardAlt, borderRadius: 8, overflow: 'hidden', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  ticketCardDesktop: { width: '31%', alignSelf: 'flex-start' },
+  // 2-up on a tablet-width browser, 3-up on real desktop — 31% cards were cramped
+  // once the tablet content column shrank below what desktop's grid math assumed.
+  ticketCardDesktop: { width: isTablet ? '48%' : '31%', alignSelf: 'flex-start' },
   ticketBody: { flex: 1, padding: isDesktopWeb ? 9 : 9 },
   // KOT View card — full colored border + tinted header instead of the thin accent strip,
   // so a ticket's status (and aging urgency) reads at a glance across the whole card.

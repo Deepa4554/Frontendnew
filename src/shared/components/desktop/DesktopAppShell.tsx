@@ -77,6 +77,7 @@ const NAV_GROUPS = (unreadCount: number, pendingApprovals: number): NavGroup[] =
     items: [
       { label: 'Billing', icon: 'credit-card-outline', route: 'Billing' },
       { label: 'Expenses', icon: 'cash-minus', route: 'Expenses' },
+      { label: 'Khatabook', icon: 'notebook-outline', route: 'Khatabook' },
       { label: 'Subscription', icon: 'cloud-check-outline', route: 'SaaS' },
     ],
   },
@@ -118,7 +119,7 @@ interface Props {
 }
 
 export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeRoute, searchPlaceholder }) => {
-  const { isDesktopWeb } = useResponsive();
+  const { isDesktopWeb, isTablet } = useResponsive();
   const dispatch = useDispatch<AppDispatch>();
   const user = useSelector((s: RootState) => s.auth.user);
   const role = user?.role;
@@ -210,7 +211,7 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
 
   return (
     <View style={styles.root}>
-      <View style={[styles.sidebar, collapsed && styles.sidebarCollapsed]}>
+      <View style={[styles.sidebar, isTablet && styles.sidebarTablet, collapsed && styles.sidebarCollapsed]}>
         <View style={[styles.brandBox, collapsed && styles.brandBoxCollapsed]}>
           {!collapsed && (
             <View style={{ flex: 1, minWidth: 0 }}>
@@ -421,6 +422,11 @@ const styles = StyleSheet.create({
     borderRightWidth: 1,
     borderRightColor: COLORS.divider,
     paddingTop: isDesktopWeb ? 14 : 21,
+  },
+  // ~25% narrower than the full 280px desktop sidebar — frees up content width for the
+  // card grids on tablet-width browsers, which otherwise inherit the desktop sidebar as-is.
+  sidebarTablet: {
+    width: 210,
   },
   sidebarCollapsed: {
     width: 76,

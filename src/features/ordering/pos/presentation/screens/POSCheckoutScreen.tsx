@@ -155,16 +155,27 @@ const NoteSuggestionChips = ({
  * React Query's structural sharing keeps an unchanged item's identity stable across
  * refetches — so a row re-renders only when its own item's data actually changes.
  * The JSX is exactly the block that previously lived inline in menuAndCategoryPicker. */
-const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesktopWeb }: {
+const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesktopWeb, isTablet }: {
   item: ApiMenuItem;
   onPress: (item: ApiMenuItem) => void;
   onTogglePin: (item: ApiMenuItem) => void;
   styles: ReturnType<typeof makeStyles>;
   COLORS: ReturnType<typeof useThemeColors>;
   isDesktopWeb: boolean;
+  isTablet: boolean;
 }) => (
   <TouchableOpacity
-    style={[styles.menuRow, isDesktopWeb && styles.menuRowDesktop, !item.available && styles.menuCardDisabled]}
+    style={[
+      styles.menuRow,
+      isDesktopWeb && styles.menuRowDesktop,
+      // The 48% 2-up grid column was tuned for real desktop width — on a
+      // tablet-width browser it left too little room for name + subtitle +
+      // price + the ADD button, so the row content overflowed the card
+      // ("price truncation"/squeeze). Tablet instead gets one full-width row
+      // per item, same single-row name/price layout, no width squeeze.
+      isTablet && { width: '100%' as const },
+      !item.available && styles.menuCardDisabled,
+    ]}
     onPress={() => onPress(item)}
     disabled={!item.available}
     activeOpacity={0.7}
@@ -256,7 +267,7 @@ export const POSCheckoutScreen = () => {
   // menu column only ~120px wide, wrapping item names/prices one character
   // per line. Tablet instead gets the same stacked mobile layout as a narrow
   // phone screen, just inside the desktop sidebar shell.
-  const { isDesktop, isDesktopWeb } = useResponsive();
+  const { isDesktop, isDesktopWeb, isTablet } = useResponsive();
   const insets = useSafeAreaInsets();
   // Pushes every bottom-sheet modal below up above the on-screen keyboard on
   // mobile web (see useKeyboardInsetWeb) — the overlay itself always stays
@@ -362,7 +373,7 @@ export const POSCheckoutScreen = () => {
   // What PaymentMethodPicker currently has picked — same component/state shape as an
   // existing order's Settle Bill panel (OrderBillActions), so Pay First presents the exact
   // same payment-method UI instead of its own bespoke one.
-  const [pfPayment, setPfPayment] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true });
+  const [pfPayment, setPfPayment] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true, dueAmount: 0, guestName: '', guestPhone: '' });
   const [pfPickerKey, setPfPickerKey] = useState(0);
   const [settlingMode, setSettlingMode] = useState<'settle' | 'print' | 'whatsapp' | null>(null);
   // Whether settling also sends the kitchen ticket to the printer. The normal flow offers
@@ -1127,8 +1138,18 @@ export const POSCheckoutScreen = () => {
       // nothing more is coming. Excluded for CASH — a walk-in cash sale has no dashboard
       // to come back to (see TokenDashboard/TableManagement/TakeawayDelivery's activeOnly
       // queries, none of which include CASH), so it must settle for real right here.
+      // A Due (udhaar) leg forces the bill closed regardless of order type: the uncollected
+      // part has already moved onto the customer's khata, so leaving the order open too would
+      // have the same rupees owed in two places (the server rejects the combination outright —
+      // see OrdersController.Pay). guestName/guestPhone come from the picker's own compulsory
+      // khata fields and are ignored on an ordinary settle.
       order = await payOrderMutation.mutateAsync({
-        id: order.id, splits, allowPartial: pfPayment.isPartial, keepOpen: orderType !== 'CASH',
+        id: order.id,
+        splits,
+        allowPartial: pfPayment.isPartial,
+        keepOpen: orderType !== 'CASH' && pfPayment.dueAmount <= 0,
+        guestName: pfPayment.dueAmount > 0 ? pfPayment.guestName : undefined,
+        guestPhone: pfPayment.dueAmount > 0 ? pfPayment.guestPhone : undefined,
       });
 
       setPayFirstVisible(false);
@@ -1351,10 +1372,12 @@ export const POSCheckoutScreen = () => {
   // Payment right here in the receipt modal, for every order type — not gated on
   // Served (see OrdersController.Pay). Lets a cashier fire the KOT and take payment
   // on the same screen instead of hopping to Tables/Token Dashboard afterward.
-  const handleReceiptMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string) => {
+  const handleReceiptMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }) => {
     if (!receipt) return;
     try {
-      await payOrderMutation.mutateAsync({ id: receipt.orderId, splits: payments, allowPartial });
+      // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
+      // server needs them to open the customer's khata and rejects the settle without.
+      await payOrderMutation.mutateAsync({ id: receipt.orderId, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone });
       dispatch(showToast({ message: 'Bill settled.', icon: 'check-circle', tone: 'success' }));
       // Chained straight off the settle tap (see OrderBillActions' split-button menu) —
       // both read order content that settling never changes, so no need to wait on a
@@ -1909,6 +1932,7 @@ export const POSCheckoutScreen = () => {
               styles={styles}
               COLORS={COLORS}
               isDesktopWeb={isDesktopWeb}
+              isTablet={isTablet}
             />
           ))
           )}
@@ -2132,7 +2156,13 @@ export const POSCheckoutScreen = () => {
                   Pay First settles a local cart instead of a server order, but the
                   payment-method UI itself is identical everywhere it appears. Keyed so
                   openPayFirst forces a clean reset on every re-open. */}
-              <PaymentMethodPicker key={pfPickerKey} owed={total} onChange={setPfPayment} />
+              <PaymentMethodPicker
+                key={pfPickerKey}
+                owed={total}
+                guestName={guestDraft || guestName}
+                guestPhone={guestPhoneDraft || guestPhone}
+                onChange={setPfPayment}
+              />
 
               {/* Kitchen-ticket choice, pre-set instead of costing its own button on the
                   settle row below — this is what keeps settling a single tap while still

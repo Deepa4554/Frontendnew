@@ -113,10 +113,29 @@ export interface OrderPayment {
   amount: number;
 }
 
-/** One tender in a split payment request — e.g. part Cash, part Card. */
+/** One tender in a split payment request — e.g. part Cash, part Card.
+ *
+ *  'Due' is a tender here too, but a special one: it settles the bill without any money
+ *  changing hands and parks the amount on the customer's khata instead (see
+ *  khatabookApi). It's what makes "₹200 cash now, ₹250 udhaar" a single settle. Sending it
+ *  requires a customer name + 10-digit mobile (see PayOptions) and is rejected alongside
+ *  allowPartial/keepOpen, both of which would leave the order open with the same rupees
+ *  owed in two places. */
 export interface PaymentSplit {
-  method: 'Cash' | 'Card' | 'UPI';
+  method: 'Cash' | 'Card' | 'UPI' | 'Due';
   amount: number;
+}
+
+/** The extras `pay` takes beyond the tenders themselves. guestName/guestPhone are only read
+ *  when a 'Due' tender is in play, where they're compulsory — the credit has to land on an
+ *  identifiable customer's khata, and the number is what that khata is looked up by. Both
+ *  are stamped onto the order as a side effect, so a bill rung up as a walk-in ends up
+ *  naming whoever actually took the credit. */
+export interface PayOptions {
+  allowPartial?: boolean;
+  keepOpen?: boolean;
+  guestName?: string;
+  guestPhone?: string;
 }
 
 export interface ApiOrder {
@@ -180,9 +199,16 @@ export interface ApiOrder {
    * partial tenders collected before the bill is fully settled (see partiallyPaid). */
   payments: OrderPayment[];
   /** Sum of `payments` — non-zero before `paid` flips true only once a deliberate partial
-   * payment (Pay's `allowPartial`) has been collected. */
+   * payment (Pay's `allowPartial`) has been collected. Counts the 'Due' tender too, so
+   * `balanceDue` stays 0 on a settled credit bill: from the ORDER's point of view that bill
+   * is closed and there is nothing further to collect against it. What's still owed lives on
+   * the customer's khata instead — see `dueAmount`. */
   amountPaid: number;
   balanceDue: number;
+  /** How much of `amountPaid` was credit rather than money in the till (the 'Due' tender).
+   * Zero on an ordinary bill; non-zero means this much moved onto the customer's khatabook
+   * at settle time and is collected there, not here. */
+  dueAmount: number;
   /** True once at least one tender has been collected but the bill isn't fully settled yet.
    * Never true at the same time as `paid`. */
   partiallyPaid: boolean;
@@ -321,9 +347,10 @@ export const ordersApi = {
    * owing (order becomes partiallyPaid instead of paid; call pay again later for the rest).
    * keepOpen is the opposite case: the payment fully covers the balance but the order should
    * stay open anyway (Pay First, more items still expected) — order stays partiallyPaid
-   * instead of paid even at 100% covered; call close() later once nothing more will be added. */
-  pay: (id: number, paymentMethod?: string, splits?: PaymentSplit[], allowPartial?: boolean, keepOpen?: boolean) =>
-    apiClient.patch<ApiOrder>(`/orders/${id}/pay`, { paymentMethod, splits, allowPartial, keepOpen }).then((r) => r.data),
+   * instead of paid even at 100% covered; call close() later once nothing more will be added.
+   * A 'Due' split settles the bill on credit instead — see PaymentSplit and PayOptions. */
+  pay: (id: number, paymentMethod?: string, splits?: PaymentSplit[], opts?: PayOptions) =>
+    apiClient.patch<ApiOrder>(`/orders/${id}/pay`, { paymentMethod, splits, ...opts }).then((r) => r.data),
   /** Finalizes a keepOpen (Pay First) order once no more items are going to be added — the
    * balance is already fully covered, so this just flips it to paid with no new payment. */
   close: (id: number) => apiClient.patch<ApiOrder>(`/orders/${id}/close`).then((r) => r.data),

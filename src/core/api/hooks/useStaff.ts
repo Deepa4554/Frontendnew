@@ -49,7 +49,7 @@ export const useResetStaffPassword = () =>
 export const useGrantStaffAccess = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, req }: { id: number; req: { email: string; password: string; loginRole: LoginRole } }) =>
+    mutationFn: ({ id, req }: { id: number; req: { phone: string; password: string; loginRole: LoginRole } }) =>
       staffApi.grantAccess(id, req),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
   });

@@ -108,6 +108,7 @@ export const SCREEN_SEARCH_INDEX: ScreenSearchEntry[] = [
   { id: 'whatsappsetup', label: 'WhatsApp Business', keywords: ['whatsapp'], icon: 'whatsapp', permissionRouteKey: 'WhatsAppSetup', navigate: nav('WhatsAppSetup') },
   { id: 'branches', label: 'Branches', icon: 'storefront', permissionRouteKey: 'Branches', navigate: nav('Branches') },
   { id: 'expenses', label: 'Expenses', icon: 'cash-minus', permissionRouteKey: 'Expenses', navigate: nav('Expenses') },
+  { id: 'khatabook', label: 'Khatabook', keywords: ['due', 'udhaar', 'credit', 'khata'], icon: 'notebook-outline', permissionRouteKey: 'Khatabook', navigate: nav('Khatabook') },
   { id: 'saas', label: 'Subscription', keywords: ['plan', 'billing plan'], icon: 'cloud-check', permissionRouteKey: 'SaaS', navigate: nav('SaaS') },
 
   // Super Admin

@@ -2,10 +2,15 @@ import { apiClient } from '../network/api';
 
 export type StaffStatus = 'ACTIVE' | 'SUSPENDED' | 'ON_LEAVE' | 'TERMINATED';
 
-export type LoginRole = 'Manager' | 'Cashier' | 'Chef' | 'Waiter' | 'KitchenStaff' | 'Accountant';
+export type LoginRole = 'Owner' | 'Manager' | 'Cashier' | 'Chef' | 'Waiter' | 'KitchenStaff' | 'Accountant';
 
+/** Excludes Owner deliberately — only an existing Owner is allowed to grant another Owner
+ * login (enforced by the backend too), so screens that let any Owner/Manager add staff
+ * splice 'Owner' in themselves, gated on the current user's own role. See
+ * StaffProfileScreen/TeamOverviewScreen's roleOptions. */
 export const LOGIN_ROLES: LoginRole[] = ['Manager', 'Cashier', 'Chef', 'Waiter', 'KitchenStaff', 'Accountant'];
 export const LOGIN_ROLE_LABEL: Record<LoginRole, string> = {
+  Owner: 'Owner',
   Manager: 'Manager',
   Cashier: 'Cashier',
   Chef: 'Chef',
@@ -81,8 +86,9 @@ export interface CreateStaffRequest {
   phone?: string;
   hourlyRate?: number;
   branchId?: number;
-  /** Supply password + loginRole together (with email) to also create a real app
-   * login for this staff member, tied to the current cafe automatically. */
+  /** Supply password + loginRole together (with a 10-digit phone) to also create a
+   * real app login for this staff member, tied to the current cafe automatically.
+   * Staff sign in with their mobile number, not email. */
   password?: string;
   loginRole?: LoginRole;
   department?: string;
@@ -218,7 +224,7 @@ export const staffApi = {
     apiClient.post<void>(`/staff/${id}/reset-password`, { newPassword }).then((r) => r.data),
   /** For a staff member created without app access — provisions a login for them
    * after the fact (StaffProfileScreen's "Give app access" action). */
-  grantAccess: (id: number, req: { email: string; password: string; loginRole: LoginRole }) =>
+  grantAccess: (id: number, req: { phone: string; password: string; loginRole: LoginRole }) =>
     apiClient.post<ApiStaff>(`/staff/${id}/grant-access`, req).then((r) => r.data),
   listShifts: (staffId: number) => apiClient.get<Shift[]>(`/staff/${staffId}/shifts`).then((r) => r.data),
   listAllShifts: (date: string) => apiClient.get<ShiftWithStaff[]>('/staff/shifts', { params: { date } }).then((r) => r.data),

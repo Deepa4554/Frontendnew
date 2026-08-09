@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit } from '../ordersApi';
+import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit, PayOptions } from '../ordersApi';
 import { PagedResult } from '../types';
 import { queryKeys } from './queryKeys';
 
@@ -152,8 +152,8 @@ export const useSetOrderStatus = () => {
 export const usePayOrder = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, paymentMethod, splits, allowPartial, keepOpen }: { id: number; paymentMethod?: string; splits?: PaymentSplit[]; allowPartial?: boolean; keepOpen?: boolean }) =>
-      ordersApi.pay(id, paymentMethod, splits, allowPartial, keepOpen),
+    mutationFn: ({ id, paymentMethod, splits, ...opts }: { id: number; paymentMethod?: string; splits?: PaymentSplit[] } & PayOptions) =>
+      ordersApi.pay(id, paymentMethod, splits, opts),
     // onSettled, not onSuccess: same reasoning as useConfirmGuestOrder — a failed pay is
     // usually "Order is already paid" (OrdersController's row-locked guard) because someone
     // else settled it on another device, so the failure is precisely when this screen's copy
@@ -162,6 +162,12 @@ export const usePayOrder = () => {
     onSettled: () => {
       qc.invalidateQueries({ queryKey: ['orders'] });
       qc.invalidateQueries({ queryKey: queryKeys.tables });
+      // A settle carrying a 'Due' tender opens/adds to a customer's khata, and the same call
+      // can move their CRM record (see OrdersController.AttachCustomerAsync). Invalidated
+      // unconditionally rather than only for credit settles — this fires once per bill, and
+      // the alternative is threading "was any of that on credit" back out of the mutation.
+      qc.invalidateQueries({ queryKey: ['khatabook'] });
+      qc.invalidateQueries({ queryKey: ['customers'] });
     },
   });
 };

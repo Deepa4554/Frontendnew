@@ -80,9 +80,12 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
   const [customRole, setCustomRole] = useState('');
   const [rolePickerVisible, setRolePickerVisible] = useState(false);
   const [grantAccess, setGrantAccess] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
+  const [newPhone, setNewPhone] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [newLoginRole, setNewLoginRole] = useState<LoginRole>('Waiter');
+  // Only an Owner can grant another Owner login — Manager still sees the regular list
+  // (backend enforces this too; see StaffController.Create).
+  const newLoginRoleOptions = user?.role === 'Owner' ? (['Owner', ...LOGIN_ROLES] as LoginRole[]) : LOGIN_ROLES;
 
   const { data: staff = [], isLoading } = useStaff();
   const createStaff = useCreateStaff();
@@ -125,7 +128,7 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
     setNewRole('');
     setCustomRole('');
     setGrantAccess(false);
-    setNewEmail('');
+    setNewPhone('');
     setNewPassword('');
     setNewLoginRole('Waiter');
   };
@@ -138,8 +141,8 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
       return;
     }
     if (grantAccess) {
-      if (!newEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(newEmail.trim())) {
-        dispatch(showToast({ message: 'Enter a valid email to give this staff member app access.', icon: 'alert-circle-outline', tone: 'warning' }));
+      if (!newPhone.trim() || !/^\d{10}$/.test(newPhone.trim())) {
+        dispatch(showToast({ message: 'Enter a valid 10-digit mobile number to give this staff member app access.', icon: 'alert-circle-outline', tone: 'warning' }));
         return;
       }
       if (newPassword.length < 6) {
@@ -151,7 +154,7 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
       await createStaff.mutateAsync({
         name: newName.trim(),
         role: effectiveRole,
-        ...(grantAccess ? { email: newEmail.trim(), password: newPassword, loginRole: newLoginRole } : {}),
+        ...(grantAccess ? { phone: newPhone.trim(), password: newPassword, loginRole: newLoginRole } : {}),
       });
       setAddVisible(false);
       resetAddForm();
@@ -446,12 +449,12 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
                 <View style={{ borderRadius: 12 }}>
                   <TextInput
                     style={styles.modalInput}
-                    placeholder="Login email"
+                    placeholder="Login mobile number"
                     placeholderTextColor={COLORS.placeholder}
-                    value={newEmail}
-                    onChangeText={setNewEmail}
-                    autoCapitalize="none"
-                    keyboardType="email-address"
+                    value={newPhone}
+                    onChangeText={(t) => setNewPhone(t.replace(/[^\d]/g, '').slice(0, 10))}
+                    keyboardType="number-pad"
+                    maxLength={10}
                   />
                 </View>
                 <View style={{ borderRadius: 12 }}>
@@ -465,7 +468,7 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
                   />
                 </View>
                 <View style={styles.loginRoleRow}>
-                  {LOGIN_ROLES.map((r) => (
+                  {newLoginRoleOptions.map((r) => (
                     <TouchableOpacity
                       key={r}
                       style={[styles.loginRolePill, newLoginRole === r && styles.loginRolePillActive]}

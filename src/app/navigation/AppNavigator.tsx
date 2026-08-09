@@ -77,6 +77,7 @@ import { HelpCenterScreen } from '../../features/management/help/presentation/sc
 import { HelpArticleScreen } from '../../features/management/help/presentation/screens/HelpArticleScreen';
 import { SupportTicketScreen } from '../../features/management/help/presentation/screens/SupportTicketScreen';
 import { CafeExpensesScreen } from '../../features/management/expenses/presentation/screens/CafeExpensesScreen';
+import { KhatabookScreen } from '../../features/management/khatabook/presentation/screens/KhatabookScreen';
 import { MoreScreen } from './MoreScreen';
 
 const Tab = createBottomTabNavigator();
@@ -144,6 +145,7 @@ const IntegrationsScreenComp = withRouteGuard(withDesktopShell(IntegrationsHubSc
 const WhatsAppSetupScreenComp = withRouteGuard(withDesktopShell(WhatsAppSetupScreen, 'WhatsAppSetup'), 'WhatsAppSetup');
 const BranchesScreenComp = withRouteGuard(withDesktopShell(BranchManagementScreen, 'Branches'), 'Branches');
 const ExpensesScreenComp = withRouteGuard(withDesktopShell(CafeExpensesScreen, 'Expenses'), 'Expenses');
+const KhatabookScreenComp = withRouteGuard(withDesktopShell(KhatabookScreen, 'Khatabook'), 'Khatabook');
 const SaaSScreenComp = withRouteGuard(withDesktopShell(SubscriptionScreen, 'SaaS'), 'SaaS');
 const SuperAdminScreenComp = withRouteGuard(SuperAdminNavigator, 'SuperAdmin');
 const ProfileScreenComp = withRouteGuard(withDesktopShell(CafeSettingsScreen, 'Profile'), 'Profile');
@@ -326,6 +328,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Branches" component={BranchesScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Expenses" component={ExpensesScreenComp} options={{ headerShown: false }} />
+      <Stack.Screen name="Khatabook" component={KhatabookScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="SaaS" component={SaaSScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="SuperAdmin" component={SuperAdminScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Profile" component={ProfileScreenComp} options={{ headerShown: false }} />

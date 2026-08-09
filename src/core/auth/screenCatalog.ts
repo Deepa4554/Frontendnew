@@ -31,6 +31,9 @@ export const SCREEN_CATALOG: ScreenCatalogEntry[] = [
   { key: 'QRMenu', label: 'QR Ordering', icon: 'qrcode', minPlan: 'NORMAL' },
   { key: 'Billing', label: 'Billing', icon: 'credit-card-outline', minPlan: 'NORMAL' },
   { key: 'CRM', label: 'Customers (CRM)', icon: 'account-heart', minPlan: 'PLUS' },
+  // Normal, deliberately below the CRM screens it shares a Customer record with — running a
+  // khata (udhaar) for regulars is what the smallest, cheapest-plan shops do most, not least.
+  { key: 'Khatabook', label: 'Khatabook (Due)', icon: 'notebook-outline', minPlan: 'NORMAL' },
   { key: 'TeamPortal', label: 'Team Portal', icon: 'account-group', minPlan: 'NORMAL' },
   { key: 'Attendance', label: 'Attendance', icon: 'clock-check-outline', minPlan: 'PLUS', parent: 'TeamPortal' },
   { key: 'Leave', label: 'Leave Requests', icon: 'calendar-remove-outline', minPlan: 'PLUS', parent: 'TeamPortal' },

@@ -65,12 +65,15 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
   const role = useSelector((s: any) => s.auth.user?.role);
   const canViewFinancials = isOwnerOrManager(role);
   const canManage = isOwnerOrManager(role);
+  // Only an Owner can grant another Owner login — Manager still sees the regular list
+  // (backend enforces this too; see StaffController.GrantAccess).
+  const grantRoleOptions = role === 'Owner' ? (['Owner', ...LOGIN_ROLES] as LoginRole[]) : LOGIN_ROLES;
   const [uploadingPhoto, setUploadingPhoto] = useState(false);
   const [branchPickerOpen, setBranchPickerOpen] = useState(false);
   const [resetPasswordOpen, setResetPasswordOpen] = useState(false);
   const [newLoginPassword, setNewLoginPassword] = useState('');
   const [grantAccessOpen, setGrantAccessOpen] = useState(false);
-  const [grantEmail, setGrantEmail] = useState('');
+  const [grantPhone, setGrantPhone] = useState('');
   const [grantPassword, setGrantPassword] = useState('');
   const [grantLoginRole, setGrantLoginRole] = useState<LoginRole>('Waiter');
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
@@ -221,8 +224,8 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
 
   const handleGrantAccess = async () => {
     if (!staff) return;
-    if (!grantEmail.trim() || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(grantEmail.trim())) {
-      dispatch(showToast({ message: 'Enter a valid email.', icon: 'alert-circle-outline', tone: 'warning' }));
+    if (!grantPhone.trim() || !/^\d{10}$/.test(grantPhone.trim())) {
+      dispatch(showToast({ message: 'Enter a valid 10-digit mobile number.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
     if (grantPassword.length < 6) {
@@ -230,9 +233,9 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
       return;
     }
     try {
-      await grantAccess.mutateAsync({ id: staff.id, req: { email: grantEmail.trim(), password: grantPassword, loginRole: grantLoginRole } });
+      await grantAccess.mutateAsync({ id: staff.id, req: { phone: grantPhone.trim(), password: grantPassword, loginRole: grantLoginRole } });
       setGrantAccessOpen(false);
-      setGrantEmail('');
+      setGrantPhone('');
       setGrantPassword('');
       setGrantLoginRole('Waiter');
       dispatch(showToast({ message: `${staff.name} can now log in to the app.`, icon: 'check-circle', tone: 'success' }));
@@ -760,14 +763,14 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
         visible={grantAccessOpen}
         transparent
         animationType="fade"
-        onRequestClose={() => { setGrantAccessOpen(false); setGrantEmail(''); setGrantPassword(''); }}
+        onRequestClose={() => { setGrantAccessOpen(false); setGrantPhone(''); setGrantPassword(''); }}
       >
         <View style={styles.modalOverlay}>
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHeaderRow}>
               <Text style={styles.pickerTitle}>Give App Access</Text>
               <TouchableOpacity
-                onPress={() => { setGrantAccessOpen(false); setGrantEmail(''); setGrantPassword(''); }}
+                onPress={() => { setGrantAccessOpen(false); setGrantPhone(''); setGrantPassword(''); }}
                 hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
               >
                 <Icon name="close" size={18} color={COLORS.muted} />
@@ -776,16 +779,16 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
             <Text style={styles.resetPasswordHint}>
               Lets {staff.name} log in to PrabandhOS on this cafe's account.
             </Text>
-            <Text style={styles.fieldLabel}>Login email</Text>
+            <Text style={styles.fieldLabel}>Login mobile number</Text>
             <View style={{ borderRadius: 8 }}>
               <TextInput
                 style={styles.resetPasswordInput}
-                placeholder="staff@example.com"
+                placeholder="10-digit mobile number"
                 placeholderTextColor={COLORS.placeholder}
-                value={grantEmail}
-                onChangeText={setGrantEmail}
-                autoCapitalize="none"
-                keyboardType="email-address"
+                value={grantPhone}
+                onChangeText={setGrantPhone}
+                maxLength={10}
+                keyboardType="phone-pad"
               />
             </View>
             <Text style={styles.fieldLabel}>Password</Text>
@@ -801,7 +804,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
             </View>
             <Text style={styles.fieldLabel}>Login role</Text>
             <View style={styles.typeRow}>
-              {LOGIN_ROLES.map((r) => (
+              {grantRoleOptions.map((r) => (
                 <TouchableOpacity
                   key={r}
                   style={[styles.typePill, grantLoginRole === r && styles.typePillActive]}
@@ -814,7 +817,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
             <View style={styles.resetPasswordActions}>
               <TouchableOpacity
                 style={styles.resetPasswordCancelBtn}
-                onPress={() => { setGrantAccessOpen(false); setGrantEmail(''); setGrantPassword(''); }}
+                onPress={() => { setGrantAccessOpen(false); setGrantPhone(''); setGrantPassword(''); }}
               >
                 <Text style={styles.pickerCancelText}>Cancel</Text>
               </TouchableOpacity>

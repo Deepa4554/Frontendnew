@@ -5,10 +5,11 @@ import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
 
-export type PaymentMethod = 'Cash' | 'Card' | 'UPI';
+export type PaymentMethod = 'Cash' | 'Card' | 'UPI' | 'Due';
 // UPI before Card — the far more common tender at an Indian counter, so it reads first.
-export const METHODS: PaymentMethod[] = ['Cash', 'UPI', 'Card'];
-export const METHOD_ICON: Record<PaymentMethod, string> = { Cash: 'cash', Card: 'credit-card-outline', UPI: 'qrcode-scan' };
+// Due last: it's the exception, not one of the everyday tenders.
+export const METHODS: PaymentMethod[] = ['Cash', 'UPI', 'Card', 'Due'];
+export const METHOD_ICON: Record<PaymentMethod, string> = { Cash: 'cash', Card: 'credit-card-outline', UPI: 'qrcode-scan', Due: 'notebook-outline' };
 
 export interface PaymentSplit {
   method: PaymentMethod;
@@ -20,14 +21,28 @@ export interface PaymentMethodPickerResult {
   splits: PaymentSplit[];
   /** True when the entered amount(s) fall short of `owed` on purpose. */
   isPartial: boolean;
-  /** False when nothing's ticked, nothing's entered, or the total overshoots `owed`. */
+  /** False when nothing's ticked, nothing's entered, the total overshoots `owed`, or a Due
+   *  leg is in play without a name and 10-digit mobile to hang the khata on. */
   canSettle: boolean;
+  /** How much of the settle is going on the customer's khata rather than into the till.
+   *  Zero on an ordinary bill. */
+  dueAmount: number;
+  /** Only filled while a Due leg is in play — the name/number typed into the khata fields
+   *  below, which the caller passes straight to ordersApi.pay (see PayOptions). Trimmed and
+   *  digits-only respectively; both are guaranteed non-empty whenever canSettle is true and
+   *  dueAmount > 0. */
+  guestName: string;
+  guestPhone: string;
 }
 
 interface Props {
   /** Amount still owed — every tender's amount is validated against this (under is a
    *  deliberate partial, over is blocked). */
   owed: number;
+  /** Prefill for the khata fields shown when Due is ticked — pass whatever the order
+   *  already has on file, so a bill rung up under a real name doesn't ask for it twice. */
+  guestName?: string | null;
+  guestPhone?: string | null;
   /** Fires on mount and on every change — both callers (an existing order's Settle
    *  button in OrderBillActions, Pay First's Settle button in POSCheckoutScreen) read
    *  the latest result at settle time instead of re-deriving this split/partial/
@@ -60,10 +75,19 @@ const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) :
  * is capped at what's needed, never the raw handed-over figure — the excess is just change,
  * not part of the recorded payment.
  *
+ * Due (udhaar) is the fourth tender and the odd one out: it settles the bill without any
+ * money changing hands and parks the amount on the customer's khata instead, to be collected
+ * later from the Khatabook screen. Because that debt has to be attached to someone the cafe
+ * can actually come back to, ticking Due reveals a name + mobile pair right underneath it and
+ * blocks canSettle until both are filled — the only tender here that gates settling on
+ * anything beyond an amount. Unlike the other three, Due is never auto-filled (nothing should
+ * quietly land on a customer's khata); the "Rest on khata" button next to its field is the
+ * one-tap way to put whatever hasn't been tendered onto it.
+ *
  * Owns all of its own state; reports the current split/partial/canSettle via onChange rather
  * than being a controlled input, since neither caller needs to drive its state from outside.
  */
-export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
+export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPhone, onChange }) => {
   const COLORS = useThemeColors();
   const { isDesktopWeb } = useResponsive();
   const styles = makeStyles(COLORS, isDesktopWeb);
@@ -72,8 +96,13 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
   // settles without touching the picker at all.
   const [selectedMethods, setSelectedMethods] = useState<PaymentMethod[]>(['UPI']);
   const [multiAmounts, setMultiAmounts] = useState<Record<PaymentMethod, string>>({
-    Cash: '', Card: '', UPI: owed > 0 ? owed.toFixed(2) : '',
+    Cash: '', Card: '', UPI: owed > 0 ? owed.toFixed(2) : '', Due: '',
   });
+  // Who the khata belongs to, seeded from whatever the order already knows. Kept here rather
+  // than in the caller so both entry points (an existing order's bill panel, POS's Pay First
+  // sheet, which has no server order yet) get the identical compulsory-fields behaviour.
+  const [khataName, setKhataName] = useState(guestName ?? '');
+  const [khataPhone, setKhataPhone] = useState(guestPhone ?? '');
   // Cash's tick state is auto-managed (see the effect below) — auto-ticked when Card/UPI
   // stop covering the whole bill, auto-unticked when they cover it fully — right up until
   // the cashier clicks Cash's own checkbox themselves, in either direction. From that click
@@ -91,10 +120,10 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
 
   const parsedAmount = (m: PaymentMethod) => parseFloat(multiAmounts[m]) || 0;
 
-  // What's still left for Cash to cover, based on Card/UPI alone — the reference value both
-  // the auto-fill and the Return/Due label compare against. Deliberately independent of
-  // whatever's actually typed into Cash's own field.
-  const cashNeeded = Math.max(0, Math.round((owed - parsedAmount('Card') - parsedAmount('UPI')) * 100) / 100);
+  // What's still left for Cash to cover, based on every other tender — the reference value
+  // both the auto-fill and the Return/Short label compare against. Deliberately independent
+  // of whatever's actually typed into Cash's own field.
+  const cashNeeded = Math.max(0, Math.round((owed - parsedAmount('Card') - parsedAmount('UPI') - parsedAmount('Due')) * 100) / 100);
 
   // Keeps Cash's field in sync with cashNeeded (and ticks/unticks it) as Card/UPI change,
   // right up until the cashier types their own number into Cash — then it's theirs to control.
@@ -117,6 +146,10 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
   // nothing covering it, instead of shrinking/filling whichever method now covers the rest
   // of the bill. UPI takes over first (if ticked), Card next; whichever it is recomputes the
   // exact same way Cash used to.
+  //
+  // Due is deliberately absent from this chain: a tender that auto-grows to swallow whatever
+  // hasn't been paid is exactly the wrong behaviour for one that puts a customer in debt.
+  // It only ever holds what the cashier typed, or what "Rest on khata" put there.
   const flexMethod: PaymentMethod | null = (!cashTouched && selectedMethods.includes('Cash'))
     ? null
     : selectedMethods.includes('UPI') ? 'UPI'
@@ -146,8 +179,36 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
   const total = selectedMethods.reduce((sum, m) => sum + effectiveAmount(m), 0);
   const balance = Math.round((owed - total) * 100) / 100;
   const fullySettled = selectedMethods.length > 0 && Math.abs(balance) <= 0.01;
-  const canSettle = selectedMethods.length > 0 && total > 0 && total - owed <= 0.01;
   const isPartial = total > 0 && total < owed - 0.01;
+
+  const dueOn = selectedMethods.includes('Due');
+  const dueAmount = dueOn ? parsedAmount('Due') : 0;
+  const trimmedName = khataName.trim();
+  const digitsPhone = khataPhone.replace(/\D/g, '');
+  // The compulsory half of a khata: a debt nobody can be identified against isn't a ledger,
+  // it's a write-off. Mirrors the same rule the server enforces in RecordKhataDueAsync, so a
+  // cashier finds out here rather than via a rejected settle.
+  const khataReady = trimmedName.length > 0 && digitsPhone.length === 10;
+
+  const canSettle =
+    selectedMethods.length > 0 &&
+    total > 0 &&
+    total - owed <= 0.01 &&
+    // A Due leg has to bring the bill to a full settle: whatever isn't tendered has already
+    // moved onto the khata, so leaving the order short as well would owe the same rupees in
+    // two places. The server rejects this combination outright (see OrdersController.Pay).
+    !(dueAmount > 0 && isPartial) &&
+    (dueAmount <= 0 || khataReady);
+
+  // What "Rest on khata" fills Due with — everything the cashier has actually committed to
+  // collecting, subtracted from the bill. The auto-absorbing leg is excluded on purpose: its
+  // number is a placeholder that exists only to make the bill add up, and it recomputes itself
+  // down to zero the moment Due takes the amount over.
+  const absorbingMethod: PaymentMethod | null =
+    !cashTouched && selectedMethods.includes('Cash') ? 'Cash' : flexMethod;
+  const restForKhata = Math.max(0, Math.round((owed - selectedMethods
+    .filter((m) => m !== 'Due' && m !== absorbingMethod)
+    .reduce((sum, m) => sum + effectiveAmount(m), 0)) * 100) / 100);
 
   const toggleMethod = (m: PaymentMethod) => {
     if (m === 'Cash') {
@@ -179,9 +240,12 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
     const splits: PaymentSplit[] = selectedMethods
       .filter((m) => effectiveAmount(m) > 0)
       .map((m) => ({ method: m, amount: effectiveAmount(m) }));
-    onChangeRef.current({ splits, isPartial, canSettle });
+    onChangeRef.current({ splits, isPartial, canSettle, dueAmount, guestName: trimmedName, guestPhone: digitsPhone });
+    // khataName/khataPhone are in here (unlike a plain amount change) because canSettle itself
+    // flips on them — without that the Settle button stays disabled until some unrelated edit
+    // happens to re-report.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMethods, multiAmounts, owed]);
+  }, [selectedMethods, multiAmounts, owed, khataName, khataPhone]);
 
   return (
     <>
@@ -226,15 +290,59 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
                     onBlur={() => setFocusedField(null)}
                   />
                 </View>
+                {/* Due is the one tender that never fills itself in (see flexMethod) — this
+                    is the one-tap stand-in for that, and covers both common shapes: whole
+                    bill on credit, or "₹200 now, rest on khata". */}
+                {m === 'Due' && restForKhata > 0 && (
+                  <TouchableOpacity
+                    style={[styles.restBtn, webNoOutline]}
+                    onPress={() => updateMethodAmount('Due', restForKhata.toFixed(2))}
+                  >
+                    <Text style={styles.restBtnText}>Rest</Text>
+                  </TouchableOpacity>
+                )}
               </View>
-              {/* Return/Due — only Cash can meaningfully overshoot (real cash handed over),
-                  so this only ever shows on Cash's own row. */}
+              {/* Return/Short — only Cash can meaningfully overshoot (real cash handed over),
+                  so this only ever shows on Cash's own row. "Short" rather than "Due", which
+                  now names an actual tender one row below. */}
               {m === 'Cash' && cashTendered > 0 && (cashChange > 0 || cashShort) && (
                 <View style={styles.changeRow}>
-                  <Text style={styles.billLabel}>{cashShort ? 'Due' : 'Return'}</Text>
+                  <Text style={styles.billLabel}>{cashShort ? 'Short' : 'Return'}</Text>
                   <Text style={[styles.billVal, cashShort ? styles.danger : styles.warning]}>
                     {money(cashShort ? cashStillDue : cashChange)}
                   </Text>
+                </View>
+              )}
+              {/* Whose khata this goes on. Compulsory, and shown right under the Due amount
+                  rather than in a separate dialog, so it reads as part of choosing the tender
+                  instead of a hurdle that appears after the cashier thinks they're done. */}
+              {m === 'Due' && (
+                <View style={styles.khataBox}>
+                  <Text style={styles.khataHint}>
+                    {khataReady
+                      ? 'This bill goes on their khata — collect it later from Khatabook.'
+                      : 'Name and mobile number are required — the khata is looked up by the number.'}
+                  </Text>
+                  <TextInput
+                    style={[styles.khataInput, focusedField === 'khata-name' && styles.inputFocused, webNoOutline]}
+                    placeholder="Customer name"
+                    placeholderTextColor={COLORS.placeholder}
+                    value={khataName}
+                    onChangeText={setKhataName}
+                    onFocus={() => setFocusedField('khata-name')}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                  <TextInput
+                    style={[styles.khataInput, focusedField === 'khata-phone' && styles.inputFocused, webNoOutline]}
+                    placeholder="10-digit mobile number"
+                    placeholderTextColor={COLORS.placeholder}
+                    keyboardType="number-pad"
+                    maxLength={10}
+                    value={khataPhone}
+                    onChangeText={(t) => setKhataPhone(t.replace(/\D/g, '').slice(0, 10))}
+                    onFocus={() => setFocusedField('khata-phone')}
+                    onBlur={() => setFocusedField(null)}
+                  />
                 </View>
               )}
             </View>
@@ -246,8 +354,20 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, onChange }) => {
             <View style={styles.divider} />
             <View style={styles.billRow}>
               <Text style={[styles.billLabel, styles.positive]}>Paid Amount</Text>
-              <Text style={[styles.billVal, styles.positive]}>{money(Math.min(total, owed))}</Text>
+              {/* Money actually collected — a Due leg is deliberately NOT part of this, it's
+                  broken out on its own row below. That split is the whole point of the tender:
+                  what goes on the khata never counts as paid. */}
+              <Text style={[styles.billVal, styles.positive]}>{money(Math.max(0, Math.min(total, owed) - dueAmount))}</Text>
             </View>
+            {dueAmount > 0 && (
+              <View style={styles.billRow}>
+                <View style={styles.billLabelRow}>
+                  <Icon name="notebook-outline" size={13} color={COLORS.warning} />
+                  <Text style={[styles.billLabel, styles.warning]}>On Khata</Text>
+                </View>
+                <Text style={[styles.billVal, styles.warning]}>{money(dueAmount)}</Text>
+              </View>
+            )}
             <View style={styles.billRow}>
               <View style={styles.billLabelRow}>
                 {fullySettled && <Icon name="check-circle" size={13} color={COLORS.success} />}
@@ -299,6 +419,31 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     alignItems: 'center', justifyContent: 'center', borderWidth: INPUT_BORDER_WIDTH, borderColor: COLORS.divider,
   },
   multiMethodLabel: { width: 36, fontSize: 12, fontWeight: '700', color: COLORS.heading },
+  // Sits inside the Due row, after its amount field — a shortcut on that one control, not a
+  // bill-level action, so it's deliberately small and unfilled rather than a proper button.
+  restBtn: {
+    paddingHorizontal: 9,
+    paddingVertical: isDesktopWeb ? 9 : 7,
+    borderRadius: RADIUS.button,
+    borderWidth: INPUT_BORDER_WIDTH,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.background,
+  },
+  restBtnText: { fontSize: 11.5, fontWeight: '800', color: COLORS.heading },
+  // Indented past the method badge like the Cash change row, so it reads as belonging to
+  // Due's row rather than to the bill summary underneath.
+  khataBox: { paddingLeft: 34, gap: 5, marginTop: 4 },
+  khataHint: { fontSize: 11, lineHeight: 15, color: COLORS.muted },
+  khataInput: {
+    borderWidth: INPUT_BORDER_WIDTH,
+    borderColor: COLORS.divider,
+    borderRadius: RADIUS.button,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    fontSize: 13,
+    color: COLORS.heading,
+    backgroundColor: '#FFFFFF',
+  },
   // flex + matching borderRadius live on the wrapper, not the input, so the web build's
   // global focus-ring-on-direct-parent rule rings a box sized to just the input.
   multiInputWrap: { flex: 1, borderRadius: RADIUS.button },

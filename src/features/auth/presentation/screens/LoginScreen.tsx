@@ -23,9 +23,16 @@ import { useThemeColors } from '../../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../../core/utils/useResponsive';
 import brandIcon from '../../../../assets/brand/prabandhos-icon.png';
 
-// Validation Schema using Zod
+// Owners/demo accounts sign in with a real email; staff logins (Waiter/Cashier/etc.,
+// see StaffController.Create) sign in with their 10-digit mobile number instead — this
+// one field accepts either, since it's the same shared login screen for every role.
 const loginSchema = z.object({
-  email: z.string().email('Invalid email address'),
+  email: z
+    .string()
+    .refine(
+      (v) => /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(v) || /^\d{10}$/.test(v),
+      'Enter a valid email or 10-digit mobile number',
+    ),
   password: z.string().min(6, 'Password must be at least 6 characters'),
 });
 
@@ -79,7 +86,7 @@ export const LoginScreen = ({ navigation }: any) => {
       <Text style={styles.welcomeTitle}>Welcome Back</Text>
       <Text style={styles.welcomeSubtitle}>Securely access your branch dashboard</Text>
 
-      <Text style={styles.fieldLabel}>Work Email</Text>
+      <Text style={styles.fieldLabel}>Email or Mobile Number</Text>
       <Controller
         control={control}
         name="email"
@@ -90,7 +97,7 @@ export const LoginScreen = ({ navigation }: any) => {
               style={[styles.input, webNoOutline]}
               value={value}
               onChangeText={(t) => { onChange(t); if (error) dispatch(clearError()); }}
-              placeholder="manager@prabandhos.ai"
+              placeholder="manager@prabandhos.ai or 9876543210"
               placeholderTextColor={COLORS.placeholder}
               keyboardType={emailKeyboardType}
               autoCapitalize="none"

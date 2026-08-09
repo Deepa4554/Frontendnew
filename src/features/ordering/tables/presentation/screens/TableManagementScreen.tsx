@@ -72,13 +72,13 @@ export const TableManagementScreen = ({ navigation }: any) => {
   // made a back arrow appear on the tab even though there's nothing to go
   // back to within Orders itself.
   const showBackButton = route.name !== 'Orders';
-  const { isDesktopWeb, isWideLayout } = useResponsive();
+  const { isDesktopWeb, isWideLayout, isTablet } = useResponsive();
   // isWideLayout (not isDesktopWeb) — this needs to apply on a native tablet APK too,
   // not just a desktop browser tab. 0.85 = one readable step down; every fontSize on
   // this screen runs through it via makeStyles' fs() helper, uniformly, so the existing
   // size/weight hierarchy (headings bigger, or bold when a pair is equal) is preserved —
   // it's a ratio, and a uniform multiplier can't change a ratio's ordering.
-  const styles = makeStyles(COLORS, isWideLayout ? 0.85 : 1, isDesktopWeb);
+  const styles = makeStyles(COLORS, isWideLayout ? 0.85 : 1, isDesktopWeb, isTablet);
   const insets = useSafeAreaInsets();
   const STATUS_STYLES = {
     empty: { bg: COLORS.cardAlt, text: COLORS.muted },
@@ -326,13 +326,15 @@ export const TableManagementScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string) => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }) => {
     if (!occupiedModal?.orderId) {
       setOccupiedModal(null);
       return;
     }
     try {
-      await payOrder.mutateAsync({ id: occupiedModal.orderId, splits: payments, allowPartial });
+      // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
+      // server needs them to open the customer's khata and rejects the settle without.
+      await payOrder.mutateAsync({ id: occupiedModal.orderId, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone });
       // Deliberately don't close the modal here — it re-renders in its "paid"
       // state (see occupiedOrder?.paid below) so the WhatsApp option can show
       // up as the next step. "Done"/"Close" is what dismisses it now.
@@ -748,7 +750,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                     { backgroundColor: table.status === 'empty' ? COLORS.successBg : badge!.bg },
                   ]}
                 >
-                  <Text style={[styles.tileStatusBadgeText, { color: table.status === 'empty' ? COLORS.success : badge!.text }]}>
+                  <Text style={[styles.tileStatusBadgeText, { color: table.status === 'empty' ? COLORS.success : badge!.text }]} numberOfLines={1}>
                     {table.status === 'empty' ? 'Empty' : badge!.label}
                   </Text>
                 </View>
@@ -756,11 +758,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
                   <Icon name="account-multiple" size={18} color={style.text} style={styles.tileTopIcon} />
                 )}
 
-                <Text style={[styles.tileId, { color: style.text }]}>{table.code}</Text>
+                <Text style={[styles.tileId, { color: style.text }]} numberOfLines={1}>{table.code}</Text>
 
                 {table.status === 'empty' && (
                   <>
-                    <Text style={[styles.tileMeta, { color: style.text }]}>
+                    <Text style={[styles.tileMeta, { color: style.text }]} numberOfLines={1}>
                       {mergedWith.length > 0
                         ? `${table.mergedSeats ?? table.seats} Seater (+${mergedWith.map((g) => g.code).join(', ')})`
                         : `${table.seats} Seater`}
@@ -1324,7 +1326,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
   );
 };
 
-const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number, isDesktopWeb: boolean) => {
+const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number, isDesktopWeb: boolean, isTablet: boolean) => {
   // Tablet+ (isWideLayout — native tablet AND desktop web, see useResponsive) runs every
   // fontSize on this screen through this. It's a single proportional multiplier, so any
   // heading that was already bigger than its sub-text/body stays bigger after scaling —
@@ -1439,9 +1441,11 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   },
   // Desktop web only (isDesktopWeb) — 25% smaller than its own original 18% / 150,
   // same ratio as before. `tile` above is what native/APK mobile actually renders,
-  // reverted back to its original size.
+  // reverted back to its original size. On a tablet-width browser, 13.5% left barely
+  // enough room for the status badge and table code to coexist without colliding —
+  // wider columns there (fewer per row) instead of shrinking content further.
   tileDesktop: {
-    width: '13.5%',
+    width: isTablet ? '23%' : '13.5%',
     minHeight: 113,
   },
   // Not a valid Shift/Merge target while a picker is active.
@@ -1454,6 +1458,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   tileStatusBadge: {
     position: 'absolute',
     top: 12,
+    maxWidth: '70%',
     paddingHorizontal: isDesktopWeb ? 6 : 6,
     paddingVertical: isDesktopWeb ? 2 : 2.25,
     borderRadius: 999,

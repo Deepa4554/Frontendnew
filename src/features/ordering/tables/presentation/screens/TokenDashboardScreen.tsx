@@ -170,10 +170,12 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string) => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }) => {
     if (!order) return;
     try {
-      await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial });
+      // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
+      // server needs them to open the customer's khata and rejects the settle without.
+      await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone });
       // Chained straight off the settle tap (see OrderBillActions' split-button menu) —
       // neither of these depends on order.paid/payments having refreshed yet, they just
       // read the bill's items/prices, which settling never changes.

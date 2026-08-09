@@ -8,6 +8,7 @@ import { useDispatch } from 'react-redux';
 import { WarmColors as COLORS } from '../../../../shared/design/warmTheme';
 import { useSuperAdminTenants, useChangeTenantPlan, useTenantSales } from '../../../../core/api/hooks/useSuperAdmin';
 import { TenantScreenAccessModal } from './TenantScreenAccessModal';
+import { TenantStaffScreenAccessModal } from './TenantStaffScreenAccessModal';
 import { ApiTenantSummary } from '../../../../core/api/superAdminApi';
 import { SubscriptionTier } from '../../../../core/api/subscriptionApi';
 import { getApiErrorMessage } from '../../../../core/network/api';
@@ -36,7 +37,7 @@ const STATUS_STYLES: Record<string, { bg: string; text: string }> = {
 // Matches the customer-facing names on SubscriptionScreen (Basic/Plus/Enterprise) —
 // STARTER/PROFESSIONAL/ENTERPRISE stay as the wire values, these are display-only.
 const PLAN_OPTIONS: { key: SubscriptionTier; label: string }[] = [
-  { key: 'FREETRIAL', label: 'Free Trial (7 days)' },
+  { key: 'FREETRIAL', label: 'Free Trial (14 days)' },
   { key: 'STARTER', label: 'Basic' },
   { key: 'PROFESSIONAL', label: 'Plus' },
   { key: 'ENTERPRISE', label: 'Enterprise' },
@@ -51,6 +52,7 @@ export const TenantManagementScreen = () => {
   const [managing, setManaging] = useState<ApiTenantSummary | null>(null);
   const [viewingSales, setViewingSales] = useState<ApiTenantSummary | null>(null);
   const [managingScreens, setManagingScreens] = useState<ApiTenantSummary | null>(null);
+  const [managingStaffAccess, setManagingStaffAccess] = useState<ApiTenantSummary | null>(null);
   const dispatch = useDispatch<AppDispatch>();
   const insets = useSafeAreaInsets();
 
@@ -150,6 +152,10 @@ export const TenantManagementScreen = () => {
                       <TouchableOpacity style={styles.salesBtn} onPress={() => setManagingScreens(tenant)}>
                         <Icon name="shield-account-outline" size={13} color={COLORS.heading} />
                         <Text style={styles.salesBtnText}>Screens</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.salesBtn} onPress={() => setManagingStaffAccess(tenant)}>
+                        <Icon name="account-cog-outline" size={13} color={COLORS.heading} />
+                        <Text style={styles.salesBtnText}>Staff Access</Text>
                       </TouchableOpacity>
                       <TouchableOpacity style={styles.manageBtn} onPress={() => setManaging(tenant)}>
                         <Text style={styles.manageBtnText}>Change Plan</Text>
@@ -276,6 +282,7 @@ export const TenantManagementScreen = () => {
       </Modal>
 
       <TenantScreenAccessModal tenant={managingScreens} onClose={() => setManagingScreens(null)} />
+      <TenantStaffScreenAccessModal tenant={managingStaffAccess} onClose={() => setManagingStaffAccess(null)} />
     </View>
   );
 };

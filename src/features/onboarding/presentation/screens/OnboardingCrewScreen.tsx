@@ -48,9 +48,10 @@ export const OnboardingCrewScreen = ({ navigation }: any) => {
   const [members, setMembers] = useState<Member[]>([]);
   const [finishing, setFinishing] = useState(false);
 
-  // A contact with '@' gets a real app login (see StaffController.Create's
-  // wantsLogin rule) — phone-only contacts stay roster-only, same as before.
-  const willHaveLogin = contact.includes('@');
+  // A contact that's a 10-digit phone number gets a real app login (see
+  // StaffController.Create's wantsLogin rule — staff sign in with a mobile number,
+  // not email) — email-only contacts stay roster-only.
+  const willHaveLogin = /^\d{10}$/.test(contact.trim());
 
   const resetForm = () => {
     setContact('');
@@ -63,16 +64,12 @@ export const OnboardingCrewScreen = ({ navigation }: any) => {
   const addMember = () => {
     const trimmedContact = contact.trim();
     if (!trimmedContact) return;
-    if (willHaveLogin && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedContact)) {
-      dispatch(showToast({ message: 'Enter a valid email address.', icon: 'alert-circle-outline', tone: 'warning' }));
-      return;
-    }
-    if (!willHaveLogin && !/^\d{10}$/.test(trimmedContact)) {
-      dispatch(showToast({ message: 'Enter a valid 10-digit phone number.', icon: 'alert-circle-outline', tone: 'warning' }));
+    if (!willHaveLogin && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(trimmedContact)) {
+      dispatch(showToast({ message: 'Enter a valid 10-digit phone number or email address.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
     if (willHaveLogin && password.length < 6) {
-      dispatch(showToast({ message: 'Set a password (6+ characters) to give this member app access, or use a phone number for a roster-only entry.', icon: 'alert-circle-outline', tone: 'warning' }));
+      dispatch(showToast({ message: 'Set a password (6+ characters) to give this member app access, or use an email address for a roster-only entry.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
     setMembers((prev) => [
@@ -92,22 +89,22 @@ export const OnboardingCrewScreen = ({ navigation }: any) => {
 
   const finish = async () => {
     setFinishing(true);
-    // Each invited crew member becomes a real Staff record on the backend — one with an
-    // email also gets a real app login (password + role), so their screen access (if
-    // Custom) can actually be attached to something. Members are removed from state as
-    // they're created so a failure partway through (duplicate email, network blip) doesn't
-    // re-submit already-created members on retry — the owner just fixes the failing one
-    // and taps Finish again.
+    // Each invited crew member becomes a real Staff record on the backend — one with a
+    // phone number also gets a real app login (password + role), so their screen access
+    // (if Custom) can actually be attached to something. Members are removed from state
+    // as they're created so a failure partway through (duplicate number, network blip)
+    // doesn't re-submit already-created members on retry — the owner just fixes the
+    // failing one and taps Finish again.
     for (const m of members) {
       try {
-        const isEmail = m.contact.includes('@');
+        const isPhone = /^\d{10}$/.test(m.contact);
         const created = await createStaff.mutateAsync({
           name: m.contact,
           role: m.role,
-          email: isEmail ? m.contact : undefined,
-          phone: isEmail ? undefined : m.contact,
-          password: isEmail ? m.password : undefined,
-          loginRole: isEmail ? m.role : undefined,
+          email: isPhone ? undefined : m.contact,
+          phone: isPhone ? m.contact : undefined,
+          password: isPhone ? m.password : undefined,
+          loginRole: isPhone ? m.role : undefined,
         });
         if (created.hasLogin && m.accessMode === 'Custom') {
           await updateScreenAccess.mutateAsync({ id: created.id, req: { accessMode: 'Custom', allowedScreens: m.allowedScreens } });
@@ -192,13 +189,13 @@ export const OnboardingCrewScreen = ({ navigation }: any) => {
 
       {/* Add form */}
       <View style={styles.addBox}>
-        <Text style={styles.fieldLabel}>Email or Phone</Text>
+        <Text style={styles.fieldLabel}>Phone or Email</Text>
         <View style={styles.inputWrapper}>
           <TextInput
             style={styles.input}
             value={contact}
             onChangeText={setContact}
-            placeholder="barista@cafe.com"
+            placeholder="9876543210 or barista@cafe.com"
             placeholderTextColor={COLORS.placeholder}
             autoCapitalize="none"
           />

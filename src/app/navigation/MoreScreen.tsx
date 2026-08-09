@@ -108,6 +108,7 @@ export const MoreScreen = () => {
         { label: 'WhatsApp Business', icon: 'whatsapp', route: 'WhatsAppSetup' },
         { label: 'Branches', icon: 'storefront', route: 'Branches' },
         { label: 'Expenses', icon: 'cash-minus', route: 'Expenses' },
+        { label: 'Khatabook', icon: 'notebook-outline', route: 'Khatabook' },
         { label: 'Subscription', icon: 'cloud-check', route: 'SaaS' },
       ],
     },

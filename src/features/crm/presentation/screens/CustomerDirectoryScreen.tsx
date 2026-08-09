@@ -25,8 +25,8 @@ import { modalHeadingOverride } from '../../../../shared/design/commonStyles';
 export const CustomerDirectoryScreen = ({ navigation }: any) => {
   const dispatch = useDispatch();
   const COLORS = useThemeColors();
-  const { isDesktopWeb } = useResponsive();
-  const styles = makeStyles(COLORS, isDesktopWeb);
+  const { isDesktopWeb, isTablet } = useResponsive();
+  const styles = makeStyles(COLORS, isDesktopWeb, isTablet);
   const insets = useSafeAreaInsets();
   const TIER_STYLES: Record<MembershipTier, { bg: string; text: string }> = {
     PLATINUM: { bg: '#5B4636', text: '#FFFFFF' },
@@ -152,7 +152,7 @@ export const CustomerDirectoryScreen = ({ navigation }: any) => {
                     <InitialsAvatar name={m.name} size={40} style={{ borderRadius: 11 }} />
                   )}
                   <View style={styles.memberInfo}>
-                    <Text style={styles.memberName}>{m.name}</Text>
+                    <Text style={styles.memberName} numberOfLines={1} {...hoverTitle(m.name)}>{m.name}</Text>
                     {lapsing ? (
                       <Text style={styles.lapsingText}>{lapsing}</Text>
                     ) : (
@@ -228,7 +228,7 @@ export const CustomerDirectoryScreen = ({ navigation }: any) => {
   );
 };
 
-const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
+const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean, isTablet: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
   memberGridDesktop: {
     flexDirection: 'row',
@@ -237,7 +237,9 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     gap: isDesktopWeb ? 8 : 12,
   },
   memberCardDesktop: {
-    width: '31%',
+    // 2-up on a tablet-width browser (content column is much narrower than desktop
+    // even with the slimmer sidebar), 3-up on real desktop.
+    width: isTablet ? '48%' : '31%',
     marginHorizontal: isDesktopWeb ? 0 : 6,
   },
   header: {
@@ -313,7 +315,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     borderColor: '#E8A9A0',
   },
   memberImage: { width: 40, height: 40, borderRadius: 11 },
-  memberInfo: { flex: 1 },
+  memberInfo: { flex: 1, minWidth: 0 },
   memberName: { fontSize: isDesktopWeb ? 14 : 12, fontWeight: '700', color: COLORS.heading, marginBottom: isDesktopWeb ? 2 : 1.5 },
   memberMeta: { fontSize: 11, color: COLORS.muted },
   lapsingText: { fontSize: 11, color: COLORS.dangerAccent, fontWeight: '500' },

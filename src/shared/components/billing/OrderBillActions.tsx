@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, TextInput, Platform, Switch, Modal } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, ActivityIndicator, Platform, Switch, Modal } from 'react-native';
 import QRCode from 'react-native-qrcode-svg';
 import { useDispatch, useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -13,6 +13,7 @@ import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
 import { LoadingOverlay } from '../atoms/LoadingOverlay';
 import { useApplyBillDiscount, useBillCoupon, useBillGiftCard, useBillCharges, useBillLoyalty, useCloseOrder, useUpdateOrderGuest, useServeAll } from '../../../core/api/hooks/useOrders';
 import { useSettings } from '../../../core/api/hooks/useSettings';
+import { useKhata } from '../../../core/api/hooks/useKhatabook';
 import { PaymentMethodPicker, PaymentMethodPickerResult, PaymentMethod, PaymentSplit } from './PaymentMethodPicker';
 import { BillAdjustmentsPanel, AdjustmentTile, AdjustmentApplyValue } from './BillAdjustmentsPanel';
 import { GuestPhonePrompt } from './GuestPhonePrompt';
@@ -49,8 +50,18 @@ interface Props {
    *  below) instead of leaving that as a second separate tap. `phoneOverride` carries a
    *  number the cashier just typed into the missing-number prompt: the order on this screen
    *  is still the pre-update copy at that moment (the refetch hasn't landed), so the caller
-   *  must send to this number rather than the blank one it can still see on the order. */
-  onMarkPaid: (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string) => void;
+   *  must send to this number rather than the blank one it can still see on the order.
+   *  `guest` carries the name/mobile typed into the payment picker's khata fields when the
+   *  settle includes a Due (udhaar) leg — the caller must pass these through to
+   *  ordersApi.pay's guestName/guestPhone, which is what the server hangs the khata entry on
+   *  (and which it rejects the settle without). Undefined for every ordinary settle. */
+  onMarkPaid: (
+    payments: PaymentSplit[],
+    allowPartial?: boolean,
+    andThen?: 'print' | 'whatsapp',
+    phoneOverride?: string,
+    guest?: { name: string; phone: string },
+  ) => void;
   onPrintBill: () => void;
   /** phoneOverride: see onMarkPaid. Every implementation is already async (it mints a
    *  receipt token, then opens WhatsApp); returning the promise lets this component show a
@@ -157,7 +168,7 @@ export const OrderBillActions: React.FC<Props> = ({
   // What PaymentMethodPicker currently has picked — see its onChange doc. Defaults to
   // nothing settleable; the picker reports its real starting value (Cash covering the
   // full owed amount) on mount, before any button press is possible.
-  const [paymentResult, setPaymentResult] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true });
+  const [paymentResult, setPaymentResult] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true, dueAmount: 0, guestName: '', guestPhone: '' });
   const [openAdjustment, setOpenAdjustment] = useState<AdjustmentKey | null>(null);
   // Lets the Service/Packing/Delivery Switches flip the instant they're tapped instead of
   // waiting on the bill-charges round trip + orders refetch — a Switch reads as "broken" if
@@ -192,6 +203,21 @@ export const OrderBillActions: React.FC<Props> = ({
   // set a UPI ID or there's nothing left to collect, which is exactly when the button below
   // shouldn't be offered at all. Same builder the printed bill uses, so paper and screen can
   // never disagree about the amount.
+  // Whether the credit this bill extended has since been collected. Fetched ONLY for a bill
+  // that actually put something on a khata — an ordinary settle costs no extra round trip at
+  // all, which is what makes reading this live affordable. Deliberately the customer's whole
+  // outstanding rather than this bill's share: a khata is one running balance, not per-invoice
+  // tracking (see KhataEntry), so "this bill's ₹250" stops being a separate thing the moment
+  // it lands there.
+  //
+  // Null whenever the answer isn't known — no khata on this bill, no CRM link, still loading,
+  // or the request was refused (Khatabook is Owner/Manager-only, and this panel is used by
+  // cashiers too). Every one of those falls back to the plain wording rather than guessing.
+  const khataCustomerId = (order.dueAmount ?? 0) > 0 ? order.customerId : null;
+  const { data: khata } = useKhata(khataCustomerId);
+  const khataOutstanding = khata?.customer.outstanding ?? null;
+  const khataCleared = khataOutstanding !== null && khataOutstanding <= 0.005;
+
   const upiUri = settings?.upiVpa
     ? buildUpiPaymentUri({ vpa: settings.upiVpa, payeeName: settings.businessName, amount: owed, note: `Bill ${order.number}` })
     : null;
@@ -246,7 +272,12 @@ export const OrderBillActions: React.FC<Props> = ({
   const handleSettle = async (andThen?: 'print' | 'whatsapp', phoneOverride?: string) => {
     if (paymentResult.splits.length === 0) return;
     if (!(await serveAllForSettle())) return;
-    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride);
+    // Only forwarded when there's actually credit in play — see onMarkPaid's `guest`. The
+    // picker won't report canSettle for a Due leg without both fields, so by here they're real.
+    const guest = paymentResult.dueAmount > 0
+      ? { name: paymentResult.guestName, phone: paymentResult.guestPhone }
+      : undefined;
+    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride, guest);
   };
 
   // Every WhatsApp action needs a number to send to. When one was never taken, the tap opens
@@ -578,17 +609,36 @@ export const OrderBillActions: React.FC<Props> = ({
       )}
 
       {order.paid ? (
-        <View style={styles.paidBadge}>
-          <Icon name="check-circle" size={14} color={COLORS.success} />
-          <Text style={styles.paidBadgeText}>
-            Settled
-            {order.payments.length > 1
-              ? ` · ${order.payments.map((p) => `${p.method} ${money(p.amount)}`).join(' + ')}`
-              : order.paymentMethod
-                ? ` · ${order.paymentMethod}`
-                : ''}
-          </Text>
-        </View>
+        <>
+          <View style={styles.paidBadge}>
+            <Icon name="check-circle" size={14} color={COLORS.success} />
+            <Text style={styles.paidBadgeText}>
+              Settled
+              {order.payments.length > 1
+                ? ` · ${order.payments.map((p) => `${p.method} ${money(p.amount)}`).join(' + ')}`
+                : order.paymentMethod
+                  ? ` · ${order.paymentMethod}`
+                  : ''}
+            </Text>
+          </View>
+          {/* The bill is closed, but part of it was never collected — spelling that out here
+              stops "Settled" from reading as "the money came in" on a credit sale. What this
+              bill put on the khata is history and never changes; whether it's since been
+              collected is live, so the two are worded separately (see khataOutstanding). */}
+          {(order.dueAmount ?? 0) > 0 && (
+            <View style={[styles.partialBadge, khataCleared && styles.settledKhataBadge]}>
+              <Icon name={khataCleared ? 'check-circle' : 'notebook-outline'} size={14} color={khataCleared ? COLORS.success : COLORS.warning} />
+              <Text style={[styles.partialBadgeText, khataCleared && styles.settledKhataText]}>
+                {money(order.dueAmount)} went on {order.guestName ?? 'the customer'}'s khata
+                {khataCleared
+                  ? ' · since cleared'
+                  : khataOutstanding !== null
+                    ? ` · ${money(khataOutstanding)} still outstanding — collect it from Khatabook`
+                    : ' — collect it from Khatabook'}
+              </Text>
+            </View>
+          )}
+        </>
       ) : (
         <>
           {partiallyPaid && (
@@ -607,7 +657,14 @@ export const OrderBillActions: React.FC<Props> = ({
               has nothing to do, so skip straight to the Close Bill action in the footer
               below. It reappears on its own once BalanceDue goes positive again (more
               items added), same as the partialBadge above. */}
-          {!fullyPrepaid && <PaymentMethodPicker owed={owed} onChange={setPaymentResult} />}
+          {!fullyPrepaid && (
+            <PaymentMethodPicker
+              owed={owed}
+              guestName={order.guestName}
+              guestPhone={order.guestPhone}
+              onChange={setPaymentResult}
+            />
+          )}
         </>
       )}
 
@@ -738,7 +795,13 @@ export const OrderBillActions: React.FC<Props> = ({
                   ) : (
                     <Icon name="cash-check" size={16} color="#FFFFFF" />
                   )}
-                  <Text style={styles.payBtnText}>{paymentResult.isPartial ? 'Collect Partial Payment' : 'Settle Bill'}</Text>
+                  <Text style={styles.payBtnText}>
+                    {paymentResult.dueAmount > 0
+                      ? 'Settle on Khata'
+                      : paymentResult.isPartial
+                        ? 'Collect Partial Payment'
+                        : 'Settle Bill'}
+                  </Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.payBtnSeg, webNoOutline]}
@@ -930,4 +993,9 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     paddingVertical: 6,
   },
   partialBadgeText: { flex: 1, fontSize: 12, fontWeight: '700', color: COLORS.warning },
+  // Same badge, recoloured once the khata behind it is square — the row still has to be
+  // there (this bill did go on credit, and that's part of its record), it just stops reading
+  // as something outstanding.
+  settledKhataBadge: { backgroundColor: COLORS.successBg },
+  settledKhataText: { color: COLORS.success },
 });

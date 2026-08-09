@@ -1,5 +1,6 @@
 import { apiClient } from '../network/api';
 import { SubscriptionTier } from './subscriptionApi';
+import { ApiStaff, StaffScreenAccess, UpdateStaffScreenAccessRequest } from './staffApi';
 
 export interface ApiTenantSummary {
   id: number;
@@ -96,4 +97,13 @@ export const superAdminApi = {
     apiClient.get<TenantScreenAccess>(`/superadmin/tenants/${tenantId}/screen-access`).then((r) => r.data),
   updateTenantScreenAccess: (tenantId: number, req: UpdateTenantScreenAccessRequest) =>
     apiClient.patch<TenantScreenAccess>(`/superadmin/tenants/${tenantId}/screen-access`, req).then((r) => r.data),
+  // Per-staff override, one level below the cafe-wide ceiling above — same
+  // StaffScreenAccess shape as StaffController's own /staff/{id}/screen-access, just
+  // reachable cross-tenant by tenantId+staffId since a platform admin's login isn't
+  // Owner/Manager on any cafe and has no ambient tenant of its own to fall into.
+  tenantStaff: (tenantId: number) => apiClient.get<ApiStaff[]>(`/superadmin/tenants/${tenantId}/staff`).then((r) => r.data),
+  tenantStaffScreenAccess: (tenantId: number, staffId: number) =>
+    apiClient.get<StaffScreenAccess>(`/superadmin/tenants/${tenantId}/staff/${staffId}/screen-access`).then((r) => r.data),
+  updateTenantStaffScreenAccess: (tenantId: number, staffId: number, req: UpdateStaffScreenAccessRequest) =>
+    apiClient.patch<StaffScreenAccess>(`/superadmin/tenants/${tenantId}/staff/${staffId}/screen-access`, req).then((r) => r.data),
 };

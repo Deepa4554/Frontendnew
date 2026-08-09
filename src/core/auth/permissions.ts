@@ -21,6 +21,10 @@ const FLOOR_STAFF_HIDDEN_ROUTES = new Set([
   'WhatsAppSetup',
   'Branches',
   'Expenses',
+  // Extending credit is a floor decision any cashier settling a bill can make; deciding a
+  // customer's debt has been paid off is not — the backend restricts every khatabook endpoint
+  // to Owner/Manager, so this hides a screen that would 403 anyway.
+  'Khatabook',
   'SaaS',
   'SuperAdmin',
   'Profile', // Cafe Settings

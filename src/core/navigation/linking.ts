@@ -132,6 +132,7 @@ export const linking: LinkingOptions<any> = {
           WhatsAppSetup: 'integrations/whatsapp',
           Branches: 'branches',
           Expenses: 'expenses',
+          Khatabook: 'khatabook',
           SaaS: 'saas',
           SuperAdmin: 'super-admin',
           Profile: 'profile',

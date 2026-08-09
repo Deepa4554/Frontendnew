@@ -121,22 +121,30 @@ const WeeklySparkline = ({ weekly, max, color, styles }: {
   max: number;
   color: string;
   styles: ReturnType<typeof makeStyles>;
-}) => (
-  <View style={styles.sparkline}>
-    {weekly.map((d, i) => (
-      <View
-        key={i}
-        style={[styles.sparklineBar, { height: Math.max(3, (d.revenue / max) * 34), backgroundColor: color }]}
-      />
-    ))}
-  </View>
-);
+}) => {
+  // `weekly` is scoped to whatever date range is selected up top (see
+  // DashboardController.daySpan) — a single-day range like "Today" hands back
+  // exactly one entry, and one bar with flex:1 filling the fixed-size box just
+  // reads as a solid colored rectangle, not a trend. Nothing meaningful to show
+  // a trend with one point, so skip the box entirely rather than draw that.
+  if (weekly.length < 2) return null;
+  return (
+    <View style={styles.sparkline}>
+      {weekly.map((d, i) => (
+        <View
+          key={i}
+          style={[styles.sparklineBar, { height: Math.max(3, (d.revenue / max) * 34), backgroundColor: color }]}
+        />
+      ))}
+    </View>
+  );
+};
 
 export const DashboardScreen = () => {
   const dispatch = useDispatch();
   const navigation = useNavigation<any>();
   const COLORS = useThemeColors();
-  const { isDesktopWeb } = useResponsive();
+  const { isDesktopWeb, isTablet } = useResponsive();
   const insets = useSafeAreaInsets();
   const styles = makeStyles(COLORS, isDesktopWeb);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
@@ -283,7 +291,12 @@ export const DashboardScreen = () => {
           </View>
         )}
 
-        {isDesktopWeb ? (
+        {/* The 3-up row packs a fixed-width icon circle + label/value + fixed-width sparkline
+            into each card — real desktop has room for that; a tablet-width browser doesn't,
+            and the label text collapsed to a sliver narrow enough to wrap character-by-character
+            ("REVE"/"NUE"). Tablet falls back to the same swipeable single-card carousel mobile
+            already uses instead of forcing three cards into a too-narrow row. */}
+        {isDesktopWeb && !isTablet ? (
           <View style={styles.statsRow}>
             <View style={[styles.revenueCard, styles.statCardFlex]}>
               <View style={styles.revenueCardHeaderRow}>
