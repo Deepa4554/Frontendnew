@@ -284,7 +284,11 @@ export const DeliveryPartnerScreen = ({ navigation }: any) => {
                     ? 'Turn on Enable Borzo to start.'
                     : !settings.hasAuthToken
                       ? 'Add your Borzo token to continue.'
-                      : 'Pin the pickup location to continue.'}
+                      : (settings.pickupLatitude === null || settings.pickupLongitude === null)
+                        ? 'Pin the pickup location to continue.'
+                        : !settings.pickupAddress
+                          ? 'Add a pickup address above — Borzo needs it, not just the map pin.'
+                          : 'Add the cafe’s phone number in Cafe Profile — the rider needs a pickup contact.'}
               </Text>
             </View>
           </>
