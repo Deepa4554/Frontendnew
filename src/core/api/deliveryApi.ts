@@ -21,6 +21,10 @@ export interface DeliverySettings {
   /** False while something required is still missing, so the screen can say what's blocking
    * instead of letting a booking fail later. */
   readyToBook: boolean;
+  /** The exact URL to paste into Borzo's cabinet (Integration tab), token already embedded —
+   * null until a callback token has been saved. See CafeSettings.BorzoCallbackToken on the
+   * backend for why this exists instead of a Borzo-issued signature. */
+  callbackUrl: string | null;
 }
 
 export interface UpdateDeliverySettingsRequest {
@@ -32,6 +36,8 @@ export interface UpdateDeliverySettingsRequest {
   pickupAddress?: string;
   pickupLatitude?: number;
   pickupLongitude?: number;
+  /** Empty string clears the saved callback token; omit to leave it untouched. */
+  callbackToken?: string;
 }
 
 export interface DeliveryQuote {

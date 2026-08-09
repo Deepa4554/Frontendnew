@@ -31,6 +31,7 @@ export const DeliveryPartnerScreen = ({ navigation }: any) => {
   // Typed but not yet saved. Kept out of `settings` so an in-progress paste is never confused
   // with what the server actually holds.
   const [tokenDraft, setTokenDraft] = useState('');
+  const [callbackTokenDraft, setCallbackTokenDraft] = useState('');
   const [pickupAddress, setPickupAddress] = useState<string | null>(null);
   const [locating, setLocating] = useState(false);
 
@@ -81,6 +82,25 @@ export const DeliveryPartnerScreen = ({ navigation }: any) => {
     // Cleared immediately — it's saved server-side now, and leaving it in the box would put a
     // live credential on screen for as long as the page stays open.
     setTokenDraft('');
+  };
+
+  const saveCallbackToken = () => {
+    if (!callbackTokenDraft.trim()) {
+      dispatch(showToast({ message: 'Paste the callback token Borzo shows in its cabinet first.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    patch({ callbackToken: callbackTokenDraft.trim() }, 'Callback token saved — copy the URL below into Borzo.');
+    setCallbackTokenDraft('');
+  };
+
+  const copyCallbackUrl = async () => {
+    if (!settings?.callbackUrl) return;
+    if (typeof navigator !== 'undefined' && navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(settings.callbackUrl);
+      dispatch(showToast({ message: 'Callback URL copied.', icon: 'check-circle', tone: 'success' }));
+    } else {
+      dispatch(showToast({ message: 'Copy isn’t available here — select the URL below manually.', icon: 'information-outline', tone: 'info' }));
+    }
   };
 
   const title = 'Delivery Partner';
@@ -142,6 +162,44 @@ export const DeliveryPartnerScreen = ({ navigation }: any) => {
                 <Icon name="content-save" size={15} color="#FFFFFF" />
                 <Text style={styles.primaryBtnText}>Save token</Text>
               </TouchableOpacity>
+            </View>
+
+            <View style={styles.card}>
+              <Text style={styles.fieldLabel}>Callback verification</Text>
+              <Text style={styles.hint}>
+                Optional, but recommended. Borzo's cabinet shows a "callback token" when you set
+                up the Integration URL — paste it here first, then copy the URL below into
+                Borzo's Callback URL field. This lets the app tell a real Borzo status update
+                apart from anything else that might hit this address.
+              </Text>
+              <TextInput
+                style={styles.fieldInput}
+                placeholder="Paste the callback token from Borzo"
+                placeholderTextColor={COLORS.placeholder}
+                value={callbackTokenDraft}
+                onChangeText={setCallbackTokenDraft}
+                autoCapitalize="none"
+                autoCorrect={false}
+              />
+              <TouchableOpacity style={styles.primaryBtn} onPress={saveCallbackToken} disabled={isPending}>
+                <Icon name="content-save" size={15} color="#FFFFFF" />
+                <Text style={styles.primaryBtnText}>Save callback token</Text>
+              </TouchableOpacity>
+
+              {settings.callbackUrl ? (
+                <>
+                  <Text style={[styles.hint, { marginTop: 12 }]}>Paste this exact URL into Borzo's Callback URL field:</Text>
+                  <Text selectable style={styles.callbackUrlText}>{settings.callbackUrl}</Text>
+                  <TouchableOpacity style={styles.secondaryBtn} onPress={copyCallbackUrl}>
+                    <Icon name="content-copy" size={14} color={COLORS.accent} />
+                    <Text style={styles.secondaryBtnText}>Copy URL</Text>
+                  </TouchableOpacity>
+                </>
+              ) : (
+                <Text style={[styles.hint, { marginTop: 8 }]}>
+                  Skipping this is fine — delivery status updates still work, just unverified.
+                </Text>
+              )}
             </View>
 
             <View style={[styles.card, settings.useTestEnvironment ? styles.cardSafe : styles.cardLive]}>
@@ -263,6 +321,10 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     borderWidth: 1, borderColor: COLORS.accent, borderRadius: 6, paddingVertical: 9, marginTop: 10,
   },
   secondaryBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.accent },
+  callbackUrlText: {
+    fontSize: 11, color: COLORS.heading, backgroundColor: COLORS.background,
+    borderRadius: 6, padding: 9, marginTop: 6, fontFamily: Platform.OS === 'web' ? 'monospace' : undefined,
+  },
   statusBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, borderRadius: 8, padding: 12 },
   statusOk: { backgroundColor: COLORS.cardAlt },
   statusBlocked: { backgroundColor: COLORS.cardAlt },
