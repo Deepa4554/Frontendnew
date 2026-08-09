@@ -130,6 +130,7 @@ export const linking: LinkingOptions<any> = {
           Tasks: 'tasks',
           Integrations: 'integrations',
           WhatsAppSetup: 'integrations/whatsapp',
+          DeliveryPartner: 'integrations/delivery',
           Branches: 'branches',
           Expenses: 'expenses',
           Khatabook: 'khatabook',

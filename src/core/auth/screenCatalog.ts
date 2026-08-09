@@ -70,6 +70,7 @@ export const SCREEN_CATALOG: ScreenCatalogEntry[] = [
   // of Integrations, so Plus cafes reach it through the direct "WhatsApp Business" entry in
   // MoreScreen/DesktopAppShell rather than the (still Premium) Integrations hub.
   { key: 'WhatsAppSetup', label: 'WhatsApp Business', icon: 'whatsapp', minPlan: 'PLUS', parent: 'Integrations' },
+  { key: 'DeliveryPartner', label: 'Delivery Partner', icon: 'moped', minPlan: 'PLUS', parent: 'Integrations' },
   { key: 'Branches', label: 'Branches', icon: 'storefront', minPlan: 'PLUS' },
   { key: 'Expenses', label: 'Expenses', icon: 'cash-minus', minPlan: 'NORMAL' },
   { key: 'SaaS', label: 'Subscription', icon: 'cloud-check', minPlan: 'NORMAL' },

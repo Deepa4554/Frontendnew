@@ -10,6 +10,12 @@ export const queryKeys = {
   taxGroups: ['tax-groups'] as const,
   categories: ['categories'] as const,
   menuOnlyQrToken: ['tables', 'menu-qr-token'] as const,
+  deliveryQrToken: ['tables', 'delivery-qr-token'] as const,
+  /** Third-party courier settings for this cafe (Borzo) — see DeliveryPartnerScreen. */
+  deliverySettings: ['delivery', 'settings'] as const,
+  /** Courier state for one order, and the un-booked price quote for it. */
+  deliveryStatus: (orderId: number) => ['delivery', 'order', orderId] as const,
+  deliveryQuote: (orderId: number) => ['delivery', 'quote', orderId] as const,
   orders: (params?: unknown) => ['orders', params] as const,
   order: (id: number) => ['orders', id] as const,
   rushForecast: ['orders', 'rush-forecast'] as const,

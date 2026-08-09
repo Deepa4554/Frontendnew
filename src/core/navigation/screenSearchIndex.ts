@@ -106,6 +106,7 @@ export const SCREEN_SEARCH_INDEX: ScreenSearchEntry[] = [
   // Business
   { id: 'integrations', label: 'Integrations', icon: 'api', permissionRouteKey: 'Integrations', navigate: nav('Integrations') },
   { id: 'whatsappsetup', label: 'WhatsApp Business', keywords: ['whatsapp'], icon: 'whatsapp', permissionRouteKey: 'WhatsAppSetup', navigate: nav('WhatsAppSetup') },
+  { id: 'deliverypartner', label: 'Delivery Partner', keywords: ['borzo', 'rider', 'courier', 'delivery'], icon: 'moped', permissionRouteKey: 'DeliveryPartner', navigate: nav('DeliveryPartner') },
   { id: 'branches', label: 'Branches', icon: 'storefront', permissionRouteKey: 'Branches', navigate: nav('Branches') },
   { id: 'expenses', label: 'Expenses', icon: 'cash-minus', permissionRouteKey: 'Expenses', navigate: nav('Expenses') },
   { id: 'khatabook', label: 'Khatabook', keywords: ['due', 'udhaar', 'credit', 'khata'], icon: 'notebook-outline', permissionRouteKey: 'Khatabook', navigate: nav('Khatabook') },

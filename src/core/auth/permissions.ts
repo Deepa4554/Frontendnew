@@ -19,6 +19,7 @@ const FLOOR_STAFF_HIDDEN_ROUTES = new Set([
   'Dashboard',
   'Integrations',
   'WhatsAppSetup',
+  'DeliveryPartner',
   'Branches',
   'Expenses',
   // Extending credit is a floor decision any cashier settling a bill can make; deciding a

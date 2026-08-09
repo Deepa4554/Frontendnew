@@ -28,6 +28,7 @@ import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/compone
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
 import { modalHeadingOverride } from '../../../../../shared/design/commonStyles';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
+import { RiderBookingCard } from '../../../../../shared/components/delivery/RiderBookingCard';
 
 type OrderKind = 'TAKEAWAY' | 'DELIVERY';
 type FilterKey = 'ALL' | OrderKind;
@@ -480,6 +481,8 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                       )}
                     </View>
                   ))}
+
+                  {order.orderType === 'DELIVERY' && <RiderBookingCard orderId={order.id} />}
 
                   {order.status !== 'SERVED' && (
                     <TouchableOpacity style={styles.markAllBtn} onPress={handleMarkAllServed} disabled={serveAll.isPending}>

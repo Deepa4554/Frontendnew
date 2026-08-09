@@ -13,6 +13,8 @@ export const useTables = () =>
 // Not table-specific, so no polling needed — this token is valid indefinitely.
 export const useMenuOnlyQrToken = () => useQuery({ queryKey: queryKeys.menuOnlyQrToken, queryFn: tablesApi.getMenuOnlyQrToken });
 
+export const useDeliveryQrToken = () => useQuery({ queryKey: queryKeys.deliveryQrToken, queryFn: tablesApi.getDeliveryQrToken });
+
 export const useCreateTable = () => {
   const qc = useQueryClient();
   return useMutation({

@@ -5,7 +5,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../../../core/theme/useThemeColors';
-import { useTables, useMenuOnlyQrToken } from '../../../../core/api/hooks/useTables';
+import { useTables, useMenuOnlyQrToken, useDeliveryQrToken } from '../../../../core/api/hooks/useTables';
 import { ApiTable } from '../../../../core/api/tablesApi';
 import { getPublicOrderBaseUrl } from '../../../../core/config/env';
 import { SkeletonGrid } from '../../../../shared/components/atoms/Skeleton';
@@ -25,13 +25,18 @@ export const QRMenuScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
   const { data: allTables = [], isLoading, isError, refetch } = useTables();
   const { data: menuOnlyToken } = useMenuOnlyQrToken();
+  const { data: deliveryToken } = useDeliveryQrToken();
   const [selected, setSelected] = useState<ApiTable | null>(null);
   const [genericVisible, setGenericVisible] = useState(false);
+  const [deliveryVisible, setDeliveryVisible] = useState(false);
 
   // The cafe and table are never exposed in plain text — the URL carries only an
   // encrypted token (see backend QrTokenService) that the server decodes itself.
   const orderUrl = (table: ApiTable) => `${getPublicOrderBaseUrl()}/order/${table.qrToken}`;
   const genericOrderUrl = menuOnlyToken ? `${getPublicOrderBaseUrl()}/order/${menuOnlyToken.token}` : null;
+  // Same page, same URL shape — the token itself is what puts it in delivery mode (see backend
+  // QrTokenService.DeliveryTableCode), so nothing about this link gives away that it's special.
+  const deliveryOrderUrl = deliveryToken ? `${getPublicOrderBaseUrl()}/order/${deliveryToken.token}` : null;
 
   // Every table gets a printed code, occupied or not — a scan on an occupied table
   // is handled by the guest-session JOIN flow server-side, so there's no need to
@@ -65,6 +70,10 @@ export const QRMenuScreen = ({ navigation }: any) => {
     if (genericOrderUrl) shareOrCopy(`Order our menu: ${genericOrderUrl}`, genericOrderUrl);
   };
 
+  const handleShareDelivery = () => {
+    if (deliveryOrderUrl) shareOrCopy(`Order home delivery: ${deliveryOrderUrl}`, deliveryOrderUrl);
+  };
+
   return (
     <View style={styles.container}>
       <DesktopPageHeader icon="qrcode" title="QR Ordering" />
@@ -93,6 +102,15 @@ export const QRMenuScreen = ({ navigation }: any) => {
           <View style={{ flex: 1 }}>
             <Text style={styles.genericCardTitle}>General Menu (No Table)</Text>
             <Text style={styles.genericCardSub}>Browse only — ordering still needs a table's own code</Text>
+          </View>
+          <Icon name="chevron-right" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.deliveryCard} activeOpacity={0.85} onPress={() => setDeliveryVisible(true)}>
+          <Icon name="moped" size={22} color="#FFFFFF" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.genericCardTitle}>Home Delivery</Text>
+            <Text style={styles.genericCardSub}>Customer orders to their address — no table needed</Text>
           </View>
           <Icon name="chevron-right" size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -205,6 +223,39 @@ export const QRMenuScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={deliveryVisible} transparent animationType="fade" onRequestClose={() => setDeliveryVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Home Delivery</Text>
+              <TouchableOpacity onPress={() => setDeliveryVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                <Icon name="close" size={18} color={COLORS.muted} />
+              </TouchableOpacity>
+            </View>
+
+            <View style={styles.qrLarge}>
+              {deliveryOrderUrl && <QRCode value={deliveryOrderUrl} size={220} color={COLORS.heading} backgroundColor="#FFFFFF" />}
+            </View>
+
+            <Text style={styles.urlText} numberOfLines={2}>
+              {deliveryOrderUrl ?? ''}
+            </Text>
+
+            <TouchableOpacity style={styles.shareBtn} onPress={handleShareDelivery}>
+              <Icon name="share-variant" size={14} color="#FFFFFF" />
+              <Text style={styles.shareBtnText}>Share Link</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.hintText}>
+              Print this on flyers, packaging or a shopfront board. Scanning it opens the menu with
+              an address box, so the order arrives as a delivery with the customer's location
+              attached. Orders appear under Takeaway &amp; Delivery, where you set a prep time and
+              book a rider — nothing is dispatched on its own.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -234,6 +285,17 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     alignItems: 'center',
     gap: isDesktopWeb ? 9 : 9,
     backgroundColor: COLORS.button,
+    borderRadius: 8,
+    padding: isDesktopWeb ? 12 : 12,
+    marginBottom: isDesktopWeb ? 14 : 15,
+  },
+  // Same card as the general-menu one, in the accent colour so the two aren't mistaken for
+  // each other on a glance — one only browses, the other takes real orders and money.
+  deliveryCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: isDesktopWeb ? 9 : 9,
+    backgroundColor: COLORS.accent,
     borderRadius: 8,
     padding: isDesktopWeb ? 12 : 12,
     marginBottom: isDesktopWeb ? 14 : 15,

@@ -22,6 +22,7 @@ import { SuperAdminNavigator } from '../../features/superadmin/presentation/navi
 import { DashboardScreen } from '../../features/management/dashboard/presentation/screens/DashboardScreen';
 import { IntegrationsHubScreen } from '../../features/management/integrations/presentation/screens/IntegrationsHubScreen';
 import { WhatsAppSetupScreen } from '../../features/management/integrations/presentation/screens/WhatsAppSetupScreen';
+import { DeliveryPartnerScreen } from '../../features/management/integrations/presentation/screens/DeliveryPartnerScreen';
 import { BranchManagementScreen } from '../../features/management/branches/presentation/screens/BranchManagementScreen';
 import { AIAssistantScreen } from '../../features/analytics/presentation/screens/AIAssistantScreen';
 import { AIChatScreen } from '../../features/analytics/presentation/screens/AIChatScreen';
@@ -143,6 +144,7 @@ const ApprovalsScreenComp = withRouteGuard(withDesktopShell(ApprovalWorkflowScre
 const TasksScreenComp = withRouteGuard(withDesktopShell(TaskManagementScreen, 'Tasks'), 'Tasks');
 const IntegrationsScreenComp = withRouteGuard(withDesktopShell(IntegrationsHubScreen, 'Integrations'), 'Integrations');
 const WhatsAppSetupScreenComp = withRouteGuard(withDesktopShell(WhatsAppSetupScreen, 'WhatsAppSetup'), 'WhatsAppSetup');
+const DeliveryPartnerScreenComp = withRouteGuard(withDesktopShell(DeliveryPartnerScreen, 'DeliveryPartner'), 'DeliveryPartner');
 const BranchesScreenComp = withRouteGuard(withDesktopShell(BranchManagementScreen, 'Branches'), 'Branches');
 const ExpensesScreenComp = withRouteGuard(withDesktopShell(CafeExpensesScreen, 'Expenses'), 'Expenses');
 const KhatabookScreenComp = withRouteGuard(withDesktopShell(KhatabookScreen, 'Khatabook'), 'Khatabook');
@@ -326,6 +328,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="Tasks" component={TasksScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Integrations" component={IntegrationsScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="WhatsAppSetup" component={WhatsAppSetupScreenComp} options={{ headerShown: false }} />
+      <Stack.Screen name="DeliveryPartner" component={DeliveryPartnerScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Branches" component={BranchesScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Expenses" component={ExpensesScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Khatabook" component={KhatabookScreenComp} options={{ headerShown: false }} />

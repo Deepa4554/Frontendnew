@@ -48,6 +48,10 @@ export const tablesApi = {
   /** A QR token not tied to any table — for browsing/ordering as takeaway, or when
    * every table is occupied. See backend TablesController.GetMenuOnlyQrToken. */
   getMenuOnlyQrToken: () => apiClient.get<{ token: string }>('/tables/menu-qr-token').then((r) => r.data),
+  /** A QR token for home delivery — printed on flyers/packaging rather than a table.
+   * Scanning it opens the ordering page in delivery mode (address + location), and the
+   * order arrives as DELIVERY. See backend TablesController.GetDeliveryQrToken. */
+  getDeliveryQrToken: () => apiClient.get<{ token: string }>('/tables/delivery-qr-token').then((r) => r.data),
   /** Manual end of a table's live QR guest session (doc Section 5.6) — abuse, a
    * wrong-table scan, or a guest request. Every device on that session gets 410 on its
    * next request. */
