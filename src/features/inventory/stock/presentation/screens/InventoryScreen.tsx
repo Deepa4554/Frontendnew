@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -28,6 +29,7 @@ import { InventoryItem, WasteReasonCode, WASTE_REASON_LABELS, InventoryImportRow
 import { pickAndParseInventorySheet, normalizeInventoryImportRows } from '../../../../../core/utils/csvInventoryImport';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { SearchClearButton } from '../../../../../shared/components/atoms/SearchClearButton';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { ScreenContainer } from '../../../../../core/components/ScreenContainer';
 import { DatePickerModal, isValidDateISO } from '../../../../../shared/components/atoms/DatePickerModal';
 
@@ -686,15 +688,21 @@ export const InventoryScreen = ({ navigation, route }: any) => {
                 <Text style={styles.lastRestock}>Last Restock: {formatRestockDate(item.lastRestockAt)}</Text>
                 {item.isActive ? (
                   <View style={styles.actionRow}>
-                    <TouchableOpacity style={styles.smallActionBtn} onPress={() => openEdit(item)}>
-                      <Icon name="pencil-outline" size={14} color={COLORS.heading} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.smallActionBtn} onPress={() => { setAdjustTarget(item); setAdjustQty(String(item.current)); }}>
-                      <Icon name="clipboard-edit-outline" size={14} color={COLORS.heading} />
-                    </TouchableOpacity>
-                    <TouchableOpacity style={styles.smallActionBtn} onPress={() => { setWasteTarget(item); setWasteQty(''); setWasteReason(WASTE_REASONS[0]); setWasteNote(''); }}>
-                      <Icon name="delete-outline" size={14} color={COLORS.dangerAccent} />
-                    </TouchableOpacity>
+                    <Tooltip label="Edit item" placement="top">
+                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => openEdit(item)}>
+                        <Icon name="pencil-outline" size={14} color={COLORS.heading} />
+                      </TouchableOpacity>
+                    </Tooltip>
+                    <Tooltip label="Adjust stock" placement="top">
+                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => { setAdjustTarget(item); setAdjustQty(String(item.current)); }}>
+                        <Icon name="clipboard-edit-outline" size={14} color={COLORS.heading} />
+                      </TouchableOpacity>
+                    </Tooltip>
+                    <Tooltip label="Log waste" placement="top">
+                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => { setWasteTarget(item); setWasteQty(''); setWasteReason(WASTE_REASONS[0]); setWasteNote(''); }}>
+                        <Icon name="delete-outline" size={14} color={COLORS.dangerAccent} />
+                      </TouchableOpacity>
+                    </Tooltip>
                     <TouchableOpacity
                       style={[styles.restockBtn, item.lowStock && styles.restockBtnFilled]}
                       onPress={() => openRestock(item)}
@@ -726,9 +734,7 @@ export const InventoryScreen = ({ navigation, route }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Add Inventory Item</Text>
-              <TouchableOpacity onPress={() => setAddVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setAddVisible(false)} size={18} />
             </View>
 
             <ScrollView style={styles.modalFieldsScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -850,9 +856,7 @@ export const InventoryScreen = ({ navigation, route }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Edit Item</Text>
-              <TouchableOpacity onPress={() => setEditTarget(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setEditTarget(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>
               Current stock stays at {editTarget ? Math.round(editTarget.current * 100) / 100 : 0}{editTarget?.unit} — use Adjust or Restock to change it.
@@ -968,9 +972,7 @@ export const InventoryScreen = ({ navigation, route }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Restock {restockTarget?.name}</Text>
-              <TouchableOpacity onPress={() => setRestockTarget(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setRestockTarget(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Current: {restockTarget ? Math.round(restockTarget.current * 100) / 100 : 0}{restockTarget?.unit}</Text>
 
@@ -1038,9 +1040,7 @@ export const InventoryScreen = ({ navigation, route }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Log Waste — {wasteTarget?.name}</Text>
-              <TouchableOpacity onPress={() => setWasteTarget(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setWasteTarget(null)} size={18} />
             </View>
 
             <Text style={styles.fieldLabel}>Quantity wasted</Text>
@@ -1098,9 +1098,7 @@ export const InventoryScreen = ({ navigation, route }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Adjust Stock — {adjustTarget?.name}</Text>
-              <TouchableOpacity onPress={() => setAdjustTarget(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setAdjustTarget(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Set the exact quantity after a physical count.</Text>
 
@@ -1159,9 +1157,7 @@ export const InventoryScreen = ({ navigation, route }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Import row errors</Text>
-              <TouchableOpacity onPress={() => setImportErrors(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setImportErrors(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>
               These rows were skipped. Fix them in the sheet and re-import — everything else already went through.

@@ -1,5 +1,15 @@
-import React, { useEffect, useRef } from 'react';
-import { View, Animated, Easing, StyleSheet, ViewStyle, DimensionValue, Platform, Dimensions } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import {
+  View,
+  Animated,
+  Easing,
+  StyleSheet,
+  ViewStyle,
+  DimensionValue,
+  Platform,
+  Dimensions,
+  LayoutChangeEvent,
+} from 'react-native';
 import LinearGradient from 'react-native-linear-gradient';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
@@ -13,9 +23,14 @@ interface SkeletonBoxProps {
 }
 
 // A same-opacity-the-whole-time pulse reads as "a static gray box" at a glance —
-// what people mean by "moving skeleton" is a light band sweeping across it. -400..400
-// comfortably outruns anything this app renders a skeleton for (full-width rows on a
-// phone screen included), so every SkeletonBox shares one sweep animation loop.
+// what people mean by "moving skeleton" is a light band sweeping across it. The
+// sweep has to travel the box's *actual* rendered width, though: a fixed -400..400
+// range covers a phone row but dies halfway across a 1200px+ desktop row, so the
+// shimmer looked stuck on laptop/big screens. Instead each box measures itself on
+// layout and animates the band from just off its left edge to just past its right
+// edge — full traversal at any width. Speed is held roughly constant (~pixels/ms)
+// by scaling the loop duration to the distance, so a wide desktop row sweeps at the
+// same visual pace as a narrow phone one instead of flashing past.
 export const SkeletonBox: React.FC<SkeletonBoxProps> = ({
   width = '100%',
   height = 14,
@@ -26,19 +41,39 @@ export const SkeletonBox: React.FC<SkeletonBoxProps> = ({
   const colors = useThemeColors();
   const sweep = useRef(new Animated.Value(0)).current;
 
+  // A wider highlight band reads better on the larger surfaces desktop renders.
+  const band = isDesktopWeb ? 200 : 120;
+
+  // Real measured width; falls back to a phone-ish default until first layout so the
+  // shimmer is already moving on the very first frame instead of waiting a tick.
+  const [boxWidth, setBoxWidth] = useState(0);
+  const onLayout = (e: LayoutChangeEvent) => {
+    const w = e.nativeEvent.layout.width;
+    if (w && Math.abs(w - boxWidth) > 1) setBoxWidth(w);
+  };
+
+  const measured = boxWidth || 320;
+  // Constant-ish velocity: distance / speed, clamped so tiny boxes aren't frantic
+  // and giant ones aren't sluggish.
+  const distance = measured + band;
+  const duration = Math.min(2200, Math.max(900, Math.round(distance / 0.9)));
+
   useEffect(() => {
     const loop = Animated.loop(
-      Animated.timing(sweep, { toValue: 1, duration: 1100, easing: Easing.linear, useNativeDriver: true }),
+      Animated.timing(sweep, { toValue: 1, duration, easing: Easing.linear, useNativeDriver: true }),
     );
     loop.start();
     return () => loop.stop();
-  }, [sweep]);
+  }, [sweep, duration]);
 
-  const translateX = sweep.interpolate({ inputRange: [0, 1], outputRange: [-400, 400] });
+  const translateX = sweep.interpolate({ inputRange: [0, 1], outputRange: [-band, measured] });
 
   return (
-    <View style={[{ width, height, borderRadius: radius, backgroundColor: colors.divider, overflow: 'hidden' }, style]}>
-      <Animated.View style={[StyleSheet.absoluteFill, { width: 120, transform: [{ translateX }] }]}>
+    <View
+      onLayout={onLayout}
+      style={[{ width, height, borderRadius: radius, backgroundColor: colors.divider, overflow: 'hidden' }, style]}
+    >
+      <Animated.View style={[StyleSheet.absoluteFill, { width: band, transform: [{ translateX }] }]}>
         <LinearGradient
           colors={['transparent', 'rgba(255,255,255,0.35)', 'transparent']}
           start={{ x: 0, y: 0 }}

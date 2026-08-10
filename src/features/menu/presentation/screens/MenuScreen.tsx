@@ -1,10 +1,12 @@
 import React, { useMemo, useState } from 'react';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Image, Switch, Modal, ActivityIndicator, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { confirmAlert } from '../../../../shared/components/ConfirmDialogHost';
 import { SearchClearButton } from '../../../../shared/components/atoms/SearchClearButton';
+import { Tooltip } from '../../../../shared/components/atoms/Tooltip';
 import { showToast } from '../../../../core/store/uiSlice';
 import { useThemeColors } from '../../../../core/theme/useThemeColors';
 import {
@@ -123,9 +125,11 @@ const VariantsSection = ({ menuItemId }: { menuItemId: number }) => {
               <View style={styles.variantBadges}>
                 {v.isDefault && <View style={styles.badgeDefault}><Text style={styles.badgeText}>Default</Text></View>}
                 {!v.isAvailable && <View style={styles.badgeUnavailable}><Text style={styles.badgeText}>86'd</Text></View>}
-                <TouchableOpacity onPress={() => handleDeleteVariant(v.id, v.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Icon name="trash-can-outline" size={16} color={COLORS.dangerAccent} />
-                </TouchableOpacity>
+                <Tooltip label="Delete variant" placement="left">
+                  <TouchableOpacity onPress={() => handleDeleteVariant(v.id, v.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Icon name="trash-can-outline" size={16} color={COLORS.dangerAccent} />
+                  </TouchableOpacity>
+                </Tooltip>
               </View>
             </View>
           ))}
@@ -245,9 +249,11 @@ const ModifiersSection = ({ menuItemId }: { menuItemId: number }) => {
                   <Text style={styles.variantName} numberOfLines={1} ellipsizeMode="tail">{m.name}</Text>
                   <Text style={styles.modifierGroupType}>{MODIFIER_TYPES.find((t) => t.value === m.type)?.label ?? m.type}{m.isRequired ? ' · Required' : ''}</Text>
                 </View>
-                <TouchableOpacity onPress={() => handleDeleteGroup(m.id, m.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Icon name="trash-can-outline" size={16} color={COLORS.dangerAccent} />
-                </TouchableOpacity>
+                <Tooltip label="Delete group" placement="left">
+                  <TouchableOpacity onPress={() => handleDeleteGroup(m.id, m.name)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Icon name="trash-can-outline" size={16} color={COLORS.dangerAccent} />
+                  </TouchableOpacity>
+                </Tooltip>
               </View>
 
               {m.options.map((o) => (
@@ -257,9 +263,11 @@ const ModifiersSection = ({ menuItemId }: { menuItemId: number }) => {
                     <Text style={styles.variantPrice}>
                       {o.price > 0 ? `+₹${o.price.toFixed(2)}` : o.price < 0 ? `−₹${Math.abs(o.price).toFixed(2)}` : 'Free'}
                     </Text>
-                    <TouchableOpacity onPress={() => handleDeleteOption(m.id, o.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Icon name="close" size={14} color={COLORS.muted} />
-                    </TouchableOpacity>
+                    <Tooltip label="Remove option" placement="left">
+                      <TouchableOpacity onPress={() => handleDeleteOption(m.id, o.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Icon name="close" size={14} color={COLORS.muted} />
+                      </TouchableOpacity>
+                    </Tooltip>
                   </View>
                 </View>
               ))}
@@ -357,9 +365,11 @@ const DraftVariantsSection = ({ variants, onChange }: { variants: DraftVariant[]
             <Text style={styles.variantName}>{v.name}</Text>
             <Text style={styles.variantPrice}>₹{(parseFloat(v.price) || 0).toFixed(2)}</Text>
           </View>
-          <TouchableOpacity onPress={() => handleRemoveVariant(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Icon name="trash-can-outline" size={16} color={COLORS.dangerAccent} />
-          </TouchableOpacity>
+          <Tooltip label="Remove variant" placement="left">
+            <TouchableOpacity onPress={() => handleRemoveVariant(i)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="trash-can-outline" size={16} color={COLORS.dangerAccent} />
+            </TouchableOpacity>
+          </Tooltip>
         </View>
       ))}
       <TouchableOpacity style={styles.addVariantBtn} onPress={() => setShowAddVariant(!showAddVariant)}>
@@ -627,6 +637,10 @@ export const MenuScreen = ({ navigation }: any) => {
   // Cafe Settings rate when there is none). Sent as 0 to clear — see UpdateMenuItemRequest.
   const [editTaxGroupId, setEditTaxGroupId] = useState<number | null>(null);
   const [editVegNonVeg, setEditVegNonVeg] = useState<'Veg' | 'NonVeg' | 'Jain' | 'Eggetarian' | null>(null);
+  // MRP item — the till asks for the rate when this is added to an order, and bills it
+  // tax-inclusive. The Price field below stays the last-known rate (what the grid shows and
+  // what the rate prompt pre-fills). See MenuItem.isOpenPrice.
+  const [editIsOpenPrice, setEditIsOpenPrice] = useState(false);
   const [uploadingEditImage, setUploadingEditImage] = useState(false);
 
   const [addModalVisible, setAddModalVisible] = useState(false);
@@ -645,6 +659,7 @@ export const MenuScreen = ({ navigation }: any) => {
   const [stationTouched, setStationTouched] = useState(false);
   const [newItemType, setNewItemType] = useState<'Recipe' | 'Retail' | 'Service' | 'Combo'>('Recipe');
   const [newVegNonVeg, setNewVegNonVeg] = useState<'Veg' | 'NonVeg' | 'Jain' | 'Eggetarian' | null>(null);
+  const [newIsOpenPrice, setNewIsOpenPrice] = useState(false);
   const [uploadingNewImage, setUploadingNewImage] = useState(false);
   // Draft variants/toppings for the Add flow: kept as plain local state (rather than
   // API calls like the Edit modal's VariantsSection/ModifiersSection use) because
@@ -722,6 +737,7 @@ export const MenuScreen = ({ navigation }: any) => {
     setEditItemType(item.itemType);
     setEditVegNonVeg(item.vegNonVegType ?? null);
     setEditTaxGroupId(item.taxGroupId ?? null);
+    setEditIsOpenPrice(item.isOpenPrice);
   };
 
   const saveEditedItem = async () => {
@@ -751,6 +767,7 @@ export const MenuScreen = ({ navigation }: any) => {
           vegNonVegType: editVegNonVeg,
           // 0 clears it back to the cafe default — undefined would mean "leave unchanged".
           taxGroupId: editTaxGroupId ?? 0,
+          isOpenPrice: editIsOpenPrice,
         },
       });
       setEditingItem(null);
@@ -819,6 +836,7 @@ export const MenuScreen = ({ navigation }: any) => {
     setStationTouched(false);
     setNewItemType('Recipe');
     setNewVegNonVeg(null);
+    setNewIsOpenPrice(false);
     setNewVariants([]);
     setNewModifierGroups([]);
     setAddModalVisible(true);
@@ -847,6 +865,7 @@ export const MenuScreen = ({ navigation }: any) => {
         stationId: newStationId ?? undefined,
         itemType: newItemType,
         vegNonVegType: newVegNonVeg,
+        isOpenPrice: newIsOpenPrice,
       });
 
       // Persist any draft variants/toppings now that the item has an id. Best-effort:
@@ -1237,9 +1256,7 @@ export const MenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Add Menu Item</Text>
-              <TouchableOpacity onPress={() => setAddModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setAddModalVisible(false)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Fill in the details — it goes live on POS immediately.</Text>
 
@@ -1402,6 +1419,16 @@ export const MenuScreen = ({ navigation }: any) => {
                 ))}
               </View>
 
+              <View style={styles.openPriceRow}>
+                <Text style={styles.fieldLabel}>Sold at MRP</Text>
+                <Switch value={newIsOpenPrice} onValueChange={setNewIsOpenPrice} />
+              </View>
+              <Text style={styles.emptyStationsHint}>
+                {newIsOpenPrice
+                  ? 'The till will ask for this item’s rate each time it’s added, and treat that rate as final — tax is taken out of it, never added on top. The Price above is only the default the prompt starts with. Not orderable from the customer QR menu.'
+                  : 'Turn on for packaged goods (soft drinks, water, chips) whose printed rate changes between packs.'}
+              </Text>
+
               <Text style={{ fontSize: 12, fontWeight: '700', color: COLORS.heading, marginTop: 10, marginBottom: 6 }}>Variants (Half/Full)</Text>
               <DraftVariantsSection variants={newVariants} onChange={setNewVariants} />
 
@@ -1428,9 +1455,7 @@ export const MenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Edit Menu Item</Text>
-              <TouchableOpacity onPress={() => setEditingItem(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setEditingItem(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Update details or remove this item from the menu.</Text>
 
@@ -1601,6 +1626,16 @@ export const MenuScreen = ({ navigation }: any) => {
                 ))}
               </View>
 
+              <View style={styles.openPriceRow}>
+                <Text style={styles.fieldLabel}>Sold at MRP</Text>
+                <Switch value={editIsOpenPrice} onValueChange={setEditIsOpenPrice} />
+              </View>
+              <Text style={styles.emptyStationsHint}>
+                {editIsOpenPrice
+                  ? 'The till will ask for this item’s rate each time it’s added, and treat that rate as final — tax is taken out of it, never added on top. The Price above is only the default the prompt starts with. Not orderable from the customer QR menu.'
+                  : 'Turn on for packaged goods (soft drinks, water, chips) whose printed rate changes between packs.'}
+              </Text>
+
               {editingItem && <MenuItemImageGallery menuItemId={editingItem.id} />}
 
               {editingItem && (
@@ -1653,9 +1688,7 @@ export const MenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{priceEditor?.name}</Text>
-              <TouchableOpacity onPress={() => setPriceEditor(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setPriceEditor(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Adjust price — updates instantly on POS</Text>
 
@@ -1688,9 +1721,7 @@ export const MenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Category Default Stations</Text>
-              <TouchableOpacity onPress={() => setCategoryManagerVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setCategoryManagerVisible(false)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>
               New items in a category prefill to its default station. Existing items only change if you tap "Apply to existing items."
@@ -1752,9 +1783,7 @@ export const MenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Import row errors</Text>
-              <TouchableOpacity onPress={() => setRecipeImportErrors(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setRecipeImportErrors(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>
               These rows were skipped. Fix them in the file and re-import — everything else already went through.
@@ -2238,6 +2267,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     fontSize: 12,
     color: COLORS.muted,
     lineHeight: 17,
+  },
+  openPriceRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginTop: 6,
   },
   categoryRowWithManage: {
     flexDirection: 'row',

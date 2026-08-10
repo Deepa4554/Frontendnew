@@ -1,10 +1,12 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../atoms/CloseButton';
 import { View, StyleSheet, Text, TouchableOpacity, Modal } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
 import { modalHeadingOverride } from '../../design/commonStyles';
 import { istToday, istDatePlusDays } from '../../../core/utils/istDate';
+import { Tooltip } from '../atoms/Tooltip';
 
 export type RangePreset = 'today' | 'yesterday' | '7d' | '15d' | '30d' | 'custom';
 
@@ -81,13 +83,17 @@ const CalendarGrid = ({ selected, onSelect, styles, COLORS }: {
   return (
     <View style={styles.calendarBox}>
       <View style={styles.calendarHeader}>
-        <TouchableOpacity onPress={() => goMonth(-1)} style={styles.calendarNavBtn}>
-          <Icon name="chevron-left" size={16} color={COLORS.heading} />
-        </TouchableOpacity>
+        <Tooltip label="Previous month" placement="top">
+          <TouchableOpacity onPress={() => goMonth(-1)} style={styles.calendarNavBtn}>
+            <Icon name="chevron-left" size={16} color={COLORS.heading} />
+          </TouchableOpacity>
+        </Tooltip>
         <Text style={styles.calendarMonthLabel}>{MONTHS[viewMonth]} {viewYear}</Text>
-        <TouchableOpacity onPress={() => goMonth(1)} style={styles.calendarNavBtn}>
-          <Icon name="chevron-right" size={16} color={COLORS.heading} />
-        </TouchableOpacity>
+        <Tooltip label="Next month" placement="top">
+          <TouchableOpacity onPress={() => goMonth(1)} style={styles.calendarNavBtn}>
+            <Icon name="chevron-right" size={16} color={COLORS.heading} />
+          </TouchableOpacity>
+        </Tooltip>
       </View>
       <View style={styles.calendarWeekRow}>
         {WEEKDAYS.map((d, i) => (
@@ -163,9 +169,7 @@ export const DateRangeFilter = ({ preset, customFrom, customTo, onChange }: Date
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Select a Date Range</Text>
-              <TouchableOpacity onPress={() => setVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setVisible(false)} size={18} />
             </View>
 
             {PRESETS.filter((p) => p.key !== 'custom').map((p) => (

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Switch, Modal, ActivityIndicator, Image } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch, useSelector } from 'react-redux';
@@ -330,9 +331,7 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Receipt Customization</Text>
-              <TouchableOpacity onPress={() => setOpenModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setOpenModal(null)} size={18} />
             </View>
             <Text style={styles.fieldLabel}>Business Name (receipt header)</Text>
             <View style={{ borderRadius: 8 }}>
@@ -375,9 +374,7 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Notification Preferences</Text>
-              <TouchableOpacity onPress={() => setOpenModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setOpenModal(null)} size={18} />
             </View>
             <View style={styles.toggleRow}>
               <View style={{ flex: 1 }}>
@@ -501,9 +498,7 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Language & Region</Text>
-              <TouchableOpacity onPress={() => setOpenModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setOpenModal(null)} size={18} />
             </View>
             <Text style={styles.fieldLabel}>Currency & Timezone</Text>
             {REGION_OPTIONS.map((opt) => {
@@ -533,9 +528,7 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Active Branch</Text>
-              <TouchableOpacity onPress={() => setOpenModal(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setOpenModal(null)} size={18} />
             </View>
             <Text style={styles.helperText}>
               POS, Inventory, Dashboard, and Reports will only show this branch's data. Pick "All Branches" to see every location combined.

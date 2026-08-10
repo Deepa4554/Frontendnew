@@ -461,6 +461,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   modalSheet: {
     width: '100%',
+    // Cap the width so on desktop web the card floats centered instead of stretching
+    // edge-to-edge (hugging left/right), and cap the height so a long receipt scrolls
+    // inside the card rather than growing down to touch the bottom — matches the POS
+    // receipt modal (receiptSheet) exactly.
+    maxWidth: 760,
+    maxHeight: '94%',
     backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: isDesktopWeb ? 10 : 10.5,

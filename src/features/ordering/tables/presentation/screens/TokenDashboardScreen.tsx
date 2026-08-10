@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Linking, Alert, TextInput } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -26,6 +27,7 @@ import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQty
 import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
 import { WhatsAppTrackingQr } from '../../../../../shared/components/billing/WhatsAppTrackingQr';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 
 import { modalHeadingOverride } from '../../../../../shared/design/commonStyles';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
@@ -326,9 +328,11 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
         </View>
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={navigateToPOS}>
-        <Icon name="plus" size={26} color="#FFFFFF" />
-      </TouchableOpacity>
+      <Tooltip label="New token order" placement="left">
+        <TouchableOpacity style={styles.fab} onPress={navigateToPOS}>
+          <Icon name="plus" size={26} color="#FFFFFF" />
+        </TouchableOpacity>
+      </Tooltip>
 
       {/* Payment is available at any point (not gated on Served) — full page on mobile,
           centered card on desktop web. */}
@@ -371,9 +375,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                   </TouchableOpacity>
                 )}
                 {isDesktopWeb && (
-                  <TouchableOpacity onPress={closeModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Icon name="close" size={22} color={COLORS.muted} />
-                  </TouchableOpacity>
+                  <CloseButton onPress={closeModal} size={22} />
                 )}
               </View>
             </View>
@@ -432,9 +434,11 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                                 <Text style={[styles.itemStatusPillText, { color: dotColor }]}>{item.status}</Text>
                               </TouchableOpacity>
                               {!order.paid && (
-                                <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                  <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                                </TouchableOpacity>
+                                <Tooltip label="Remove item" placement="left">
+                                  <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                                  </TouchableOpacity>
+                                </Tooltip>
                               )}
                             </View>
                           );
@@ -454,9 +458,11 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                       <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.unfiredTag}><Text style={styles.unfiredTagText}>NEW</Text></View>
                       {!order.paid && (
-                        <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                        </TouchableOpacity>
+                        <Tooltip label="Remove item" placement="left">
+                          <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                          </TouchableOpacity>
+                        </Tooltip>
                       )}
                     </View>
                   ))}

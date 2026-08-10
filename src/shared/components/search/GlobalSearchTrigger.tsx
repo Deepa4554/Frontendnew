@@ -11,6 +11,7 @@ import { useResponsive } from '../../../core/utils/useResponsive';
 import { usePlanCategory } from '../../../core/plan/planCategory';
 import { useSettings } from '../../../core/api/hooks/useSettings';
 import { searchScreens, ScreenSearchEntry } from '../../../core/navigation/screenSearchIndex';
+import { Tooltip } from '../atoms/Tooltip';
 
 const TYPE_ICON: Record<SearchResult['category'], string> = {
   Orders: 'receipt',
@@ -80,9 +81,11 @@ export const GlobalSearchTrigger: React.FC<Props> = ({ navigation, iconColor, ic
 
   return (
     <>
-      <TouchableOpacity style={[styles.iconBtn, style]} onPress={() => setVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-        <Icon name="magnify" size={iconSize} color={iconColor ?? COLORS.heading} />
-      </TouchableOpacity>
+      <Tooltip label="Search" placement="bottom">
+        <TouchableOpacity style={[styles.iconBtn, style]} onPress={() => setVisible(true)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <Icon name="magnify" size={iconSize} color={iconColor ?? COLORS.heading} />
+        </TouchableOpacity>
+      </Tooltip>
       <Modal visible={visible} transparent animationType="fade" onRequestClose={close}>
         <Pressable style={styles.backdrop} onPress={close}>
           <Pressable style={[styles.panel, { marginTop: insets.top + 12 }]} onPress={() => {}}>

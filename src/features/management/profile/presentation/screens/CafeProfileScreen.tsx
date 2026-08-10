@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Switch, Image, Modal, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -316,9 +317,7 @@ export const CafeProfileScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{editingField ? FIELD_META[editingField].label : ''}</Text>
-              <TouchableOpacity onPress={() => setEditingField(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setEditingField(null)} size={18} />
             </View>
             <View style={{ borderRadius: 12 }}>
               <TextInput

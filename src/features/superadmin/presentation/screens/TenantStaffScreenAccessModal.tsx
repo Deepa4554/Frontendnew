@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
@@ -140,9 +141,7 @@ export const TenantStaffScreenAccessModal = ({ tenant, onClose }: { tenant: ApiT
             <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>
               {staff ? `${tenant?.name} — ${staff.name}` : `${tenant?.name} — Staff Access`}
             </Text>
-            <TouchableOpacity onPress={close} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Icon name="close" size={18} color={COLORS.muted} />
-            </TouchableOpacity>
+            <CloseButton onPress={close} size={18} />
           </View>
 
           {!staff ? (

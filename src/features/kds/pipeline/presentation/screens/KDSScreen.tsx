@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { RootState } from '../../../../../core/store/rootReducer';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { useOrders, useAdvanceOrder, useAdvanceUnits, useBulkAdvance, useRushForecast } from '../../../../../core/api/hooks/useOrders';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
@@ -13,6 +14,7 @@ import { useStations } from '../../../../../core/api/hooks/useStations';
 import { OrderStatus, ApiOrder, OrderItem, FireBatch, STAGE_FLOW, unitsAtStage } from '../../../../../core/api/ordersApi';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { VegNonVegBadge } from '../../../../../shared/components/atoms/VegNonVegBadge';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { confirmAlert } from '../../../../../shared/components/ConfirmDialogHost';
 import { getKdsDefaultStation, saveKdsDefaultStation, getKdsLocked, saveKdsLocked } from '../../../../../core/kds/kdsDeviceSettings';
 import { GlobalSearchTrigger } from '../../../../../shared/components/search/GlobalSearchTrigger';
@@ -453,9 +455,11 @@ export const KDSScreen = () => {
                 </TouchableOpacity>
               ))}
               {activeStation !== 'ALL' && (
-                <TouchableOpacity style={styles.lockToggleBtn} onPress={lockStation} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Icon name="lock-open-variant-outline" size={16} color={COLORS.muted} />
-                </TouchableOpacity>
+                <Tooltip label="Lock to this station" placement="top">
+                  <TouchableOpacity style={styles.lockToggleBtn} onPress={lockStation} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Icon name="lock-open-variant-outline" size={16} color={COLORS.muted} />
+                  </TouchableOpacity>
+                </Tooltip>
               )}
             </View>
           )
@@ -667,7 +671,7 @@ export const KDSScreen = () => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{prodPopup?.name}</Text>
-              <TouchableOpacity onPress={closeProd} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}><Icon name="close" size={18} color={COLORS.muted} /></TouchableOpacity>
+              <CloseButton onPress={closeProd} size={18} />
             </View>
             <Text style={styles.modalSub}>Pending at {prodStage.toLowerCase()}: {prodPopup?.byStage[prodStage] ?? 0}. {actionLabelFor(prodStage)}.</Text>
 

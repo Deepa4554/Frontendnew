@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, Share } from 'react-native';
 import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -167,9 +168,7 @@ export const QRMenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Table {selected?.code}</Text>
-              <TouchableOpacity onPress={() => setSelected(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setSelected(null)} size={18} />
             </View>
 
             <View style={styles.qrLarge}>
@@ -197,9 +196,7 @@ export const QRMenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>General Menu</Text>
-              <TouchableOpacity onPress={() => setGenericVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setGenericVisible(false)} size={18} />
             </View>
 
             <View style={styles.qrLarge}>
@@ -229,9 +226,7 @@ export const QRMenuScreen = ({ navigation }: any) => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Home Delivery</Text>
-              <TouchableOpacity onPress={() => setDeliveryVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setDeliveryVisible(false)} size={18} />
             </View>
 
             <View style={styles.qrLarge}>

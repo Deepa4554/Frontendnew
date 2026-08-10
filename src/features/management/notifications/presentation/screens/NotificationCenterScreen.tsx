@@ -5,6 +5,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FlashList } from '@shopify/flash-list';
 import { EmptyState, ErrorState } from '../../../../../shared/components/atoms/StateComponents';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { LoadingOverlay } from '../../../../../shared/components/atoms/LoadingOverlay';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
@@ -100,9 +101,11 @@ const NotificationItem: React.FC<{ item: ApiNotification; COLORS: ReturnType<typ
           </TouchableOpacity>
         </View>
       ) : (
-        <TouchableOpacity style={styles.menuBtn} onPress={() => setActionsOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-          <Icon name="dots-vertical" size={20} color={COLORS.muted} />
-        </TouchableOpacity>
+        <Tooltip label="Actions" placement="left">
+          <TouchableOpacity style={styles.menuBtn} onPress={() => setActionsOpen(true)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+            <Icon name="dots-vertical" size={20} color={COLORS.muted} />
+          </TouchableOpacity>
+        </Tooltip>
       )}
     </TouchableOpacity>
   );
@@ -225,13 +228,17 @@ export const NotificationCenterScreen: React.FC = () => {
         right={(
           <>
             {unreadCount > 0 && (
-              <TouchableOpacity style={styles.headerIconBtn} onPress={() => markAllRead.mutate()}>
-                <Icon name="check-all" size={22} color={COLORS.heading} />
-              </TouchableOpacity>
+              <Tooltip label="Mark all read" placement="bottom">
+                <TouchableOpacity style={styles.headerIconBtn} onPress={() => markAllRead.mutate()}>
+                  <Icon name="check-all" size={22} color={COLORS.heading} />
+                </TouchableOpacity>
+              </Tooltip>
             )}
-            <TouchableOpacity style={styles.headerIconBtn} onPress={() => setPrefsOpen(true)}>
-              <Icon name="cog-outline" size={22} color={COLORS.heading} />
-            </TouchableOpacity>
+            <Tooltip label="Notification settings" placement="bottom">
+              <TouchableOpacity style={styles.headerIconBtn} onPress={() => setPrefsOpen(true)}>
+                <Icon name="cog-outline" size={22} color={COLORS.heading} />
+              </TouchableOpacity>
+            </Tooltip>
           </>
         )}
       />

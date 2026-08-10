@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, TextInput, ActivityIndicator, Image, Alert, Linking } from 'react-native';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, TextInput, ActivityIndicator, Image, Alert, Linking, Dimensions } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -32,6 +33,7 @@ import { PaymentMethodPicker, PaymentMethodPickerResult } from '../../../../../s
 import { BillAdjustmentsPanel, AdjustmentTile, AdjustmentApplyValue } from '../../../../../shared/components/billing/BillAdjustmentsPanel';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { VegNonVegBadge } from '../../../../../shared/components/atoms/VegNonVegBadge';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { GlobalSearchTrigger } from '../../../../../shared/components/search/GlobalSearchTrigger';
 import { MenuItem as ApiMenuItem } from '../../../../../core/api/menuApi';
 import menuPlaceholderImage from '../../../../../assets/menu-placeholder.png';
@@ -76,6 +78,25 @@ interface CartLine {
   modifierOptionIds: number[];
   /** Display-only snapshot of the selected toppings' names, e.g. ["Extra Cheese", "Jalapeños"]. */
   modifierNames: string[];
+  /** The rate the biller typed for an MRP item (see ApiMenuItem.isOpenPrice), before any
+   * topping deltas — `price` above is still the effective per-unit figure. Sent as-is so the
+   * server re-derives the line the same way; undefined on every ordinary line. */
+  openPrice?: number;
+}
+
+/** An MRP line parked while the till asks for its rate — everything the add flow already
+ * resolved, minus the money. See addLineToCart. */
+interface PendingRateLine {
+  item: ApiMenuItem;
+  variantId?: number;
+  variantName?: string;
+  optionIds: number[];
+  optionNames: string[];
+  /** Just the toppings' contribution. The typed rate replaces the base/variant price and
+   * this is added back on top, which is exactly how the server prices it (see
+   * OrderBuildingService.ResolveLinePricingAsync). */
+  modifierDelta: number;
+  note: string;
 }
 
 const ORDER_TYPES = [
@@ -163,7 +184,12 @@ const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesk
   COLORS: ReturnType<typeof useThemeColors>;
   isDesktopWeb: boolean;
   isTablet: boolean;
-}) => (
+}) => {
+  // Tablet-and-wider (native tablet, or any tablet/desktop browser) drops the per-item
+  // thumbnail on the POS menu list — the images added visual noise and squeezed the row
+  // without helping ring items up faster on a till. Phones keep the thumbnail.
+  const wide = isTablet || isDesktopWeb;
+  return (
   <TouchableOpacity
     style={[
       styles.menuRow,
@@ -180,18 +206,22 @@ const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesk
     disabled={!item.available}
     activeOpacity={0.7}
   >
-    <Image
-      source={item.image ? { uri: item.image } : menuPlaceholderImage}
-      style={[styles.menuImage, isDesktopWeb && styles.menuImageDesktop]}
-    />
+    {!wide && (
+      <Image
+        source={item.image ? { uri: item.image } : menuPlaceholderImage}
+        style={[styles.menuImage, isDesktopWeb && styles.menuImageDesktop]}
+      />
+    )}
+    {/* With the image gone on wide layouts these chips have nothing to overlay, so they
+        fall back to an inline, vertically-centered chip at the start of the row. */}
     {item.popular && item.available && (
-      <View style={[styles.aiSuggestBadge, styles.menuBadgeOverlay]}>
+      <View style={[styles.aiSuggestBadge, wide ? styles.menuBadgeInline : styles.menuBadgeOverlay]}>
         <Icon name="star" size={10} color={COLORS.accent} />
         <Text style={styles.aiSuggestText}>POPULAR</Text>
       </View>
     )}
     {!item.available && (
-      <View style={[styles.unavailableBadge, styles.menuBadgeOverlay]}>
+      <View style={[styles.unavailableBadge, wide ? styles.menuBadgeInline : styles.menuBadgeOverlay]}>
         <Text style={styles.unavailableBadgeText}>UNAVAILABLE</Text>
       </View>
     )}
@@ -235,24 +265,27 @@ const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesk
           be something you can hit without ringing the item up by accident. Stays visible when
           unpinned (a faint outline) rather than appearing on hover: on a touch till there is no
           hover, and a control nobody can find is a control nobody uses. */}
-      <TouchableOpacity
-        onPress={() => onTogglePin(item)}
-        hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
-        style={styles.pinBtn}
-      >
-        <Icon
-          name={item.pinned ? 'pin' : 'pin-outline'}
-          size={15}
-          color={item.pinned ? COLORS.accent : COLORS.divider}
-        />
-      </TouchableOpacity>
+      <Tooltip label={item.pinned ? 'Unpin item' : 'Pin item'} placement="left">
+        <TouchableOpacity
+          onPress={() => onTogglePin(item)}
+          hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
+          style={styles.pinBtn}
+        >
+          <Icon
+            name={item.pinned ? 'pin' : 'pin-outline'}
+            size={15}
+            color={item.pinned ? COLORS.accent : COLORS.divider}
+          />
+        </TouchableOpacity>
+      </Tooltip>
       <View style={[styles.addBtn, !item.available && styles.addBtnDisabled]}>
         <Text style={styles.addBtnText}>ADD</Text>
         <Icon name="plus" size={11} color={COLORS.accent} />
       </View>
     </View>
   </TouchableOpacity>
-));
+  );
+});
 
 export const POSCheckoutScreen = () => {
   const COLORS = useThemeColors();
@@ -509,6 +542,39 @@ export const POSCheckoutScreen = () => {
   // the structural variant/topping selection above (see addLineToCart).
   const [optionsNote, setOptionsNote] = useState('');
 
+  // An MRP line waiting on its rate, and the rate being typed for it — see addLineToCart.
+  const [rateLine, setRateLine] = useState<PendingRateLine | null>(null);
+  const [rateInput, setRateInput] = useState('');
+
+  const insertLineIntoCart = (
+    item: ApiMenuItem,
+    variantId: number | undefined,
+    variantName: string | undefined,
+    optionIds: number[],
+    optionNames: string[],
+    unitPrice: number,
+    note: string = '',
+    openPrice?: number,
+  ) => {
+    const sortedIds = [...optionIds].sort((a, b) => a - b);
+    // Two MRP lines for the same item at DIFFERENT rates are genuinely different lines (two
+    // packs, two printed prices), so the rate joins the identity — otherwise the second one
+    // would just bump the first one's qty and be billed at the wrong price.
+    const cartId = `c_${item.id}_${variantId ?? 'base'}_${sortedIds.join('-')}`
+      + (openPrice != null ? `_r${openPrice}` : '');
+    setCart((prev) => {
+      const existing = prev.find((c) => c.id === cartId);
+      if (existing) {
+        return prev.map((c) => (c.id === cartId ? { ...c, qty: c.qty + 1 } : c));
+      }
+      return [...prev, {
+        id: cartId, menuItemId: item.id, name: item.name, modifier: note.trim(), price: unitPrice, qty: 1, icon: item.icon,
+        variantId, variantName, modifierOptionIds: sortedIds, modifierNames: optionNames, openPrice,
+      }];
+    });
+    dispatch(showToast({ message: `${item.name} added to order`, icon: 'check-circle', tone: 'success' }));
+  };
+
   const addLineToCart = (
     item: ApiMenuItem,
     variantId: number | undefined,
@@ -518,19 +584,33 @@ export const POSCheckoutScreen = () => {
     unitPrice: number,
     note: string = '',
   ) => {
-    const sortedIds = [...optionIds].sort((a, b) => a - b);
-    const cartId = `c_${item.id}_${variantId ?? 'base'}_${sortedIds.join('-')}`;
-    setCart((prev) => {
-      const existing = prev.find((c) => c.id === cartId);
-      if (existing) {
-        return prev.map((c) => (c.id === cartId ? { ...c, qty: c.qty + 1 } : c));
-      }
-      return [...prev, {
-        id: cartId, menuItemId: item.id, name: item.name, modifier: note.trim(), price: unitPrice, qty: 1, icon: item.icon,
-        variantId, variantName, modifierOptionIds: sortedIds, modifierNames: optionNames,
-      }];
-    });
-    dispatch(showToast({ message: `${item.name} added to order`, icon: 'check-circle', tone: 'success' }));
+    // An MRP item has no catalog rate to bill at — the till has to ask (see
+    // ApiMenuItem.isOpenPrice). Both add paths (one-tap and the options picker) land here, so
+    // raising the prompt at this single point covers each of them.
+    if (item.isOpenPrice) {
+      const catalogBase = item.variants.find((v) => v.id === variantId)?.price ?? item.price;
+      setRateLine({ item, variantId, variantName, optionIds, optionNames, modifierDelta: unitPrice - catalogBase, note });
+      // Pre-fill with the last-known rate so the common "same as last time" case is one tap.
+      setRateInput(catalogBase > 0 ? String(catalogBase) : '');
+      return;
+    }
+    insertLineIntoCart(item, variantId, variantName, optionIds, optionNames, unitPrice, note);
+  };
+
+  const confirmRateLine = () => {
+    if (!rateLine) return;
+    const rate = parseFloat(rateInput);
+    if (!rateInput.trim() || isNaN(rate) || rate <= 0) {
+      dispatch(showToast({ message: 'Enter a rate greater than 0.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    const typed = Math.round(rate * 100) / 100;
+    insertLineIntoCart(
+      rateLine.item, rateLine.variantId, rateLine.variantName, rateLine.optionIds, rateLine.optionNames,
+      typed + rateLine.modifierDelta, rateLine.note, typed,
+    );
+    setRateLine(null);
+    setRateInput('');
   };
 
   const addToCart = (item: ApiMenuItem) => {
@@ -742,6 +822,7 @@ export const POSCheckoutScreen = () => {
         items: cart.map((c) => ({
           menuItemId: c.menuItemId, qty: c.qty, modifier: c.modifier || undefined,
           variantId: c.variantId, modifierOptionIds: c.modifierOptionIds.length ? c.modifierOptionIds : undefined,
+          openPrice: c.openPrice,
         })),
         discountPct: discountPct || undefined,
         branchId: activeBranchId,
@@ -843,6 +924,7 @@ export const POSCheckoutScreen = () => {
         await addOrderItemMutation.mutateAsync({
           id: resumeOrderId, menuItemId: c.menuItemId, qty: c.qty, modifier: c.modifier || undefined,
           variantId: c.variantId, modifierOptionIds: c.modifierOptionIds.length ? c.modifierOptionIds : undefined,
+          openPrice: c.openPrice,
         });
       }
       if (!holdOnly) {
@@ -1080,6 +1162,7 @@ export const POSCheckoutScreen = () => {
         items: cart.map((c) => ({
           menuItemId: c.menuItemId, qty: c.qty, modifier: c.modifier || undefined,
           variantId: c.variantId, modifierOptionIds: c.modifierOptionIds.length ? c.modifierOptionIds : undefined,
+          openPrice: c.openPrice,
         })),
         discountPct: discountPct || undefined,
         branchId: activeBranchId,
@@ -1623,9 +1706,11 @@ export const POSCheckoutScreen = () => {
             <Text style={styles.holdHeaderBtnText}>{resumeMode ? 'Add' : 'Hold'}</Text>
           </TouchableOpacity>
         )}
-        <TouchableOpacity style={styles.clearBtn} onPress={clearCart}>
-          <Icon name="trash-can-outline" size={18} color={COLORS.dangerAccent} />
-        </TouchableOpacity>
+        <Tooltip label="Clear cart" placement="left">
+          <TouchableOpacity style={styles.clearBtn} onPress={clearCart}>
+            <Icon name="trash-can-outline" size={18} color={COLORS.dangerAccent} />
+          </TouchableOpacity>
+        </Tooltip>
       </View>
 
       {cart.length === 0 && (
@@ -1827,9 +1912,11 @@ export const POSCheckoutScreen = () => {
                 returnKeyType="search"
               />
               {!!menuSearchQuery && (
-                <TouchableOpacity onPress={() => setMenuSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Icon name="close-circle" size={16} color={COLORS.muted} />
-                </TouchableOpacity>
+                <Tooltip label="Clear search" placement="bottom">
+                  <TouchableOpacity onPress={() => setMenuSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Icon name="close-circle" size={16} color={COLORS.muted} />
+                  </TouchableOpacity>
+                </Tooltip>
               )}
             </View>
             <CategoryFilterTrigger
@@ -1875,9 +1962,11 @@ export const POSCheckoutScreen = () => {
                 returnKeyType="search"
               />
               {!!menuSearchQuery && (
-                <TouchableOpacity onPress={() => setMenuSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Icon name="close-circle" size={16} color={COLORS.muted} />
-                </TouchableOpacity>
+                <Tooltip label="Clear search" placement="bottom">
+                  <TouchableOpacity onPress={() => setMenuSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Icon name="close-circle" size={16} color={COLORS.muted} />
+                  </TouchableOpacity>
+                </Tooltip>
               )}
             </View>
             <CategoryFilterTrigger
@@ -2037,6 +2126,43 @@ export const POSCheckoutScreen = () => {
         </>
       )}
 
+      {/* ---------- Rate prompt for an MRP item ---------- */}
+      {/* Raised by addLineToCart instead of adding the line, since an MRP item carries no
+          catalog rate to bill at. The typed rate is final — the server bills it tax-inclusive
+          so the line's total lands exactly on it (see OrderItem.PriceIncludesTax). */}
+      <Modal visible={!!rateLine} transparent animationType="fade" onRequestClose={() => setRateLine(null)}>
+        <View style={modalOverlayStyle}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <View style={{ flex: 1, minWidth: 0, marginRight: 6 }}>
+                <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1} ellipsizeMode="tail">
+                  Rate for {rateLine?.item.name}{rateLine?.variantName ? ` (${rateLine.variantName})` : ''}
+                </Text>
+                <Text style={styles.notePromptSubtitle}>Sold at MRP — enter the rate printed on the pack</Text>
+              </View>
+              <CloseButton onPress={() => setRateLine(null)} size={22} />
+            </View>
+            <View style={styles.noteInputWrap}>
+              <TextInput
+                style={styles.modifierNoteInput}
+                placeholder="0.00"
+                placeholderTextColor={COLORS.placeholder}
+                value={rateInput}
+                onChangeText={setRateInput}
+                keyboardType="decimal-pad"
+                onSubmitEditing={confirmRateLine}
+                autoFocus
+                selectTextOnFocus
+              />
+            </View>
+            <TouchableOpacity style={styles.confirmSplitBtn} onPress={confirmRateLine}>
+              <Icon name="check" size={18} color="#FFFFFF" />
+              <Text style={styles.confirmSplitText}>Add to order</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       {/* ---------- Note editor for one existing cart line ---------- */}
       <Modal visible={!!notePromptLineId} transparent animationType="fade" onRequestClose={() => setNotePromptLineId(null)}>
         <View style={modalOverlayStyle}>
@@ -2046,9 +2172,7 @@ export const POSCheckoutScreen = () => {
                 <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1} ellipsizeMode="tail">Note for {notePromptItemName}</Text>
                 <Text style={styles.notePromptSubtitle}>Pick from the list, or type your own</Text>
               </View>
-              <TouchableOpacity onPress={() => setNotePromptLineId(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setNotePromptLineId(null)} size={22} />
             </View>
             <View style={styles.noteInputWrap}>
               <TextInput
@@ -2078,21 +2202,26 @@ export const POSCheckoutScreen = () => {
       <Modal
         visible={payFirstVisible}
         transparent
-        animationType="slide"
+        animationType={isDesktopWeb ? 'fade' : 'slide'}
         onRequestClose={() => setPayFirstVisible(false)}
       >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
+        {/* Laptop/wider: a centered, width-capped card (a bit larger than the other POS
+            modals) instead of the full-bleed bottom sheet. */}
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? [styles.optionsSheetDesktop, styles.payFirstSheetDesktop] : styles.modalSheet}>
+            {!isDesktopWeb && <View style={styles.modalHandle} />}
 
-            <View style={styles.modalHeader}>
+            <View style={[styles.modalHeader, isDesktopWeb && styles.optionsHeaderDesktop]}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Settle Bill</Text>
-              <TouchableOpacity onPress={() => setPayFirstVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setPayFirstVisible(false)} size={22} />
             </View>
 
-            <ScrollView style={{ maxHeight: 460 }} showsVerticalScrollIndicator={false}>
+            {/* Laptop/wider: grow with the viewport (leaving room for the header + settle
+                footer) so a normal bill shows with no scroll; phones keep the 460px cap. */}
+            <ScrollView
+              style={isDesktopWeb ? { maxHeight: Dimensions.get('window').height * 0.7 } : { maxHeight: 460 }}
+              showsVerticalScrollIndicator={false}
+            >
               <View style={styles.pfBillBox}>
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Subtotal</Text>
@@ -2271,9 +2400,7 @@ export const POSCheckoutScreen = () => {
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Saved Drafts</Text>
-              <TouchableOpacity onPress={() => setDraftsModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setDraftsModalVisible(false)} size={22} />
             </View>
             <Text style={styles.draftsModalHint}>
               Drafts live only on this device — no order is created and no table is occupied until you load one and fire it.
@@ -2296,9 +2423,11 @@ export const POSCheckoutScreen = () => {
                         {d.cart.map((l) => `${l.qty}× ${l.name}`).join(', ')}
                       </Text>
                     </TouchableOpacity>
-                    <TouchableOpacity style={styles.draftDeleteBtn} onPress={() => deleteDraft(d.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Icon name="trash-can-outline" size={18} color={COLORS.dangerAccent} />
-                    </TouchableOpacity>
+                    <Tooltip label="Delete draft" placement="left">
+                      <TouchableOpacity style={styles.draftDeleteBtn} onPress={() => deleteDraft(d.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Icon name="trash-can-outline" size={18} color={COLORS.dangerAccent} />
+                      </TouchableOpacity>
+                    </Tooltip>
                   </View>
                 );
               })}
@@ -2319,9 +2448,7 @@ export const POSCheckoutScreen = () => {
             <View style={styles.modalHandle} />
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Who's serving this order?</Text>
-              <TouchableOpacity onPress={() => setWaiterModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setWaiterModalVisible(false)} size={22} />
             </View>
             <ScrollView style={{ maxHeight: 360 }}>
               {allStaff.map((s) => {
@@ -2349,36 +2476,52 @@ export const POSCheckoutScreen = () => {
       </Modal>
 
       {/* ---------- Item Options Modal (Half/Full variant + toppings) ---------- */}
-      <Modal visible={!!optionsItem} transparent animationType="slide" onRequestClose={() => { setOptionsItem(null); setOptionsNote(''); }}>
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
+      {/* Laptop/wider: a centered, width-capped card (like the receipt modal) instead of
+          the full-bleed bottom sheet phones use — the sheet spanning the whole width and
+          hugging the bottom edge looked oversized on desktop. */}
+      <Modal
+        visible={!!optionsItem}
+        transparent
+        animationType={isDesktopWeb ? 'fade' : 'slide'}
+        onRequestClose={() => { setOptionsItem(null); setOptionsNote(''); }}
+      >
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? styles.optionsSheetDesktop : styles.modalSheet}>
+            {!isDesktopWeb && <View style={styles.modalHandle} />}
+            <View style={[styles.modalHeader, isDesktopWeb && styles.optionsHeaderDesktop]}>
               <View style={{ flexDirection: 'row', alignItems: 'center', flex: 1, minWidth: 0, marginRight: 6 }}>
                 <VegNonVegBadge type={optionsItem?.vegNonVegType} size={13} style={{ marginRight: 3 }} />
                 <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1} ellipsizeMode="tail">{optionsItem?.name}</Text>
               </View>
-              <TouchableOpacity onPress={() => { setOptionsItem(null); setOptionsNote(''); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => { setOptionsItem(null); setOptionsNote(''); }} size={22} />
             </View>
 
             <ScrollView style={{ maxHeight: 420 }} showsVerticalScrollIndicator={false}>
               {optionsItem && optionsItem.variants.length > 0 && (
                 <View style={{ marginBottom: 8 }}>
                   <Text style={styles.optionsGroupTitle}>Size</Text>
-                  {optionsItem.variants.map((v) => {
-                    const active = v.id === optionsVariantId;
-                    return (
-                      <TouchableOpacity key={v.id} style={styles.optionRow} onPress={() => setOptionsVariantId(v.id)}>
-                        <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
-                          {active && <View style={styles.radioInner} />}
-                        </View>
-                        <Text style={styles.optionRowLabel}>{v.name}</Text>
-                        <Text style={styles.optionRowPrice}>₹{v.price.toFixed(2)}</Text>
-                      </TouchableOpacity>
-                    );
-                  })}
+                  {/* On laptop/wider screens the size choices render as a 2-up card grid
+                      (bigger tap targets, price aligned right); phones keep the compact
+                      stacked radio rows. */}
+                  <View style={isDesktopWeb ? styles.optionsSizeGrid : undefined}>
+                    {optionsItem.variants.map((v) => {
+                      const active = v.id === optionsVariantId;
+                      return (
+                        <TouchableOpacity
+                          key={v.id}
+                          style={isDesktopWeb ? [styles.optionSizeCard, active && styles.optionSizeCardActive] : styles.optionRow}
+                          onPress={() => setOptionsVariantId(v.id)}
+                          activeOpacity={0.7}
+                        >
+                          <View style={[styles.radioOuter, active && styles.radioOuterActive]}>
+                            {active && <View style={styles.radioInner} />}
+                          </View>
+                          <Text style={styles.optionRowLabel}>{v.name}</Text>
+                          <Text style={[styles.optionRowPrice, isDesktopWeb && styles.optionSizeCardPrice]}>₹{v.price.toFixed(2)}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                  </View>
                 </View>
               )}
 
@@ -2443,12 +2586,12 @@ export const POSCheckoutScreen = () => {
             </ScrollView>
 
             <TouchableOpacity
-              style={[styles.confirmSplitBtn, missingRequiredGroups.length > 0 && styles.confirmSplitBtnDisabled]}
+              style={[styles.confirmSplitBtn, isDesktopWeb && styles.optionsAddBtnDesktop, missingRequiredGroups.length > 0 && styles.confirmSplitBtnDisabled]}
               onPress={confirmOptionsAdd}
               disabled={missingRequiredGroups.length > 0}
             >
               <Icon name="cart-plus" size={18} color="#FFFFFF" />
-              <Text style={styles.confirmSplitText}>
+              <Text style={[styles.confirmSplitText, isDesktopWeb && styles.optionsAddTextDesktop]}>
                 {missingRequiredGroups.length > 0
                   ? `Choose ${missingRequiredGroups.map((m) => m.name).join(', ')}`
                   : `Add — ₹${optionsUnitPrice.toFixed(2)}`}
@@ -2470,9 +2613,7 @@ export const POSCheckoutScreen = () => {
                 <Icon name="check-circle" size={16} color={COLORS.success} />
                 <Text style={styles.sentBadgeText}>{receipt?.isCashSale ? 'Ready to Bill' : 'Sent to Kitchen (KDS)'}</Text>
               </View>
-              <TouchableOpacity onPress={closeReceipt} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={closeReceipt} size={22} />
             </View>
 
             {/* A fixed maxHeight (not flex:1) is what actually makes this scroll on desktop
@@ -2481,7 +2622,16 @@ export const POSCheckoutScreen = () => {
                 Mobile's receiptFullPageInner is a true flex-stretched full screen, so the
                 ScrollView just fills it there, same as before. */}
             {receipt && (
-              <ScrollView showsVerticalScrollIndicator={false} style={[styles.receiptScroll, isDesktopWeb && styles.receiptScrollDesktop]}>
+              <ScrollView
+                showsVerticalScrollIndicator={false}
+                style={[
+                  styles.receiptScroll,
+                  // Grow with the viewport instead of a fixed 560px cap, so a normal-length
+                  // bill shows fully with no scroll on a laptop; only an unusually long one
+                  // (many items) still scrolls, bounded by the sheet's own maxHeight.
+                  isDesktopWeb && { flex: undefined, maxHeight: Dimensions.get('window').height * 0.82 },
+                ]}
+              >
                 <View style={styles.slip}>
                   <Text style={styles.slipBrand}>{businessName}</Text>
                   {!!businessAddress && <Text style={styles.slipAddr}>{businessAddress}</Text>}
@@ -2624,9 +2774,7 @@ export const POSCheckoutScreen = () => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Select a Table</Text>
-              <TouchableOpacity onPress={closeTablePicker} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={closeTablePicker} size={22} />
             </View>
             <Text style={styles.tablePickerSubtitle}>Choose which table this order is for.</Text>
 
@@ -2709,9 +2857,7 @@ export const POSCheckoutScreen = () => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Guest Details</Text>
-              <TouchableOpacity onPress={() => setGuestModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setGuestModalVisible(false)} size={22} />
             </View>
 
             <Text style={styles.guestFieldLabel}>Name</Text>
@@ -2777,13 +2923,13 @@ export const POSCheckoutScreen = () => {
         animationType="fade"
         onRequestClose={closeQuickFireModal}
       >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
+        {/* Laptop/wider: centered, width-capped card like the other POS modals, instead of
+            the full-bleed bottom sheet. */}
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? [styles.optionsSheetDesktop, styles.quickFireSheetDesktop] : styles.modalSheet}>
+            <View style={[styles.modalHeader, isDesktopWeb && styles.optionsHeaderDesktop]}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Fire to Kitchen</Text>
-              <TouchableOpacity onPress={closeQuickFireModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={closeQuickFireModal} size={22} />
             </View>
 
             <View style={styles.quickFireFieldsRow}>
@@ -2872,16 +3018,12 @@ export const POSCheckoutScreen = () => {
                     </View>
                   )}
                 </ScrollView>
-
-                <TouchableOpacity style={styles.modalCancelBtn} onPress={closeQuickFireModal}>
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
+                {/* No Cancel button — the header X already dismisses this modal, so a
+                    separate Cancel would just be a redundant second way to do the same thing. */}
               </>
             ) : (
               <View style={styles.guestModalActions}>
-                <TouchableOpacity style={[styles.modalCancelBtn, { flex: 1 }]} onPress={closeQuickFireModal}>
-                  <Text style={styles.modalCancelText}>Cancel</Text>
-                </TouchableOpacity>
+                {/* No Cancel here either (header X dismisses); the primary action takes the row. */}
                 <TouchableOpacity style={styles.guestSaveBtn} onPress={handleQuickFireSubmit}>
                   <Text style={styles.guestSaveText}>{pendingPayFirst ? 'Continue to Payment' : pendingHoldOnly ? 'Hold Order' : 'Fire to Kitchen'}</Text>
                 </TouchableOpacity>
@@ -2942,7 +3084,8 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     flex: 1,
   },
   wideCartPane: {
-    width: 380,
+    // 25% narrower than the original 380px cart pane (per design request).
+    width: 285,
     flexDirection: 'column',
     borderLeftWidth: 1,
     borderLeftColor: COLORS.divider,
@@ -3124,6 +3267,13 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     left: 4,
     marginBottom: 0,
     zIndex: 1,
+  },
+  // Inline variant used on tablet-and-wider, where there's no image to overlay: the chip
+  // sits in the row flow, vertically centered, overriding the badge's stacked-layout
+  // alignSelf/marginBottom.
+  menuBadgeInline: {
+    alignSelf: 'center',
+    marginBottom: 0,
   },
   unavailableBadge: {
     alignSelf: 'flex-start',
@@ -3696,6 +3846,40 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     backgroundColor: COLORS.divider,
     marginBottom: 5,
   },
+  // Item Options modal, laptop/wider: a centered floating card rather than a bottom sheet.
+  optionsOverlayDesktop: {
+    flex: 1,
+    backgroundColor: 'rgba(43, 24, 16, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  optionsSheetDesktop: {
+    width: '100%',
+    maxWidth: 560,
+    maxHeight: '90%',
+    backgroundColor: COLORS.background,
+    borderRadius: 16,
+    paddingHorizontal: 20,
+    paddingTop: 16,
+    paddingBottom: 16,
+    overflow: 'hidden',
+  },
+  // Fire-to-Kitchen card is a touch wider — it holds the 3-up table grid.
+  quickFireSheetDesktop: {
+    maxWidth: 720,
+  },
+  // Settle Bill card is a bit larger — it packs the full bill + adjustments + payment.
+  payFirstSheetDesktop: {
+    maxWidth: 640,
+  },
+  // A little more breathing room + a divider under the header on the desktop card.
+  optionsHeaderDesktop: {
+    paddingBottom: 12,
+    marginBottom: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: COLORS.divider,
+  },
   modalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -3889,6 +4073,16 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   confirmSplitBtnDisabled: {
     opacity: 0.5,
   },
+  // Desktop card's Add button: taller, more rounded, gap above it from the note chips.
+  optionsAddBtnDesktop: {
+    marginTop: 16,
+    borderRadius: 12,
+    paddingVertical: 14,
+    gap: 8,
+  },
+  optionsAddTextDesktop: {
+    fontSize: 15,
+  },
   confirmSplitText: {
     fontSize: 12,
     fontWeight: '700',
@@ -4062,6 +4256,38 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontSize: 12,
     fontWeight: '700',
     color: COLORS.muted,
+  },
+  // Laptop/wider size picker: two option cards per row (Half | Full), matching the
+  // menu grid's 2-up card language instead of the compact stacked rows phones use.
+  optionsSizeGrid: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 10,
+    marginTop: 2,
+  },
+  optionSizeCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexGrow: 1,
+    flexBasis: '47%',
+    minWidth: 140,
+    paddingVertical: 14,
+    paddingHorizontal: 14,
+    borderRadius: 12,
+    borderWidth: 1.5,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.cardAlt,
+  },
+  // Selected size card = soft cream fill + warm orange border (matching the reference),
+  // NOT the desktop theme's solid orange pillActiveBg, which filled the whole card.
+  optionSizeCardActive: {
+    borderColor: '#E08A3C',
+    backgroundColor: '#FCEFDF',
+  },
+  optionSizeCardPrice: {
+    fontSize: 14,
+    color: COLORS.heading,
   },
   radioOuter: {
     width: 20,

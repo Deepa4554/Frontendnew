@@ -1,4 +1,5 @@
 import React from 'react';
+import { CloseButton } from '../atoms/CloseButton';
 import { Modal, View, Text, TouchableOpacity, ScrollView, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
@@ -40,9 +41,7 @@ export const CategoryFilterModal: React.FC<CategoryFilterModalProps> = ({
           <View style={styles.dragHandle} />
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
-            <TouchableOpacity onPress={onClose} style={styles.closeBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Icon name="close" size={18} color={COLORS.heading} />
-            </TouchableOpacity>
+            <CloseButton onPress={onClose} style={styles.closeBtn} size={18} color={COLORS.heading} />
           </View>
           <ScrollView bounces={false} contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
             {categories.map((cat) => {

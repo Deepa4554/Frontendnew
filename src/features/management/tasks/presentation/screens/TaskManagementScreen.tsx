@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
@@ -273,9 +274,7 @@ export const TaskManagementScreen: React.FC = () => {
             <ScrollView showsVerticalScrollIndicator={false}>
               <View style={styles.modalHeaderRow}>
                 <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>New Task</Text>
-                <TouchableOpacity onPress={() => setAddVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Icon name="close" size={22} color={COLORS.muted} />
-                </TouchableOpacity>
+                <CloseButton onPress={() => setAddVisible(false)} size={22} />
               </View>
 
               <Text style={styles.fieldLabel}>Title</Text>

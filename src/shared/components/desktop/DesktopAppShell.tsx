@@ -17,6 +17,7 @@ import { logout } from '../../../features/auth/presentation/viewmodels/authSlice
 import { confirmAlert } from '../ConfirmDialogHost';
 import { showToast, setSidebarCollapsed } from '../../../core/store/uiSlice';
 import { useResponsive } from '../../../core/utils/useResponsive';
+import { Tooltip } from '../atoms/Tooltip';
 
 const SEARCH_TYPE_ICON: Record<SearchResult['category'], string> = {
   Orders: 'receipt',
@@ -210,23 +211,33 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
     ]);
   };
 
+  // A cafe name longer than 11 characters (spaces included) is too wide for the sidebar
+  // brand slot at full size — drop the brand font to 16 for those so they still fit on one line.
+  const brandName = settings?.businessName ?? 'PrabandhOS';
+  const brandTitleStyle =
+    brandName.length > 11
+      ? [styles.brandTitle, { fontSize: 16 }]
+      : styles.brandTitle;
+
   return (
     <View style={styles.root}>
       <View style={[styles.sidebar, isTablet && styles.sidebarTablet, collapsed && styles.sidebarCollapsed]}>
         <View style={[styles.brandBox, collapsed && styles.brandBoxCollapsed]}>
           {!collapsed && (
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Text style={styles.brandTitle} numberOfLines={1}>{settings?.businessName ?? 'PrabandhOS'}</Text>
+              <Text style={brandTitleStyle} numberOfLines={1}>{brandName}</Text>
               <Text style={styles.brandSubtitle}>Cafe Management System</Text>
             </View>
           )}
-          <TouchableOpacity
-            style={styles.collapseToggleBtn}
-            onPress={() => dispatch(setSidebarCollapsed(!collapsed))}
-            activeOpacity={0.7}
-          >
-            <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={18} color={COLORS.sidebarInactiveText} />
-          </TouchableOpacity>
+          <Tooltip label={collapsed ? 'Expand sidebar' : 'Collapse sidebar'} placement={collapsed ? 'right' : 'bottom'}>
+            <TouchableOpacity
+              style={styles.collapseToggleBtn}
+              onPress={() => dispatch(setSidebarCollapsed(!collapsed))}
+              activeOpacity={0.7}
+            >
+              <Icon name={collapsed ? 'chevron-right' : 'chevron-left'} size={18} color={COLORS.sidebarInactiveText} />
+            </TouchableOpacity>
+          </Tooltip>
         </View>
 
         <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={false}>
@@ -236,27 +247,28 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
               {group.items.map((item) => {
                 const active = item.tab ? activeRoute === item.tab : activeRoute === item.route;
                 return (
-                  <TouchableOpacity
-                    key={item.label}
-                    style={[styles.navRow, collapsed && styles.navRowCollapsed, active && styles.navRowActive]}
-                    onPress={() => goTo(item)}
-                    activeOpacity={0.7}
-                  >
-                    <View style={{ position: 'relative' }}>
-                      <Icon name={item.icon} size={18} color={active ? COLORS.sidebarActiveText : COLORS.sidebarInactiveText} />
-                      {collapsed && !!item.badge && <View style={styles.navBadgeDot} />}
-                    </View>
-                    {!collapsed && (
-                      <>
-                        <Text style={[styles.navRowText, active && styles.navRowTextActive]} numberOfLines={1}>{item.label}</Text>
-                        {!!item.badge && (
-                          <View style={styles.navBadge}>
-                            <Text style={styles.navBadgeText}>{item.badge}</Text>
-                          </View>
-                        )}
-                      </>
-                    )}
-                  </TouchableOpacity>
+                  <Tooltip key={item.label} label={collapsed ? item.label : undefined} placement="right">
+                    <TouchableOpacity
+                      style={[styles.navRow, collapsed && styles.navRowCollapsed, active && styles.navRowActive]}
+                      onPress={() => goTo(item)}
+                      activeOpacity={0.7}
+                    >
+                      <View style={{ position: 'relative' }}>
+                        <Icon name={item.icon} size={18} color={active ? COLORS.sidebarActiveText : COLORS.sidebarInactiveText} />
+                        {collapsed && !!item.badge && <View style={styles.navBadgeDot} />}
+                      </View>
+                      {!collapsed && (
+                        <>
+                          <Text style={[styles.navRowText, active && styles.navRowTextActive]} numberOfLines={1}>{item.label}</Text>
+                          {!!item.badge && (
+                            <View style={styles.navBadge}>
+                              <Text style={styles.navBadgeText}>{item.badge}</Text>
+                            </View>
+                          )}
+                        </>
+                      )}
+                    </TouchableOpacity>
+                  </Tooltip>
                 );
               })}
             </View>
@@ -268,21 +280,27 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
               NAV_GROUPS filter, so a login without Cafe Settings / Help Center still saw them
               and got bounced by the route guard on click. */}
           {canOpen('Profile') && (
-            <TouchableOpacity style={[styles.footerRow, collapsed && styles.navRowCollapsed]} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
-              <Icon name="cog-outline" size={18} color={COLORS.sidebarInactiveText} />
-              {!collapsed && <Text style={styles.navRowText}>Settings</Text>}
-            </TouchableOpacity>
+            <Tooltip label={collapsed ? 'Settings' : undefined} placement="right">
+              <TouchableOpacity style={[styles.footerRow, collapsed && styles.navRowCollapsed]} onPress={() => navigation.navigate('Profile')} activeOpacity={0.7}>
+                <Icon name="cog-outline" size={18} color={COLORS.sidebarInactiveText} />
+                {!collapsed && <Text style={styles.navRowText}>Settings</Text>}
+              </TouchableOpacity>
+            </Tooltip>
           )}
           {canOpen('Help') && (
-            <TouchableOpacity style={[styles.footerRow, collapsed && styles.navRowCollapsed]} onPress={() => navigation.navigate('Help')} activeOpacity={0.7}>
-              <Icon name="lifebuoy" size={18} color={COLORS.sidebarInactiveText} />
-              {!collapsed && <Text style={styles.navRowText}>Support</Text>}
-            </TouchableOpacity>
+            <Tooltip label={collapsed ? 'Support' : undefined} placement="right">
+              <TouchableOpacity style={[styles.footerRow, collapsed && styles.navRowCollapsed]} onPress={() => navigation.navigate('Help')} activeOpacity={0.7}>
+                <Icon name="lifebuoy" size={18} color={COLORS.sidebarInactiveText} />
+                {!collapsed && <Text style={styles.navRowText}>Support</Text>}
+              </TouchableOpacity>
+            </Tooltip>
           )}
           {collapsed && (
-            <TouchableOpacity style={styles.navRowCollapsed} onPress={handleSignOut} activeOpacity={0.7}>
-              <Icon name="logout" size={18} color={COLORS.sidebarInactiveText} />
-            </TouchableOpacity>
+            <Tooltip label="Sign Out" placement="right">
+              <TouchableOpacity style={styles.navRowCollapsed} onPress={handleSignOut} activeOpacity={0.7}>
+                <Icon name="logout" size={18} color={COLORS.sidebarInactiveText} />
+              </TouchableOpacity>
+            </Tooltip>
           )}
 
           <View style={[styles.profileCard, collapsed && styles.profileCardCollapsed]}>
@@ -295,9 +313,11 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
                   <Text style={styles.profileName} numberOfLines={1}>{userName ?? 'User'}</Text>
                   <Text style={styles.profileRole}>{role ? ROLE_LABELS[role].toUpperCase() : ''}</Text>
                 </View>
-                <TouchableOpacity onPress={handleSignOut} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                  <Icon name="logout" size={18} color="#FFFFFF" />
-                </TouchableOpacity>
+                <Tooltip label="Sign Out" placement="top">
+                  <TouchableOpacity onPress={handleSignOut} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                    <Icon name="logout" size={18} color="#FFFFFF" />
+                  </TouchableOpacity>
+                </Tooltip>
               </>
             )}
           </View>
@@ -309,35 +329,40 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
           <View style={styles.searchBarOuter}>
             <View style={[styles.searchBar, searchDropdownOpen && styles.searchBarFocused]}>
               <Icon name="magnify" size={18} color={COLORS.muted} />
-              <View style={styles.searchInputWrap}>
-                <TextInput
-                  style={[styles.searchInput, webNoOutline]}
-                  value={searchQuery}
-                  onChangeText={setSearchQuery}
-                  placeholder={searchPlaceholder ?? 'Search orders, customers, menu, inventory, tables…'}
-                  placeholderTextColor={COLORS.muted}
-                  onFocus={() => {
-                    if (blurTimeout.current) clearTimeout(blurTimeout.current);
-                    setSearchDropdownOpen(true);
-                  }}
-                  onBlur={() => {
-                    // Delayed so a tap on a dropdown result still registers before the
-                    // dropdown unmounts.
-                    blurTimeout.current = setTimeout(() => setSearchDropdownOpen(false), 150);
-                  }}
-                  returnKeyType="search"
-                  // Without this, the browser's own autofill/history suggestions for this
-                  // field render as a second, native dropdown stacked on top of the
-                  // results dropdown below — looking like duplicate/unrelated results.
-                  autoComplete="off"
-                  autoCorrect={false}
-                  spellCheck={false}
-                />
-              </View>
+              {/* Deliberately NOT wrapped in a layout <View>: the global focus ring lands on
+                  whichever div directly holds the focused input (see public/index.html), so an
+                  extra wrapper here drew a second ring around just the text — inside searchBar's
+                  own accent focus border, reading as a broken double outline. Sitting directly
+                  in searchBar means that one ring coincides with the border it already draws. */}
+              <TextInput
+                style={[styles.searchInput, webNoOutline]}
+                value={searchQuery}
+                onChangeText={setSearchQuery}
+                placeholder={searchPlaceholder ?? 'Search orders, customers, menu, inventory, tables…'}
+                placeholderTextColor={COLORS.muted}
+                onFocus={() => {
+                  if (blurTimeout.current) clearTimeout(blurTimeout.current);
+                  setSearchDropdownOpen(true);
+                }}
+                onBlur={() => {
+                  // Delayed so a tap on a dropdown result still registers before the
+                  // dropdown unmounts.
+                  blurTimeout.current = setTimeout(() => setSearchDropdownOpen(false), 150);
+                }}
+                returnKeyType="search"
+                // Without this, the browser's own autofill/history suggestions for this
+                // field render as a second, native dropdown stacked on top of the
+                // results dropdown below — looking like duplicate/unrelated results.
+                autoComplete="off"
+                autoCorrect={false}
+                spellCheck={false}
+              />
               {!!searchQuery && (
-                <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                  <Icon name="close-circle" size={16} color={COLORS.muted} />
-                </TouchableOpacity>
+                <Tooltip label="Clear search" placement="bottom">
+                  <TouchableOpacity onPress={() => setSearchQuery('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                    <Icon name="close-circle" size={16} color={COLORS.muted} />
+                  </TouchableOpacity>
+                </Tooltip>
               )}
             </View>
 
@@ -385,15 +410,19 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
           </View>
           <View style={styles.topbarIcons}>
             {canOpen('Notifications') && (
-              <TouchableOpacity style={styles.topbarIconBtn} onPress={() => navigation.navigate('Notifications')}>
-                <Icon name="bell-outline" size={20} color={COLORS.heading} />
-                {unreadCount > 0 && <View style={styles.topbarDot} />}
-              </TouchableOpacity>
+              <Tooltip label="Notifications" placement="bottom">
+                <TouchableOpacity style={styles.topbarIconBtn} onPress={() => navigation.navigate('Notifications')}>
+                  <Icon name="bell-outline" size={20} color={COLORS.heading} />
+                  {unreadCount > 0 && <View style={styles.topbarDot} />}
+                </TouchableOpacity>
+              </Tooltip>
             )}
             {canOpen('Profile') && (
-              <TouchableOpacity style={styles.topbarIconBtn} onPress={() => navigation.navigate('Profile')}>
-                <Icon name="account-circle-outline" size={22} color={COLORS.heading} />
-              </TouchableOpacity>
+              <Tooltip label="Profile" placement="bottom">
+                <TouchableOpacity style={styles.topbarIconBtn} onPress={() => navigation.navigate('Profile')}>
+                  <Icon name="account-circle-outline" size={22} color={COLORS.heading} />
+                </TouchableOpacity>
+              </Tooltip>
             )}
           </View>
         </View>
@@ -418,7 +447,8 @@ const styles = StyleSheet.create({
     ...({ fontFamily: COLORS.fontFamily } as object),
   },
   sidebar: {
-    width: 280,
+    // 25% narrower than the original 280px desktop sidebar (per design request).
+    width: 210,
     backgroundColor: COLORS.sidebarBg,
     borderRightWidth: 1,
     borderRightColor: COLORS.divider,
@@ -611,12 +641,12 @@ const styles = StyleSheet.create({
     borderColor: COLORS.accent,
     backgroundColor: COLORS.background,
   },
-  searchInputWrap: {
-    flex: 1,
-    borderRadius: 8,
-  },
   searchInput: {
-    width: '100%',
+    // flex (not width:'100%') now that the input sits straight in searchBar's row — it takes
+    // the space left by the magnifier and the clear button. minWidth:0 lets it actually shrink
+    // instead of shoving the clear button past the pill's right edge on a long placeholder.
+    flex: 1,
+    minWidth: 0,
     fontSize: 16,
     color: COLORS.heading,
   },

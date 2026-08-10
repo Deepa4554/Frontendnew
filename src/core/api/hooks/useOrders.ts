@@ -215,8 +215,8 @@ export const useFireOrder = () => {
 export const useAddOrderItem = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, menuItemId, qty, modifier, variantId, modifierOptionIds }: { id: number; menuItemId: number; qty: number; modifier?: string; variantId?: number; modifierOptionIds?: number[] }) =>
-      ordersApi.addItem(id, { menuItemId, qty, modifier, variantId, modifierOptionIds }),
+    mutationFn: ({ id, menuItemId, qty, modifier, variantId, modifierOptionIds, openPrice }: { id: number; menuItemId: number; qty: number; modifier?: string; variantId?: number; modifierOptionIds?: number[]; openPrice?: number }) =>
+      ordersApi.addItem(id, { menuItemId, qty, modifier, variantId, modifierOptionIds, openPrice }),
     onSuccess: () => invalidateOrderGraph(qc),
   });
 };
@@ -239,6 +239,22 @@ const patchCachedOrder = (qc: ReturnType<typeof useQueryClient>, order: ApiOrder
       items: page.items.map((o) => (o.id === order.id ? order : o)),
     });
   });
+};
+
+/** The fast path for any mutation whose response IS the whole updated order (remove item,
+ *  bill discount/coupon/gift card/loyalty). Writes that server-computed order straight into
+ *  the caches (patchCachedOrder) instead of the old invalidateOrderGraph, which refetched the
+ *  ~6s active-orders list, tables, customers and inventory on every single action — so the
+ *  panel sat behind a spinner for a full extra round trip even though the response already
+ *  carried the answer.
+ *
+ *  The tables grid still refetches immediately: its tiles sit right behind this modal showing
+ *  the order's status/amount, and a tile that doesn't move until the next 30s poll reads as a
+ *  lost edit. It's a small dedicated query (tablesApi.list) — the cost this was ever about is
+ *  the active-orders list above, not this one. */
+const commitOrderResult = (qc: ReturnType<typeof useQueryClient>, order: ApiOrder) => {
+  patchCachedOrder(qc, order);
+  qc.invalidateQueries({ queryKey: queryKeys.tables });
 };
 
 /** Edits one line's quantity in place — see ordersApi.updateItemQty for the fired-line rules.
@@ -283,7 +299,12 @@ export const useRemoveOrderItem = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, itemId, reason }: { id: number; itemId: number; reason?: string }) => ordersApi.removeItem(id, itemId, reason),
-    onSuccess: () => invalidateOrderGraph(qc),
+    onSuccess: (updated) => {
+      commitOrderResult(qc, updated);
+      // Voiding a still-New/Ready fired line reverses its stock deduction, so inventory really
+      // did change — refetch it the same way this always did.
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
   });
 };
 
@@ -309,9 +330,15 @@ export const useApplyBillDiscount = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, pct, amount }: { id: number; pct?: number; amount?: number }) => ordersApi.billDiscount(id, { pct, amount }),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] });
-      qc.invalidateQueries({ queryKey: queryKeys.tables });
+    onSuccess: (result) => {
+      // A discount over the manager threshold comes back as a pending-approval stub, not an
+      // order — nothing's actually changed yet, so fall back to a plain invalidate there.
+      if ('pendingApproval' in result) {
+        qc.invalidateQueries({ queryKey: ['orders'] });
+        qc.invalidateQueries({ queryKey: queryKeys.tables });
+        return;
+      }
+      commitOrderResult(qc, result);
     },
   });
 };
@@ -320,10 +347,7 @@ export const useBillCoupon = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, code }: { id: number; code: string }) => ordersApi.billCoupon(id, code),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] });
-      qc.invalidateQueries({ queryKey: queryKeys.tables });
-    },
+    onSuccess: (updated) => commitOrderResult(qc, updated),
   });
 };
 
@@ -331,10 +355,7 @@ export const useBillGiftCard = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, code }: { id: number; code: string }) => ordersApi.billGiftCard(id, code),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] });
-      qc.invalidateQueries({ queryKey: queryKeys.tables });
-    },
+    onSuccess: (updated) => commitOrderResult(qc, updated),
   });
 };
 
@@ -342,9 +363,9 @@ export const useBillLoyalty = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, points }: { id: number; points: number }) => ordersApi.billLoyalty(id, points),
-    onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] });
-      qc.invalidateQueries({ queryKey: queryKeys.tables });
+    onSuccess: (updated) => {
+      commitOrderResult(qc, updated);
+      // Redeeming points draws down the customer's balance — refresh their CRM record.
       qc.invalidateQueries({ queryKey: ['customers'] });
     },
   });

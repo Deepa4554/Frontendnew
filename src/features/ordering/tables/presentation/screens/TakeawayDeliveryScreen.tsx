@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Linking, Alert, TextInput } from 'react-native';
 import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -26,6 +27,7 @@ import { OrderBillActions, PaymentSplit } from '../../../../../shared/components
 import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
 import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { modalHeadingOverride } from '../../../../../shared/design/commonStyles';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 import { RiderBookingCard } from '../../../../../shared/components/delivery/RiderBookingCard';
@@ -402,9 +404,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                   </TouchableOpacity>
                 )}
                 {isDesktopWeb && (
-                  <TouchableOpacity onPress={closeModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                    <Icon name="close" size={22} color={COLORS.muted} />
-                  </TouchableOpacity>
+                  <CloseButton onPress={closeModal} size={22} />
                 )}
               </View>
             </View>
@@ -453,9 +453,11 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                                 <Text style={[styles.itemStatusPillText, { color: dotColor }]}>{item.status}</Text>
                               </TouchableOpacity>
                               {!order.paid && (
-                                <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                  <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                                </TouchableOpacity>
+                                <Tooltip label="Remove item" placement="left">
+                                  <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                    <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                                  </TouchableOpacity>
+                                </Tooltip>
                               )}
                             </View>
                           );
@@ -475,9 +477,11 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                       <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.unfiredTag}><Text style={styles.unfiredTagText}>NEW</Text></View>
                       {!order.paid && (
-                        <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                          <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                        </TouchableOpacity>
+                        <Tooltip label="Remove item" placement="left">
+                          <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                          </TouchableOpacity>
+                        </Tooltip>
                       )}
                     </View>
                   ))}

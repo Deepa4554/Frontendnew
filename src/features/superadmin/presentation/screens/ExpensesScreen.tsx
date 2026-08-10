@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -139,9 +140,7 @@ export const ExpensesScreen = () => {
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Add Expense</Text>
-              <TouchableOpacity onPress={() => setModalVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setModalVisible(false)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Log a business expense — amount, who spent it, and what for.</Text>
 

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -12,6 +13,7 @@ import { getApiErrorMessage } from '../../../../../core/network/api';
 import { ScreenContainer } from '../../../../../core/components/ScreenContainer';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { modalHeadingOverride } from '../../../../../shared/design/commonStyles';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
@@ -170,9 +172,11 @@ export const KhatabookScreen = () => {
                     onChangeText={setSearch}
                   />
                   {!!search && (
-                    <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                      <Icon name="close-circle" size={15} color={COLORS.muted} />
-                    </TouchableOpacity>
+                    <Tooltip label="Clear search" placement="bottom">
+                      <TouchableOpacity onPress={() => setSearch('')} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <Icon name="close-circle" size={15} color={COLORS.muted} />
+                      </TouchableOpacity>
+                    </Tooltip>
                   )}
                 </View>
                 {/* Cleared khatas are hidden by default — the list's job is "who do I need to
@@ -237,9 +241,7 @@ export const KhatabookScreen = () => {
                 </Text>
                 <Text style={styles.modalSubtitle}>{current?.phone ?? 'No number on file'}</Text>
               </View>
-              <TouchableOpacity onPress={() => setOpenCustomer(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setOpenCustomer(null)} size={18} />
             </View>
 
             <View style={styles.balanceStrip}>

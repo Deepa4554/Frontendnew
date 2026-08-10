@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, Switch } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -398,9 +399,7 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
           <View style={styles.modalCard}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Add Staff Member</Text>
-              <TouchableOpacity onPress={() => { setAddVisible(false); resetAddForm(); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => { setAddVisible(false); resetAddForm(); }} size={18} />
             </View>
             <View style={{ borderRadius: 12 }}>
               <TextInput

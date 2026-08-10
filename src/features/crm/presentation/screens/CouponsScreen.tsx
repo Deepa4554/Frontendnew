@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Platform, Dimensions } from 'react-native';
 import { Text, useTheme, Card, Button, Chip } from 'react-native-paper';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -211,9 +212,7 @@ export const CouponsScreen = ({ route, navigation }: any) => {
           <View style={[styles.modalSheet, { backgroundColor: COLORS.background }]}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, { color: COLORS.heading }, modalHeadingOverride(styles.modalTitle.fontSize)]}>Issue Coupon</Text>
-              <TouchableOpacity onPress={() => setIssueVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setIssueVisible(false)} size={18} />
             </View>
 
             <View style={{ borderRadius: 10 }}>

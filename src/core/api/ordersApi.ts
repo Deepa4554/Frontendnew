@@ -237,6 +237,10 @@ export interface CreateOrderItemRequest {
    * to order more than one of it (2x Extra Cheese = the same id twice); only a
    * "Quantity"-type modifier group honours that, others collapse repeats to a single unit. */
   modifierOptionIds?: number[];
+  /** The rate the biller typed for an MRP item (see MenuItem.isOpenPrice) — required for
+   * one, and ignored by the server for every other item, so an ordinary line can never be
+   * re-priced from the client. */
+  openPrice?: number;
 }
 
 export interface CreateOrderRequest {

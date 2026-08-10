@@ -1,4 +1,5 @@
 import React, { useMemo, useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Image, ActivityIndicator, Modal, TextInput } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -607,9 +608,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHeaderRow}>
               <Text style={styles.pickerTitle}>Select Branch</Text>
-              <TouchableOpacity onPress={() => setBranchPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setBranchPickerOpen(false)} size={18} />
             </View>
             {branches.length === 0 ? (
               <Text style={styles.emptyText}>No branches yet — create one in Branch Management first.</Text>
@@ -640,9 +639,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHeaderRow}>
               <Text style={styles.pickerTitle}>Reset Password</Text>
-              <TouchableOpacity onPress={() => { setResetPasswordOpen(false); setNewLoginPassword(''); }} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => { setResetPasswordOpen(false); setNewLoginPassword(''); }} size={18} />
             </View>
             <Text style={styles.resetPasswordHint}>
               Set a new app login password for {staff.name}. They'll be signed out of any other devices.
@@ -682,9 +679,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHeaderRow}>
               <Text style={styles.pickerTitle}>HR Details</Text>
-              <TouchableOpacity onPress={() => setHrModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setHrModalOpen(false)} size={18} />
             </View>
             <Text style={styles.fieldLabel}>Department</Text>
             <View style={{ borderRadius: 8 }}>
@@ -723,9 +718,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHeaderRow}>
               <Text style={styles.pickerTitle}>Edit Financial Details</Text>
-              <TouchableOpacity onPress={() => setFinancialsModalOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setFinancialsModalOpen(false)} size={18} />
             </View>
             <Text style={styles.fieldLabel}>Bank Account Number</Text>
             <View style={{ borderRadius: 8 }}>
@@ -834,9 +827,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHeaderRow}>
               <Text style={styles.pickerTitle}>Set Status</Text>
-              <TouchableOpacity onPress={() => setStatusPickerOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setStatusPickerOpen(false)} size={18} />
             </View>
             {STAFF_STATUSES.map((s) => (
               <TouchableOpacity key={s} style={styles.pickerRow} onPress={() => handleUpdateStatus(s)} disabled={updateStatus.isPending}>
@@ -856,9 +847,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
           <View style={styles.pickerSheet}>
             <View style={styles.pickerHeaderRow}>
               <Text style={styles.pickerTitle}>Remove Staff Member</Text>
-              <TouchableOpacity onPress={() => setDeleteConfirmOpen(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setDeleteConfirmOpen(false)} size={18} />
             </View>
             <Text style={styles.resetPasswordHint}>
               This permanently removes {staff.name} from your roster{staff.hasLogin ? ' and revokes their app login' : ''}. This can't be undone.

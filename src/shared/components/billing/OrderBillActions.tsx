@@ -18,6 +18,7 @@ import { PaymentMethodPicker, PaymentMethodPickerResult, PaymentMethod, PaymentS
 import { BillAdjustmentsPanel, AdjustmentTile, AdjustmentApplyValue } from './BillAdjustmentsPanel';
 import { GuestPhonePrompt } from './GuestPhonePrompt';
 import { buildUpiPaymentUri } from '../../../core/payments/upi';
+import { Tooltip } from '../atoms/Tooltip';
 
 // Re-exported so existing `import { OrderBillActions, PaymentSplit } from '.../OrderBillActions'`
 // call sites (TokenDashboard, TableManagement, TakeawayDelivery, POSCheckoutScreen) keep working
@@ -67,6 +68,12 @@ interface Props {
    *  receipt token, then opens WhatsApp); returning the promise lets this component show a
    *  spinner and block a second tap while that's in flight, the way its sibling actions do. */
   onSendWhatsApp: (phoneOverride?: string) => void | Promise<void>;
+  /** Tablet+/desktop-web only: lay the settle panel out as two side-by-side columns
+   *  (Bill Summary + payment on the left, Adjustments & Services on the right) with the
+   *  action row full-width beneath, instead of one tall single-column stack. Opt-in — only
+   *  the Tables occupied-order modal passes it; POS / Token Dashboard / Takeaway keep the
+   *  stack. No effect on a narrow (mobile) browser — the layout gates on isDesktopWeb too. */
+  desktopTwoColumn?: boolean;
 }
 
 const money = (n: number) => `₹${n.toFixed(2)}`;
@@ -83,9 +90,11 @@ const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) :
 // behave in most POS bill screens. Module-level (not nested in OrderBillActions) so it
 // isn't recreated as a new component type on every render.
 const EditRowIcon = ({ onPress, color }: { onPress: () => void; color: string }) => (
-  <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={webNoOutline}>
-    <Icon name="pencil-outline" size={13} color={color} />
-  </TouchableOpacity>
+  <Tooltip label="Edit" placement="left">
+    <TouchableOpacity onPress={onPress} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={webNoOutline}>
+      <Icon name="pencil-outline" size={13} color={color} />
+    </TouchableOpacity>
+  </Tooltip>
 );
 
 /**
@@ -113,9 +122,13 @@ export const OrderBillActions: React.FC<Props> = ({
   onMarkPaid,
   onPrintBill,
   onSendWhatsApp,
+  desktopTwoColumn = false,
 }) => {
   const COLORS = useThemeColors();
   const { isDesktopWeb } = useResponsive();
+  // Side-by-side columns are a desktop-web affordance only — a phone-width browser (or the
+  // native app, where isDesktopWeb is always false) never has the room, so it stays stacked.
+  const twoCol = desktopTwoColumn && isDesktopWeb;
   const styles = makeStyles(COLORS, isDesktopWeb);
   const dispatch = useDispatch();
   const role = useSelector((s: any) => s.auth.user?.role);
@@ -539,8 +552,20 @@ export const OrderBillActions: React.FC<Props> = ({
     </>
   );
 
-  return (
-    <View style={styles.container}>
+  // The settle panel is assembled from these blocks and then arranged one of two ways
+  // (see the return): the default single vertical stack, or — when twoCol is on — two
+  // side-by-side columns with the action row full-width beneath. Extracted so the stack
+  // order stays byte-for-byte what every other screen already ships, and only Tables'
+  // desktop modal gets the two-column arrangement.
+  const billSummaryTitle = (
+    <View style={styles.colTitle}>
+      <Icon name="receipt-text-outline" size={18} color={COLORS.accent} />
+      <Text style={styles.colTitleText}>Bill Summary</Text>
+    </View>
+  );
+
+  const breakdownBlock = (
+    <>
       {!hideBreakdown && (
         <View style={styles.billBox}>
           <View style={styles.billRow}>
@@ -607,8 +632,10 @@ export const OrderBillActions: React.FC<Props> = ({
       {hideBreakdown && (showServiceToggle || showPackingToggle || showDeliveryToggle) && (
         <View style={styles.billBox}>{chargeToggleRows}</View>
       )}
+    </>
+  );
 
-      {order.paid ? (
+  const settlementBlock = order.paid ? (
         <>
           <View style={styles.paidBadge}>
             <Icon name="check-circle" size={14} color={COLORS.success} />
@@ -666,11 +693,11 @@ export const OrderBillActions: React.FC<Props> = ({
             />
           )}
         </>
-      )}
+  );
 
-      {/* Below Payment Method, not above it — settling is what happens on every order,
-          adjustments only sometimes, so the frequently-used control sits higher. */}
-      {!order.paid && (
+  // Below Payment Method, not above it — settling is what happens on every order,
+  // adjustments only sometimes, so the frequently-used control sits higher.
+  const adjustmentsBlock = !order.paid ? (
         <BillAdjustmentsPanel
           tiles={tiles}
           openKey={openAdjustment}
@@ -680,9 +707,9 @@ export const OrderBillActions: React.FC<Props> = ({
           onRemove={(key) => handleRemoveAdjustment(key as AdjustmentKey)}
           onWarn={warn}
         />
-      )}
+  ) : null;
 
-      {showServeAllNow && (
+  const serveAllBlock = showServeAllNow ? (
         <TouchableOpacity
           style={[styles.serveAllNowBtn, webNoOutline]}
           onPress={handleServeAllNow}
@@ -695,12 +722,12 @@ export const OrderBillActions: React.FC<Props> = ({
           )}
           <Text style={styles.serveAllNowText}>Mark All as Served</Text>
         </TouchableOpacity>
-      )}
+  ) : null;
 
-      {/* Sits directly on top of the settle row because it modifies what that row's button
-          does — ticked (the default) it's one tap for "served and paid", unticked it's a
-          plain settle for a guest paying before the food goes out. */}
-      {showServeOnSettle && (
+  // Sits directly on top of the settle row because it modifies what that row's button
+  // does — ticked (the default) it's one tap for "served and paid", unticked it's a
+  // plain settle for a guest paying before the food goes out.
+  const serveOnSettleBlock = showServeOnSettle ? (
         <TouchableOpacity
           style={[styles.serveOnSettleRow, webNoOutline]}
           onPress={() => setServeOnSettle((on) => !on)}
@@ -715,8 +742,9 @@ export const OrderBillActions: React.FC<Props> = ({
           />
           <Text style={styles.serveOnSettleText}>Mark items as Served on Settlement</Text>
         </TouchableOpacity>
-      )}
+  ) : null;
 
+  const actionsBlock = (
       <View style={styles.actionsRow}>
         <View style={styles.printBtnGroup}>
           <TouchableOpacity
@@ -824,7 +852,10 @@ export const OrderBillActions: React.FC<Props> = ({
           </View>
         )}
       </View>
+  );
 
+  const overlays = (
+    <>
       <GuestPhonePrompt
         visible={phonePromptFor !== null}
         onSubmit={handlePhoneSubmit}
@@ -859,12 +890,53 @@ export const OrderBillActions: React.FC<Props> = ({
       </Modal>
 
       <LoadingOverlay visible={chargeToggleBusy} message="Updating bill…" />
+    </>
+  );
+
+  return (
+    <View style={styles.container}>
+      {twoCol ? (
+        // Desktop settle: Bill Summary + payment on the left, Adjustments (+ the serve-on-
+        // settle tick) on the right, then the print/settle action row full-width beneath.
+        <>
+          <View style={styles.twoColRow}>
+            <View style={styles.twoColSide}>
+              {billSummaryTitle}
+              {breakdownBlock}
+              {settlementBlock}
+            </View>
+            <View style={styles.twoColSide}>
+              {adjustmentsBlock}
+              {serveOnSettleBlock}
+            </View>
+          </View>
+          {serveAllBlock}
+          {actionsBlock}
+        </>
+      ) : (
+        // Default single vertical stack — byte-for-byte the order every screen already ships.
+        <>
+          {breakdownBlock}
+          {settlementBlock}
+          {adjustmentsBlock}
+          {serveAllBlock}
+          {serveOnSettleBlock}
+          {actionsBlock}
+        </>
+      )}
+      {overlays}
     </View>
   );
 };
 
 const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
   container: { gap: isDesktopWeb ? 10 : 6 },
+  // Two-column desktop settle layout (opt-in via desktopTwoColumn). alignItems flex-start so
+  // the shorter column doesn't stretch to match the taller one; each half takes an equal share.
+  twoColRow: { flexDirection: 'row', gap: 16, alignItems: 'flex-start' },
+  twoColSide: { flex: 1, minWidth: 0, gap: isDesktopWeb ? 10 : 6 },
+  colTitle: { flexDirection: 'row', alignItems: 'center', gap: 8, marginBottom: 2 },
+  colTitleText: { fontSize: 16, fontWeight: '800', color: COLORS.heading },
   upiBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
   upiCard: { backgroundColor: COLORS.card, borderRadius: RADIUS.card, padding: 20, alignItems: 'center', gap: 8, maxWidth: 320, width: '100%' },
   upiTitle: { fontSize: 13, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.4, textTransform: 'uppercase' },

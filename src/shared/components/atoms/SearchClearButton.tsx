@@ -2,6 +2,7 @@ import React from 'react';
 import { TouchableOpacity, StyleSheet, ViewStyle, StyleProp } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
+import { Tooltip } from './Tooltip';
 
 interface SearchClearButtonProps {
   onPress: () => void;
@@ -12,13 +13,14 @@ interface SearchClearButtonProps {
 export const SearchClearButton = ({ onPress, style }: SearchClearButtonProps) => {
   const COLORS = useThemeColors();
   return (
-    <TouchableOpacity
-      onPress={onPress}
-      hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-      style={[styles.btn, style]}
-    >
-      <Icon name="close-circle" size={13} color={COLORS.muted} />
-    </TouchableOpacity>
+    <Tooltip label="Clear search" placement="bottom" style={[styles.btn, style]}>
+      <TouchableOpacity
+        onPress={onPress}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+      >
+        <Icon name="close-circle" size={13} color={COLORS.muted} />
+      </TouchableOpacity>
+    </Tooltip>
   );
 };
 

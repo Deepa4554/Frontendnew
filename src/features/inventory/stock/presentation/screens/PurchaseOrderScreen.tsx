@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Linking, Alert } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
@@ -361,9 +362,7 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
           <View testID="create-order-modal" style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Place Purchase Order</Text>
-              <TouchableOpacity onPress={() => setFormVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setFormVisible(false)} size={18} />
             </View>
 
             <ScrollView style={styles.modalFieldsScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
@@ -477,9 +476,7 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
           <View testID="ingredient-picker-modal" style={styles.pickerSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Select Ingredient</Text>
-              <TouchableOpacity onPress={() => setPickerLineKey(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setPickerLineKey(null)} size={18} />
             </View>
             <ScrollView style={{ maxHeight: 420 }}>
               {inventory.map((i) => (
@@ -506,9 +503,7 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
           <View testID="vendor-picker-modal" style={styles.pickerSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Select Vendor</Text>
-              <TouchableOpacity onPress={() => setVendorPickerVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setVendorPickerVisible(false)} size={18} />
             </View>
             <ScrollView style={{ maxHeight: 420 }}>
               {vendors.length === 0 && <Text style={styles.emptyHint}>No vendors added yet — add one from the Vendors screen, or type a one-off supplier name below.</Text>}
@@ -536,9 +531,7 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
           <View testID="receive-modal" style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Receive Order #{receivingOrder?.id}</Text>
-              <TouchableOpacity onPress={() => setReceivingOrder(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setReceivingOrder(null)} size={18} />
             </View>
 
             <ScrollView style={styles.modalFieldsScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>

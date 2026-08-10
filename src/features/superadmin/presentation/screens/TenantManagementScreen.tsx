@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform, Dimensions } from 'react-native';
 import { LineChart } from 'react-native-gifted-charts';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -174,9 +175,7 @@ export const TenantManagementScreen = () => {
           <View style={styles.modalCard}>
             <View style={styles.salesModalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{managing?.name}</Text>
-              <TouchableOpacity onPress={() => setManaging(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setManaging(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Current plan: {managing ? planLabel(managing.plan) : ''}</Text>
             {PLAN_OPTIONS.map((opt) => (
@@ -204,9 +203,7 @@ export const TenantManagementScreen = () => {
           <View style={[styles.modalCard, { maxHeight: '85%' }]}>
             <View style={styles.salesModalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{viewingSales?.name}</Text>
-              <TouchableOpacity onPress={() => setViewingSales(null)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setViewingSales(null)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>Real sales — computed from this cafe's actual paid orders</Text>
 

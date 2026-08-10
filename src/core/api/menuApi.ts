@@ -25,6 +25,12 @@ export interface MenuItem {
   stationName: string;
   shortCode?: string | null;
   itemType: 'Recipe' | 'Retail' | 'Service' | 'Combo';
+  /** MRP item — the biller types this line's rate at the till instead of it coming from
+   * `price` above, for packaged goods (soft drinks, water, chips) whose printed rate changes
+   * between batches. The typed rate is also billed tax-INCLUSIVE, since an MRP is the most a
+   * customer may be charged. `price` stays as the last-known rate the grid displays.
+   * Not orderable from the customer QR menu — a guest has no rate to type. */
+  isOpenPrice: boolean;
   vegNonVegType?: 'Veg' | 'NonVeg' | 'Jain' | 'Eggetarian' | null;
   /** Which tax slab this item bills at (see taxGroupsApi). Null = the cafe's default tax
    * group, or Cafe Settings' flat rate when there's no default. */
@@ -107,6 +113,8 @@ export interface CreateMenuItemRequest {
   itemType?: string;
   vegNonVegType?: string | null;
   taxGroupId?: number | null;
+  /** MRP item — rate typed at billing time. See MenuItem.isOpenPrice. */
+  isOpenPrice?: boolean;
 }
 
 export interface UpdateMenuItemRequest {
@@ -127,6 +135,8 @@ export interface UpdateMenuItemRequest {
   /** Pass 0 to clear the item back to the cafe default — an omitted value means "leave
    * unchanged", like every other field on this PATCH, so it can't also mean "clear". */
   taxGroupId?: number | null;
+  /** MRP item — rate typed at billing time. See MenuItem.isOpenPrice. */
+  isOpenPrice?: boolean;
 }
 
 export interface CreateVariantRequest {

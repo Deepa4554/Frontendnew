@@ -8,6 +8,7 @@ import { showToast } from '../../core/store/uiSlice';
 import { getApiErrorMessage } from '../../core/network/api';
 import { WarmColors as COLORS } from '../design/warmTheme';
 import { confirmAlert } from './ConfirmDialogHost';
+import { CloseButton } from './atoms/CloseButton';
 import { NonBlockingOverlay } from './NonBlockingOverlay';
 import { useResponsive } from '../../core/utils/useResponsive';
 
@@ -119,9 +120,7 @@ export const PendingOrdersHost = () => {
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
               <Text style={styles.sheetTitle}>Confirm Guest Orders</Text>
-              <TouchableOpacity onPress={() => setOpen(false)}>
-                <Icon name="close" size={18} color={COLORS.heading} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setOpen(false)} size={18} color={COLORS.heading} />
             </View>
             <ScrollView style={{ maxHeight: 420 }}>
               {orders.map((o) => (

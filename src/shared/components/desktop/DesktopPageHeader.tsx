@@ -3,6 +3,7 @@ import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { DesktopColors as COLORS } from '../../design/desktopWebTheme';
 import { useResponsive } from '../../../core/utils/useResponsive';
+import { Tooltip } from '../atoms/Tooltip';
 
 interface Props {
   /** MaterialCommunityIcons name — mirrors the screen's mobile header / sidebar icon. */
@@ -32,9 +33,11 @@ export const DesktopPageHeader: React.FC<Props> = ({ icon, title, onBack, right 
   return (
     <View style={styles.header}>
       {!!onBack && (
-        <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
-          <Icon name="arrow-left" size={20} color={COLORS.heading} />
-        </TouchableOpacity>
+        <Tooltip label="Back" placement="bottom">
+          <TouchableOpacity onPress={onBack} style={styles.backBtn} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }} activeOpacity={0.7}>
+            <Icon name="arrow-left" size={20} color={COLORS.heading} />
+          </TouchableOpacity>
+        </Tooltip>
       )}
       <Icon name={icon} size={20} color={COLORS.accent} />
       <Text style={styles.title} numberOfLines={1}>{title}</Text>

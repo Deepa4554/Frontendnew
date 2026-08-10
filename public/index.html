@@ -67,19 +67,34 @@
          pokes outside the rounded wrapper AND doesn't cover the whole visual box.
          Instead, ring whichever wrapper div directly contains the focused field — that
          div already has the real border-radius, so the highlight follows it exactly and
-         covers the whole textbox. One rule, no per-screen changes needed anywhere. */
-      input, textarea, select {
-        outline: none;
-      }
-      /* :not([role="switch"]) excludes RN's Switch — react-native-web renders it as an
-         invisible <input type="checkbox" role="switch"> layered directly inside its own
-         wrapper <div> (alongside the visible track/thumb), so without this exclusion the
-         same ring meant for text fields was firing around every toggle whenever its hidden
-         checkbox took focus. */
-      div:has(> input:focus:not([role="switch"])),
-      div:has(> textarea:focus),
-      div:has(> select:focus) {
-        box-shadow: 0 0 0 1px rgba(197, 101, 46, 0.25);
+         covers the whole textbox. One rule, no per-screen changes needed anywhere.
+
+         This rule assumes the wrapper's box IS the field's visible box, so a field must not
+         carry its own margin: a flex child's margin grows the wrapper, and the ring then hugs
+         that inflated box instead of the field (which is what made the Add-Table modal's ring
+         sit low). Put the gap on the wrapper — see newZoneInputWrap in TableManagementScreen.
+
+         Deliberately NOT switched to ringing the input itself to dodge that margin rule: a
+         search bar's input is border-less and often shorter than its pill, and whether it has
+         a sibling (the clear button only exists once you type) can't be a stable signal — the
+         ring would change shape mid-typing.
+
+         Gated to tablet+ to match the app's own isDesktopWeb switch (width >= BREAKPOINTS.tablet
+         = 768, see useResponsive.ts); a narrow mobile browser keeps its native outline. */
+      @media (min-width: 768px) {
+        input, textarea, select {
+          outline: none;
+        }
+        /* :not([role="switch"]) excludes RN's Switch — react-native-web renders it as an
+           invisible <input type="checkbox" role="switch"> layered directly inside its own
+           wrapper <div> (alongside the visible track/thumb), so without this exclusion the
+           same ring meant for text fields was firing around every toggle whenever its hidden
+           checkbox took focus. */
+        div:has(> input:focus:not([role="switch"])),
+        div:has(> textarea:focus),
+        div:has(> select:focus) {
+          box-shadow: 0 0 0 1px rgba(197, 101, 46, 0.25);
+        }
       }
     </style>
   </head>

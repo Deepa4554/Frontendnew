@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, TouchableOpacity, TextInput, Modal, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -216,9 +217,7 @@ export const ApprovalWorkflowScreen: React.FC = () => {
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>
                 {notesTarget?.kind === 'APPROVE' ? 'Confirm Approval' : 'Confirm Rejection'}
               </Text>
-              <TouchableOpacity onPress={closeNotes} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={18} color={COLORS.muted} />
-              </TouchableOpacity>
+              <CloseButton onPress={closeNotes} size={18} />
             </View>
             <Text style={styles.modalLabel}>Notes (optional)</Text>
             <View style={{ borderRadius: RADIUS.card }}>

@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Linking, TextInput, Alert } from 'react-native';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Linking, TextInput, Alert, Dimensions } from 'react-native';
 import { useRoute } from '@react-navigation/native';
 import { useSelector, useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -29,9 +30,9 @@ import { ordersApi } from '../../../../../core/api/ordersApi';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
+import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
 import { GlobalSearchTrigger } from '../../../../../shared/components/search/GlobalSearchTrigger';
-import { useWebTooltip } from '../../../../../shared/hooks/useWebTooltip';
 import { CategoryFilterModal, CategoryFilterTrigger } from '../../../../../shared/components/molecules/CategoryFilterModal';
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
 import { WhatsAppTrackingQr } from '../../../../../shared/components/billing/WhatsAppTrackingQr';
@@ -209,15 +210,6 @@ export const TableManagementScreen = ({ navigation }: any) => {
     nextShare - splitRemaining <= 0.01;
 
   const canAdd = canManageTables(role);
-
-  // Hover tooltips for the three icon-only order-lifecycle buttons in the occupied-table
-  // modal's header row (End QR Guest Session / Shift Table / Cancel Order) — see
-  // useWebTooltip's own comment for why accessibilityLabel alone doesn't give a sighted mouse
-  // user any visible way to tell what an unlabeled icon does. Called unconditionally here
-  // (rules of hooks) even though each button itself only renders conditionally further down.
-  const endSessionTooltipRef = useWebTooltip('End QR Guest Session');
-  const shiftTableTooltipRef = useWebTooltip('Move this order to a different table');
-  const cancelOrderTooltipRef = useWebTooltip('Cancel Order');
 
   const TABLES = allTables.filter((t) => t.zone === activeZone);
 
@@ -827,9 +819,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
       </ScrollView>
 
       {canAdd && (
-        <TouchableOpacity style={styles.fab} onPress={() => setAddModalVisible(true)}>
-          <Icon name="plus" size={26} color="#FFFFFF" />
-        </TouchableOpacity>
+        <Tooltip label="Add table" placement="left">
+          <TouchableOpacity style={styles.fab} onPress={() => setAddModalVisible(true)}>
+            <Icon name="plus" size={26} color="#FFFFFF" />
+          </TouchableOpacity>
+        </Tooltip>
       )}
 
       {/* ---------- Occupied table: order lifecycle. Payment is available at any point
@@ -837,12 +831,20 @@ export const TableManagementScreen = ({ navigation }: any) => {
           bill, and payment actions together; a centered card on desktop web. ---------- */}
       <Modal visible={!!occupiedModal} transparent={isDesktopWeb} animationType={isDesktopWeb ? 'fade' : 'slide'} onRequestClose={closeOccupiedModal}>
         <View style={isDesktopWeb ? styles.modalOverlay : styles.occFullPage}>
-          <View style={isDesktopWeb ? styles.modalSheet : [styles.occFullPageInner, { paddingTop: insets.top + 12 }]}>
+          <View style={isDesktopWeb ? [styles.modalSheet, styles.occModalSheetTight, styles.occModalSheetWide] : [styles.occFullPageInner, { paddingTop: insets.top + 12 }]}>
             <View style={styles.occupiedModalHeader}>
-              <TouchableOpacity style={styles.occupiedModalBackBtn} onPress={closeOccupiedModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name={isDesktopWeb ? 'close' : 'arrow-left'} size={22} color={COLORS.heading} />
-              </TouchableOpacity>
-              <Text style={[styles.modalTitle, styles.occupiedModalTitleText, modalHeadingOverride(styles.modalTitle.fontSize)]}>{occupiedModal?.code} — {occupiedOrder?.status ?? occupiedModal?.orderStatus}</Text>
+              {/* Mobile is a full-page slide-in → back arrow on the left (phone convention).
+                  Desktop web is a dialog → the close (X) belongs on the top-RIGHT, so the
+                  title takes the row (flex) and the X sits after it on the right edge. */}
+              {!isDesktopWeb && (
+                <TouchableOpacity style={styles.occupiedModalBackBtn} onPress={closeOccupiedModal} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+                  <Icon name="arrow-left" size={22} color={COLORS.heading} />
+                </TouchableOpacity>
+              )}
+              <Text style={[styles.modalTitle, styles.occupiedModalTitleText, isDesktopWeb && { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1}>{occupiedModal?.code} — {occupiedOrder?.status ?? occupiedModal?.orderStatus}</Text>
+              {isDesktopWeb && (
+                <CloseButton onPress={closeOccupiedModal} size={22} style={styles.occupiedModalBackBtn} />
+              )}
             </View>
             {/* Order number + the three order-lifecycle actions (QR session/Shift/Cancel)
                 share one row — icon-only buttons so all three fit alongside the order
@@ -858,20 +860,21 @@ export const TableManagementScreen = ({ navigation }: any) => {
                     below. Owner/Manager only, same policy the backend enforces
                     (Policies.OwnerOrManager). */}
                 {canAdd && occupiedModal?.activeSessionId != null && (
-                  <TouchableOpacity
-                    ref={endSessionTooltipRef}
-                    style={styles.orderHeaderIconBtn}
-                    onPress={handleRevokeSession}
-                    disabled={revokeSession.isPending}
-                    accessibilityLabel="End QR Guest Session"
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    {revokeSession.isPending ? (
-                      <ActivityIndicator size="small" color={COLORS.dangerAccent} />
-                    ) : (
-                      <Icon name="account-off-outline" size={15} color={COLORS.dangerAccent} />
-                    )}
-                  </TouchableOpacity>
+                  <Tooltip label="End QR guest session" placement="bottom">
+                    <TouchableOpacity
+                      style={styles.orderHeaderIconBtn}
+                      onPress={handleRevokeSession}
+                      disabled={revokeSession.isPending}
+                      accessibilityLabel="End QR Guest Session"
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      {revokeSession.isPending ? (
+                        <ActivityIndicator size="small" color={COLORS.dangerAccent} />
+                      ) : (
+                        <Icon name="account-off-outline" size={15} color={COLORS.dangerAccent} />
+                      )}
+                    </TouchableOpacity>
+                  </Tooltip>
                 )}
 
                 {/* Moves this order to a different, currently-empty table — no Owner/Manager
@@ -879,39 +882,41 @@ export const TableManagementScreen = ({ navigation }: any) => {
                     Cancel Order's stricter one below), since relabelling a table isn't
                     destructive or billing-related. */}
                 {occupiedOrder && !occupiedOrder.cancelled && (
-                  <TouchableOpacity
-                    ref={shiftTableTooltipRef}
-                    style={[styles.orderHeaderIconBtn, styles.orderHeaderIconBtnAccent]}
-                    onPress={() => { if (occupiedModal) { setShiftingFrom(occupiedModal); closeOccupiedModal(); } }}
-                    disabled={shiftTable.isPending}
-                    accessibilityLabel="Shift Table"
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    {shiftTable.isPending ? (
-                      <ActivityIndicator size="small" color={COLORS.accent} />
-                    ) : (
-                      <Icon name="table-furniture" size={15} color={COLORS.accent} />
-                    )}
-                  </TouchableOpacity>
+                  <Tooltip label="Move to another table" placement="bottom">
+                    <TouchableOpacity
+                      style={[styles.orderHeaderIconBtn, styles.orderHeaderIconBtnAccent]}
+                      onPress={() => { if (occupiedModal) { setShiftingFrom(occupiedModal); closeOccupiedModal(); } }}
+                      disabled={shiftTable.isPending}
+                      accessibilityLabel="Shift Table"
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      {shiftTable.isPending ? (
+                        <ActivityIndicator size="small" color={COLORS.accent} />
+                      ) : (
+                        <Icon name="table-furniture" size={15} color={COLORS.accent} />
+                      )}
+                    </TouchableOpacity>
+                  </Tooltip>
                 )}
 
                 {/* Whole-order cancel — Owner/Manager only, matches Policies enforced server-side
                     once any item's already been served. Hidden once paid (use Refund instead). */}
                 {canCancelOrder && occupiedOrder && !occupiedOrder.paid && !occupiedOrder.cancelled && (
-                  <TouchableOpacity
-                    ref={cancelOrderTooltipRef}
-                    style={styles.orderHeaderIconBtn}
-                    onPress={handleCancelOrder}
-                    disabled={cancelOrder.isPending}
-                    accessibilityLabel="Cancel Order"
-                    hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
-                  >
-                    {cancelOrder.isPending ? (
-                      <ActivityIndicator size="small" color={COLORS.dangerAccent} />
-                    ) : (
-                      <Icon name="close-circle-outline" size={15} color={COLORS.dangerAccent} />
-                    )}
-                  </TouchableOpacity>
+                  <Tooltip label="Cancel order" placement="bottom">
+                    <TouchableOpacity
+                      style={styles.orderHeaderIconBtn}
+                      onPress={handleCancelOrder}
+                      disabled={cancelOrder.isPending}
+                      accessibilityLabel="Cancel Order"
+                      hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+                    >
+                      {cancelOrder.isPending ? (
+                        <ActivityIndicator size="small" color={COLORS.dangerAccent} />
+                      ) : (
+                        <Icon name="close-circle-outline" size={15} color={COLORS.dangerAccent} />
+                      )}
+                    </TouchableOpacity>
+                  </Tooltip>
                 )}
               </View>
             </View>
@@ -921,7 +926,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 actually scroll — a fixed maxHeight there is what works (matches the pattern
                 already used by POS's own bill modal). Mobile's occFullPageInner is a true
                 flex-stretched full screen, so flex:1 is fine there. */}
-            <ScrollView style={[styles.occModalScroll, isDesktopWeb && styles.occModalScrollDesktop]} showsVerticalScrollIndicator={false}>
+            <ScrollView style={[styles.occModalScroll, isDesktopWeb && { flex: undefined, maxHeight: Dimensions.get('window').height * 0.8 }]} showsVerticalScrollIndicator={false}>
               {!occupiedOrder && (
                 <ActivityIndicator size="small" color={COLORS.accent} style={{ marginVertical: 24 }} />
               )}
@@ -940,9 +945,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
                       <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.occUnfiredTag}><Text style={styles.occUnfiredTagText}>NEW</Text></View>
                       <Text style={styles.occItemPrice}>₹{(item.price * item.qty).toFixed(2)}</Text>
-                      <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                        <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                      </TouchableOpacity>
+                      <Tooltip label="Remove item" placement="left">
+                        <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                        </TouchableOpacity>
+                      </Tooltip>
                     </View>
                   ))}
                   <TouchableOpacity style={styles.occAddItemBtn} onPress={handleAddItemsViaPos}>
@@ -959,7 +966,12 @@ export const TableManagementScreen = ({ navigation }: any) => {
               {occupiedOrder && !isOpenOrder && (
                 <View style={styles.occItemsScroll}>
                   {occupiedOrder.fireBatches.map((batch) => {
-                    const batchItems = occupiedOrder.items.filter((i) => i.fireBatch === batch.batchNumber);
+                    // Exclude voided lines. Removing a fired item VOIDS it (soft delete so the
+                    // KOT/ledger history survives — see OrdersController.RemoveItem/VoidItemAsync),
+                    // so without this filter the "removed" line just stays here as a disabled "1×"
+                    // row and looks like the X did nothing.
+                    const batchItems = occupiedOrder.items.filter((i) => i.fireBatch === batch.batchNumber && !i.voided);
+                    if (batchItems.length === 0) return null; // whole round pulled back — nothing left to show
                     return (
                       <View key={batch.batchNumber} style={styles.occBatchGroup}>
                         <View style={styles.occBatchHeaderRow}>
@@ -992,9 +1004,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
                               >
                                 <Text style={[styles.occItemStatusPillText, { color: dotColor }]}>{item.status}</Text>
                               </TouchableOpacity>
-                              <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                                <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                              </TouchableOpacity>
+                              <Tooltip label="Remove item" placement="left">
+                                <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                  <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                                </TouchableOpacity>
+                              </Tooltip>
                             </View>
                           );
                         })}
@@ -1008,12 +1022,12 @@ export const TableManagementScreen = ({ navigation }: any) => {
                       price column none of the fired rows carry, and a differently-styled tag
                       where the status pill sits. Two unrelated-looking lists in one panel, with
                       nothing saying where one ended and the other began. */}
-                  {occupiedOrder.items.some((i) => i.fireBatch === 0) && (
+                  {occupiedOrder.items.some((i) => i.fireBatch === 0 && !i.voided) && (
                     <View style={styles.occBatchGroup}>
                       <View style={styles.occBatchHeaderRow}>
                         <Text style={styles.occBatchLabel}>NEW · not sent to the kitchen yet</Text>
                       </View>
-                      {occupiedOrder.items.filter((i) => i.fireBatch === 0).map((item) => (
+                      {occupiedOrder.items.filter((i) => i.fireBatch === 0 && !i.voided).map((item) => (
                         <View key={item.id} style={styles.occItemRow}>
                           <View style={[styles.occItemStatusDot, { backgroundColor: COLORS.muted }]} />
                           <ItemQtyStepper
@@ -1029,9 +1043,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
                           <View style={[styles.occItemStatusPill, { backgroundColor: `${COLORS.muted}22` }]}>
                             <Text style={[styles.occItemStatusPillText, { color: COLORS.muted }]}>NEW</Text>
                           </View>
-                          <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-                            <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                          </TouchableOpacity>
+                          <Tooltip label="Remove item" placement="left">
+                            <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                              <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                            </TouchableOpacity>
+                          </Tooltip>
                         </View>
                       ))}
                     </View>
@@ -1068,6 +1084,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
                     payingPending={payOrder.isPending}
                     printingPending={printingBill}
                     offerServeOnSettle
+                    // Desktop web has the width for a two-column settle panel (Bill Summary |
+                    // Adjustments); on mobile/native it's ignored and stays a single stack.
+                    desktopTwoColumn
                     onMarkPaid={handleMarkPaid}
                     onPrintBill={handlePrintBill}
                     onSendWhatsApp={sendBillViaWhatsApp}
@@ -1077,12 +1096,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
               {occupiedOrder && !occupiedOrder.cancelled && <WhatsAppTrackingQr orderId={occupiedOrder.id} />}
             </ScrollView>
 
-            {/* --- Primary action row: Close/Done + Fire (payment lives in OrderBillActions above) --- */}
+            {/* --- Primary action row: Fire (Close/Done removed — the top-right X dismisses;
+                payment lives in OrderBillActions above) --- */}
             <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={closeOccupiedModal}>
-                <Text style={styles.modalCancelText}>{occupiedOrder?.paid ? 'Done' : 'Close'}</Text>
-              </TouchableOpacity>
-
               {occupiedOrder && isOpenOrder && (
                 <TouchableOpacity style={styles.modalPayBtn} onPress={handleFire} disabled={fireOrder.isPending}>
                   {fireOrder.isPending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon name="chef-hat" size={16} color="#FFFFFF" />}
@@ -1107,10 +1123,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.occupiedModalHeader}>
-              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Split Bill</Text>
-              <TouchableOpacity onPress={() => setSplitVisible(false)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-                <Icon name="close" size={22} color={COLORS.muted} />
-              </TouchableOpacity>
+              {/* flex on the title pushes the close (X) to the right edge — occupiedModalHeader
+                  itself has no space-between (it's shared with the back-arrow layout above). */}
+              <Text style={[styles.modalTitle, { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1}>Split Bill</Text>
+              <CloseButton onPress={() => setSplitVisible(false)} size={22} />
             </View>
             <View style={styles.occBillRow}><Text style={styles.occBillTotalLabel}>Bill Total</Text><Text style={styles.occBillTotalVal}>₹{splitTotal.toFixed(2)}</Text></View>
             <View style={styles.occBillRow}><Text style={styles.occBillLabel}>Collected</Text><Text style={styles.occBillVal}>₹{splitPaid.toFixed(2)}</Text></View>
@@ -1227,7 +1243,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
             {newZoneMode ? (
               <>
                 <Text style={styles.modalLine}>Floor / Zone Name</Text>
-                <View style={{ borderRadius: 8 }}>
+                <View style={styles.newZoneInputWrap}>
                   <TextInput
                     style={styles.newZoneInput}
                     value={newZoneName}
@@ -1251,7 +1267,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 there. Optional on purpose: a cafe that just wants T1, T2, T3… shouldn't have
                 to type anything, so blank keeps the old auto-numbering behaviour. */}
             <Text style={[styles.modalLine, { marginTop: 14 }]}>Table Name</Text>
-            <View style={{ borderRadius: 8 }}>
+            <View style={styles.newZoneInputWrap}>
               <TextInput
                 style={styles.newZoneInput}
                 value={newTableName}
@@ -1600,6 +1616,17 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     borderRadius: 12,
     padding: isDesktopWeb ? 16 : 16.5,
   },
+  // Tighter padding for the occupied-order modal specifically (per design request) —
+  // scoped here so the other dialogs sharing modalSheet keep their roomier padding.
+  occModalSheetTight: {
+    padding: 10,
+  },
+  // The occupied-order modal lays its settle panel out in two columns on desktop web
+  // (OrderBillActions' desktopTwoColumn), which needs more room than the default 760 cap
+  // the confirm-style dialogs share — so widen it here, scoped to this modal only.
+  occModalSheetWide: {
+    maxWidth: 1000,
+  },
   // Occupied-order modal on mobile: full page, not a centered popup — there's a lot to
   // fit (items, bill, payment) and this is the screen a QSR counter lives in all day.
   occFullPage: { flex: 1, backgroundColor: COLORS.background },
@@ -1613,7 +1640,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     flexDirection: 'row',
     alignItems: 'center',
     gap: isDesktopWeb ? 7 : 7.5,
-    marginBottom: isDesktopWeb ? 9 : 9,
+    marginBottom: isDesktopWeb ? 4 : 5,
   },
   // Fixed-size hit target, same pattern as CafeSettingsScreen's header iconBtn — gives the
   // back icon a clean box to center in so it lines up with the title on the row's cross-axis.
@@ -1635,7 +1662,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   modalLine: {
     fontSize: fs(14),
     color: COLORS.heading,
-    marginBottom: isDesktopWeb ? 4 : 4.5,
+    marginBottom: isDesktopWeb ? 2 : 2.5,
   },
   orderHeaderRow: {
     flexDirection: 'row',
@@ -1707,7 +1734,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   modalActions: {
     flexDirection: 'row',
     gap: isDesktopWeb ? 9 : 9,
-    marginTop: isDesktopWeb ? 12 : 12,
+    marginTop: isDesktopWeb ? 7 : 8,
   },
   modalCancelBtn: {
     flex: 1,
@@ -1741,12 +1768,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     backgroundColor: COLORS.divider,
   },
   // --- Occupied modal: lifecycle sub-views ---
-  occItemsScroll: { marginTop: isDesktopWeb ? 9 : 9 },
+  occItemsScroll: { marginTop: isDesktopWeb ? 4 : 5 },
   occItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: isDesktopWeb ? 6 : 6,
-    paddingVertical: isDesktopWeb ? 5 : 5.25,
+    paddingVertical: isDesktopWeb ? 3 : 3.5,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.divider,
   },
@@ -1760,7 +1787,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   occBatchGroup: { marginTop: isDesktopWeb ? 7 : 7.5 },
   occBatchHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: isDesktopWeb ? 3 : 3 },
   occBatchLabel: { fontSize: fs(11), fontWeight: '700', color: COLORS.muted, letterSpacing: 0.3 },
-  occAddItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, paddingVertical: isDesktopWeb ? 9 : 9, marginTop: isDesktopWeb ? 3 : 3 },
+  occAddItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, paddingVertical: isDesktopWeb ? 6 : 6, marginTop: isDesktopWeb ? 2 : 2 },
   occAddItemText: { fontSize: fs(14), fontWeight: '700', color: COLORS.accent },
   occBillRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isDesktopWeb ? 2 : 2.25 },
   occBillLabel: { fontSize: fs(13), color: COLORS.muted },
@@ -1768,9 +1795,9 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   occBillTotalLabel: { fontSize: fs(15), fontWeight: '800', color: COLORS.heading },
   occBillTotalVal: { fontSize: fs(18), fontWeight: '800', color: COLORS.heading },
   occFieldInput: { flex: 1, backgroundColor: COLORS.cardAlt, borderWidth: INPUT_BORDER_WIDTH, borderColor: COLORS.inputBorder, borderRadius: 8, paddingHorizontal: isDesktopWeb ? 9 : 9, height: 42, fontSize: fs(16), color: COLORS.heading },
-  occSplitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, backgroundColor: COLORS.cardAlt, borderRadius: 6, paddingVertical: isDesktopWeb ? 9 : 9, marginTop: isDesktopWeb ? 9 : 9 },
+  occSplitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, backgroundColor: COLORS.cardAlt, borderRadius: 6, paddingVertical: isDesktopWeb ? 6 : 6, marginTop: isDesktopWeb ? 5 : 5 },
   occSplitBtnText: { fontSize: fs(13), fontWeight: '700', color: COLORS.heading },
-  occPickerRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 7 : 7.5, paddingVertical: isDesktopWeb ? 9 : 9, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  occPickerRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 7 : 7.5, paddingVertical: isDesktopWeb ? 6 : 6, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
   occPickerName: { flex: 1, fontSize: fs(14), color: COLORS.heading },
   occPickerPrice: { fontSize: fs(13), fontWeight: '700', color: COLORS.muted },
   splitWaysRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 9 : 9, marginVertical: isDesktopWeb ? 10 : 10.5 },
@@ -1828,6 +1855,13 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     height: 46,
     fontSize: fs(16),
     color: COLORS.heading,
+  },
+  // The focus ring is a box-shadow the global stylesheet puts on whichever div directly wraps
+  // the focused input (see public/index.html), so this wrapper's box has to be exactly the
+  // input's visible box — a margin left on the input itself would grow the wrapper and the ring
+  // would sit low. Hence the gap below the field lives here, not on newZoneInput.
+  newZoneInputWrap: {
+    borderRadius: 8,
     marginBottom: 6,
   },
   newZoneToggleText: {

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { CloseButton } from './CloseButton';
 import { View, Text, Modal, ScrollView, TouchableOpacity, StyleSheet } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
@@ -118,9 +119,7 @@ export const TimePickerModal: React.FC<Props> = ({ visible, value, title = 'Sele
         <View style={styles.sheet}>
           <View style={styles.titleRow}>
             <Text style={[styles.title, modalHeadingOverride(16)]} numberOfLines={1}>{title}</Text>
-            <TouchableOpacity onPress={onCancel} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-              <Icon name="close" size={18} color={COLORS.muted} />
-            </TouchableOpacity>
+            <CloseButton onPress={onCancel} size={18} />
           </View>
 
           <View style={styles.preview}>

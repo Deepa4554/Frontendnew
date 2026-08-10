@@ -3,6 +3,7 @@ import { View, StyleSheet, Text, TextInput, TouchableOpacity, Modal, ScrollView,
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch, useSelector } from 'react-redux';
 import { showToast } from '../../../../core/store/uiSlice';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { useCreateStaff, useUpdateStaffScreenAccess } from '../../../../core/api/hooks/useStaff';
 import { useCompleteOnboarding } from '../../../../core/api/hooks/useSettings';
 import { getApiErrorMessage } from '../../../../core/network/api';
@@ -285,9 +286,7 @@ export const OnboardingCrewScreen = ({ navigation }: any) => {
           <View style={styles.accessSheet}>
             <View style={styles.accessSheetHeader}>
               <Text style={styles.pickerTitle}>Choose Screens</Text>
-              <TouchableOpacity onPress={() => setAccessPickerOpen(false)}>
-                <Icon name="close" size={22} color={COLORS.heading} />
-              </TouchableOpacity>
+              <CloseButton onPress={() => setAccessPickerOpen(false)} size={22} color={COLORS.heading} />
             </View>
             <ScrollView style={{ maxHeight: 420 }}>
               {PARENT_SCREENS.map((parent) => {
