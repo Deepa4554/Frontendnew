@@ -831,7 +831,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
           bill, and payment actions together; a centered card on desktop web. ---------- */}
       <Modal visible={!!occupiedModal} transparent={isDesktopWeb} animationType={isDesktopWeb ? 'fade' : 'slide'} onRequestClose={closeOccupiedModal}>
         <View style={isDesktopWeb ? styles.modalOverlay : styles.occFullPage}>
-          <View style={isDesktopWeb ? [styles.modalSheet, styles.occModalSheetTight, styles.occModalSheetWide] : [styles.occFullPageInner, { paddingTop: insets.top + 12 }]}>
+          <View style={isDesktopWeb ? [styles.modalSheet, styles.occModalSheetTight] : [styles.occFullPageInner, { paddingTop: insets.top + 12 }]}>
             <View style={styles.occupiedModalHeader}>
               {/* Mobile is a full-page slide-in → back arrow on the left (phone convention).
                   Desktop web is a dialog → the close (X) belongs on the top-RIGHT, so the
@@ -926,7 +926,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 actually scroll — a fixed maxHeight there is what works (matches the pattern
                 already used by POS's own bill modal). Mobile's occFullPageInner is a true
                 flex-stretched full screen, so flex:1 is fine there. */}
-            <ScrollView style={[styles.occModalScroll, isDesktopWeb && { flex: undefined, maxHeight: Dimensions.get('window').height * 0.8 }]} showsVerticalScrollIndicator={false}>
+            {/* Desktop web shows the scrollbar so it's obvious the settle panel scrolls
+                below the fold (Adjustments + payment sit under the Grand Total); the mobile
+                full-page keeps its clean, indicator-free scroll. */}
+            <ScrollView style={[styles.occModalScroll, isDesktopWeb && { flex: undefined, maxHeight: Dimensions.get('window').height * 0.8 }]} showsVerticalScrollIndicator={isDesktopWeb} persistentScrollbar={isDesktopWeb}>
               {!occupiedOrder && (
                 <ActivityIndicator size="small" color={COLORS.accent} style={{ marginVertical: 24 }} />
               )}
@@ -1084,9 +1087,6 @@ export const TableManagementScreen = ({ navigation }: any) => {
                     payingPending={payOrder.isPending}
                     printingPending={printingBill}
                     offerServeOnSettle
-                    // Desktop web has the width for a two-column settle panel (Bill Summary |
-                    // Adjustments); on mobile/native it's ignored and stays a single stack.
-                    desktopTwoColumn
                     onMarkPaid={handleMarkPaid}
                     onPrintBill={handlePrintBill}
                     onSendWhatsApp={sendBillViaWhatsApp}
@@ -1619,13 +1619,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   // Tighter padding for the occupied-order modal specifically (per design request) —
   // scoped here so the other dialogs sharing modalSheet keep their roomier padding.
   occModalSheetTight: {
-    padding: 10,
-  },
-  // The occupied-order modal lays its settle panel out in two columns on desktop web
-  // (OrderBillActions' desktopTwoColumn), which needs more room than the default 760 cap
-  // the confirm-style dialogs share — so widen it here, scoped to this modal only.
-  occModalSheetWide: {
-    maxWidth: 1000,
+    padding: isDesktopWeb ? 6 : 10,
   },
   // Occupied-order modal on mobile: full page, not a centered popup — there's a lot to
   // fit (items, bill, payment) and this is the screen a QSR counter lives in all day.
@@ -1634,13 +1628,13 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   // minHeight: 0 overrides a flex item's default min-height:auto — without it, this
   // ScrollView refuses to shrink below its content's natural height and pushes the modal
   // taller than its own maxHeight instead of clipping and actually scrolling.
-  occModalScroll: { flex: 1, minHeight: 0, marginTop: isDesktopWeb ? 3 : 3 },
+  occModalScroll: { flex: 1, minHeight: 0, marginTop: isDesktopWeb ? 1 : 3 },
   occModalScrollDesktop: { flex: undefined, maxHeight: 560 },
   occupiedModalHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: isDesktopWeb ? 7 : 7.5,
-    marginBottom: isDesktopWeb ? 4 : 5,
+    marginBottom: isDesktopWeb ? 2 : 5,
   },
   // Fixed-size hit target, same pattern as CafeSettingsScreen's header iconBtn — gives the
   // back icon a clean box to center in so it lines up with the title on the row's cross-axis.
@@ -1674,7 +1668,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     flexDirection: 'row',
     alignItems: 'center',
     gap: isDesktopWeb ? 6 : 6,
-    marginBottom: isDesktopWeb ? 4 : 4.5,
+    marginBottom: isDesktopWeb ? 2 : 4.5,
   },
   orderHeaderIconBtn: {
     width: isDesktopWeb ? 30 : 26,
@@ -1768,35 +1762,35 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     backgroundColor: COLORS.divider,
   },
   // --- Occupied modal: lifecycle sub-views ---
-  occItemsScroll: { marginTop: isDesktopWeb ? 4 : 5 },
+  occItemsScroll: { marginTop: isDesktopWeb ? 2 : 5 },
   occItemRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: isDesktopWeb ? 6 : 6,
-    paddingVertical: isDesktopWeb ? 3 : 3.5,
+    paddingVertical: isDesktopWeb ? 1.5 : 3.5,
     borderBottomWidth: 1,
     borderBottomColor: COLORS.divider,
   },
-  occItemName: { fontSize: fs(14), color: COLORS.heading, flex: 1, minWidth: 0 },
-  occItemStatusDot: { width: 8, height: 8, borderRadius: 4 },
-  occItemStatusPill: { borderRadius: 6, paddingHorizontal: isDesktopWeb ? 5 : 5.25, paddingVertical: isDesktopWeb ? 1.5 : 1.5 },
-  occItemStatusPillText: { fontSize: fs(9.5), fontWeight: '800', letterSpacing: 0.3 },
+  occItemName: { fontSize: fs(isDesktopWeb ? 12.5 : 14), color: COLORS.heading, flex: 1, minWidth: 0 },
+  occItemStatusDot: { width: isDesktopWeb ? 7 : 8, height: isDesktopWeb ? 7 : 8, borderRadius: 4 },
+  occItemStatusPill: { borderRadius: 6, paddingHorizontal: isDesktopWeb ? 4.5 : 5.25, paddingVertical: isDesktopWeb ? 1 : 1.5 },
+  occItemStatusPillText: { fontSize: fs(isDesktopWeb ? 8.5 : 9.5), fontWeight: '800', letterSpacing: 0.3 },
   occUnfiredTag: { backgroundColor: COLORS.dangerAccent, borderRadius: 5, paddingHorizontal: isDesktopWeb ? 4 : 3.75, paddingVertical: isDesktopWeb ? 0.75 : 0.75 },
   occUnfiredTagText: { fontSize: fs(8.5), fontWeight: '800', color: '#FFFFFF', letterSpacing: 0.4 },
   occItemPrice: { fontSize: fs(13), fontWeight: '700', color: COLORS.heading, minWidth: 62, textAlign: 'right' },
-  occBatchGroup: { marginTop: isDesktopWeb ? 7 : 7.5 },
-  occBatchHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: isDesktopWeb ? 3 : 3 },
-  occBatchLabel: { fontSize: fs(11), fontWeight: '700', color: COLORS.muted, letterSpacing: 0.3 },
-  occAddItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, paddingVertical: isDesktopWeb ? 6 : 6, marginTop: isDesktopWeb ? 2 : 2 },
-  occAddItemText: { fontSize: fs(14), fontWeight: '700', color: COLORS.accent },
+  occBatchGroup: { marginTop: isDesktopWeb ? 3 : 7.5 },
+  occBatchHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: isDesktopWeb ? 1 : 3 },
+  occBatchLabel: { fontSize: fs(isDesktopWeb ? 10 : 11), fontWeight: '700', color: COLORS.muted, letterSpacing: 0.3 },
+  occAddItemBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, paddingVertical: isDesktopWeb ? 4 : 6, marginTop: isDesktopWeb ? 1 : 2 },
+  occAddItemText: { fontSize: fs(isDesktopWeb ? 12.5 : 14), fontWeight: '700', color: COLORS.accent },
   occBillRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: isDesktopWeb ? 2 : 2.25 },
   occBillLabel: { fontSize: fs(13), color: COLORS.muted },
   occBillVal: { fontSize: fs(13), fontWeight: '600', color: COLORS.heading },
   occBillTotalLabel: { fontSize: fs(15), fontWeight: '800', color: COLORS.heading },
   occBillTotalVal: { fontSize: fs(18), fontWeight: '800', color: COLORS.heading },
   occFieldInput: { flex: 1, backgroundColor: COLORS.cardAlt, borderWidth: INPUT_BORDER_WIDTH, borderColor: COLORS.inputBorder, borderRadius: 8, paddingHorizontal: isDesktopWeb ? 9 : 9, height: 42, fontSize: fs(16), color: COLORS.heading },
-  occSplitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, backgroundColor: COLORS.cardAlt, borderRadius: 6, paddingVertical: isDesktopWeb ? 6 : 6, marginTop: isDesktopWeb ? 5 : 5 },
-  occSplitBtnText: { fontSize: fs(13), fontWeight: '700', color: COLORS.heading },
+  occSplitBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, backgroundColor: COLORS.cardAlt, borderRadius: 6, paddingVertical: isDesktopWeb ? 4 : 6, marginTop: isDesktopWeb ? 3 : 5 },
+  occSplitBtnText: { fontSize: fs(isDesktopWeb ? 12 : 13), fontWeight: '700', color: COLORS.heading },
   occPickerRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 7 : 7.5, paddingVertical: isDesktopWeb ? 6 : 6, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
   occPickerName: { flex: 1, fontSize: fs(14), color: COLORS.heading },
   occPickerPrice: { fontSize: fs(13), fontWeight: '700', color: COLORS.muted },

@@ -1655,11 +1655,25 @@ export const POSCheckoutScreen = () => {
         </View>
       )}
 
-      <View style={styles.orderHeaderRow}>
-        <View style={styles.orderHeaderLeft}>
+      <View style={styles.orderHeaderCol}>
+        <View style={styles.orderHeaderTopRow}>
           <Text style={styles.orderTitle}>{resumeMode ? 'New Items' : 'Current Order'}</Text>
-          <View style={styles.orderSubtitleRow}>
-            {resumeMode ? (
+          <View style={styles.orderHeaderActions}>
+            {(resumeMode || (orderType !== 'QSR' && orderType !== 'CASH')) && (
+              <TouchableOpacity style={styles.holdHeaderBtn} onPress={holdOrder} disabled={submitting}>
+                <Icon name="clock-outline" size={14} color={COLORS.heading} />
+                <Text style={styles.holdHeaderBtnText}>{resumeMode ? 'Add' : 'Hold'}</Text>
+              </TouchableOpacity>
+            )}
+            <Tooltip label="Clear cart" placement="left">
+              <TouchableOpacity style={styles.clearBtn} onPress={clearCart}>
+                <Icon name="trash-can-outline" size={18} color={COLORS.dangerAccent} />
+              </TouchableOpacity>
+            </Tooltip>
+          </View>
+        </View>
+        <View style={styles.orderSubtitleRow}>
+          {resumeMode ? (
               <Text style={styles.orderSubtitleStatic}>
                 Table #{resumeOrder?.tableCode ?? selectedTable} · {resumeOrder?.guestName || 'Guest'}
               </Text>
@@ -1698,19 +1712,7 @@ export const POSCheckoutScreen = () => {
                 )}
               </>
             )}
-          </View>
         </View>
-        {(resumeMode || (orderType !== 'QSR' && orderType !== 'CASH')) && (
-          <TouchableOpacity style={styles.holdHeaderBtn} onPress={holdOrder} disabled={submitting}>
-            <Icon name="clock-outline" size={14} color={COLORS.heading} />
-            <Text style={styles.holdHeaderBtnText}>{resumeMode ? 'Add' : 'Hold'}</Text>
-          </TouchableOpacity>
-        )}
-        <Tooltip label="Clear cart" placement="left">
-          <TouchableOpacity style={styles.clearBtn} onPress={clearCart}>
-            <Icon name="trash-can-outline" size={18} color={COLORS.dangerAccent} />
-          </TouchableOpacity>
-        </Tooltip>
       </View>
 
       {cart.length === 0 && (
@@ -2770,8 +2772,8 @@ export const POSCheckoutScreen = () => {
         animationType="fade"
         onRequestClose={closeTablePicker}
       >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? styles.optionsSheetDesktop : styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Select a Table</Text>
               <CloseButton onPress={closeTablePicker} size={22} />
@@ -2853,8 +2855,8 @@ export const POSCheckoutScreen = () => {
         animationType="fade"
         onRequestClose={() => setGuestModalVisible(false)}
       >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? styles.optionsSheetDesktop : styles.modalSheet}>
             <View style={styles.modalHeader}>
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Guest Details</Text>
               <CloseButton onPress={() => setGuestModalVisible(false)} size={22} />
@@ -3408,17 +3410,20 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   resumeKot: { marginTop: 3 },
   resumeKotLabel: { fontSize: 11, fontWeight: '700', color: COLORS.accent, letterSpacing: 0.2 },
   resumeKotItem: { fontSize: 12, color: COLORS.muted, marginLeft: 4, marginTop: 0.5 },
-  orderHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+  orderHeaderCol: {
     paddingHorizontal: 10,
     marginBottom: 6,
   },
-  orderHeaderLeft: {
-    flex: 1,
-    minWidth: 0,
-    marginRight: 6,
+  orderHeaderTopRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  orderHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    flexShrink: 0,
   },
   orderTitle: {
     fontSize: 20,

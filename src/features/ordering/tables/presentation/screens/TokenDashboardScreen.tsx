@@ -390,7 +390,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                     it wouldn't actually scroll — a fixed maxHeight there is what works
                     (matches the pattern already used by POS's own bill modal). Mobile's
                     fullPageInner is a true flex-stretched full screen, so flex:1 is fine there. */}
-                <ScrollView style={[styles.itemsScroll, isDesktopWeb && styles.itemsScrollDesktop]} showsVerticalScrollIndicator={false}>
+                <ScrollView style={[styles.itemsScroll, isDesktopWeb && styles.itemsScrollDesktop]} showsVerticalScrollIndicator={isDesktopWeb} persistentScrollbar={isDesktopWeb}>
                   {/* Grouped by KOT/fire-batch — each round can be cancelled independently
                       of every other round already on this token (see Cancel KOT below). */}
                   {order.fireBatches.map((batch) => {
@@ -578,11 +578,11 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   // maxHeight caps the card so itemsScroll's flex:1 below has a bounded height to work
   // with — without it, a tall order (more items, more billing adjustments) just grows the
   // card past the viewport with nothing scrollable to reach the Settle button.
-  modalSheet: { width: '100%', maxWidth: 760, maxHeight: '94%', backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 17 : 16.5 },
+  modalSheet: { width: '100%', maxWidth: 760, maxHeight: '94%', backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 12 : 16.5 },
   // Order-detail modal on mobile: full page, not a centered popup.
   fullPage: { flex: 1, backgroundColor: COLORS.background },
   fullPageInner: { flex: 1, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingBottom: isDesktopWeb ? 16 : 12 },
-  modalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: isDesktopWeb ? 5 : 4.5, marginBottom: isDesktopWeb ? 4 : 3 },
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: isDesktopWeb ? 5 : 4.5, marginBottom: isDesktopWeb ? 2 : 3 },
   modalTitle: { flex: 1, minWidth: 0, fontSize: isDesktopWeb ? 18 : 14, fontWeight: '800', color: COLORS.heading },
   headerActions: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 5 : 4.5 },
   headerPill: {
@@ -591,24 +591,24 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   headerPillText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
   headerPillTextAccent: { fontSize: 12, fontWeight: '700', color: COLORS.accent },
-  modalLine: { fontSize: isDesktopWeb ? 13 : 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 7 : 6 },
+  modalLine: { fontSize: isDesktopWeb ? 12 : 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 3 : 6 },
   reasonInput: { borderWidth: 1, borderColor: COLORS.divider, borderRadius: 8, paddingHorizontal: isDesktopWeb ? 11 : 10.5, paddingVertical: isDesktopWeb ? 10 : 9, fontSize: isDesktopWeb ? 14 : 16, color: COLORS.heading, marginBottom: isDesktopWeb ? 13 : 12 },
   // minHeight: 0 overrides a flex item's default min-height:auto — without it, a ScrollView
   // refuses to shrink below its content's natural height and instead pushes the modal (and
   // whatever's pinned below it) taller than the card's own maxHeight, rather than clipping
   // and actually scrolling.
-  itemsScroll: { flex: 1, minHeight: 0, marginBottom: isDesktopWeb ? 7 : 6 },
+  itemsScroll: { flex: 1, minHeight: 0, marginBottom: isDesktopWeb ? 3 : 6 },
   itemsScrollDesktop: { flex: undefined, maxHeight: 560 },
-  kotGroup: { marginBottom: isDesktopWeb ? 7 : 7.5 },
-  kotHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: isDesktopWeb ? 5 : 4.5 },
-  kotLabel: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
-  cancelKotText: { fontSize: 12, fontWeight: '700', color: COLORS.dangerAccent },
-  unfiredTag: { alignSelf: 'flex-start', backgroundColor: COLORS.warningBg, borderRadius: 999, paddingHorizontal: isDesktopWeb ? 6 : 6, paddingVertical: isDesktopWeb ? 2 : 1.5, marginLeft: 'auto' },
-  unfiredTagText: { fontSize: 10, fontWeight: '800', color: COLORS.warning },
-  itemRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 8 : 7.5, paddingVertical: isDesktopWeb ? 6 : 6, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
-  itemName: { flex: 1, minWidth: 0, fontSize: isDesktopWeb ? 13 : 12, color: COLORS.heading },
-  itemStatusPill: { paddingHorizontal: isDesktopWeb ? 8 : 7.5, paddingVertical: isDesktopWeb ? 5 : 3.75, borderRadius: 999 },
-  itemStatusPillText: { fontSize: 11, fontWeight: '800' },
+  kotGroup: { marginBottom: isDesktopWeb ? 3 : 7.5 },
+  kotHeaderRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: isDesktopWeb ? 1.5 : 4.5 },
+  kotLabel: { fontSize: isDesktopWeb ? 10 : 12, fontWeight: '700', color: COLORS.muted },
+  cancelKotText: { fontSize: isDesktopWeb ? 11 : 12, fontWeight: '700', color: COLORS.dangerAccent },
+  unfiredTag: { alignSelf: 'flex-start', backgroundColor: COLORS.warningBg, borderRadius: 999, paddingHorizontal: isDesktopWeb ? 5 : 6, paddingVertical: isDesktopWeb ? 1 : 1.5, marginLeft: 'auto' },
+  unfiredTagText: { fontSize: isDesktopWeb ? 8.5 : 10, fontWeight: '800', color: COLORS.warning },
+  itemRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 8 : 7.5, paddingVertical: isDesktopWeb ? 1.5 : 6, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  itemName: { flex: 1, minWidth: 0, fontSize: isDesktopWeb ? 12 : 12, color: COLORS.heading },
+  itemStatusPill: { paddingHorizontal: isDesktopWeb ? 4.5 : 7.5, paddingVertical: isDesktopWeb ? 1 : 3.75, borderRadius: 999 },
+  itemStatusPillText: { fontSize: isDesktopWeb ? 8.5 : 11, fontWeight: '800' },
   modalActions: { flexDirection: 'row', gap: 6, marginTop: 6 },
   modalCancelBtn: { flex: 1, alignItems: 'center', paddingVertical: 7.5, borderRadius: 6, backgroundColor: COLORS.cardAlt },
   modalCancelText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
