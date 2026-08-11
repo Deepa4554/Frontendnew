@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -45,10 +45,42 @@ const sinceLabel = (iso: string) => {
  * ten-second interaction at a counter, and the list you came from is the thing you want back
  * the instant it's done.
  */
+// One khata row. React.memo'd so the whole list skips re-render while the user types in the
+// search box (each keystroke re-queries and re-renders the screen). Module-level helpers
+// (money/sinceLabel/webNoOutline) and stable props keep a row rendering only when its own data changes.
+const KhataCard = React.memo(({ c, styles, COLORS, onOpen }: {
+  c: KhataCustomer;
+  styles: ReturnType<typeof makeStyles>;
+  COLORS: ReturnType<typeof useThemeColors>;
+  onOpen: (c: KhataCustomer) => void;
+}) => {
+  const clear = c.outstanding <= 0.005;
+  return (
+    <TouchableOpacity style={[styles.khataCard, webNoOutline]} onPress={() => onOpen(c)}>
+      <View style={styles.avatarBox}>
+        <Text style={styles.avatarText}>{c.name.trim().charAt(0).toUpperCase() || '?'}</Text>
+      </View>
+      <View style={{ flex: 1 }}>
+        <View style={styles.cardTopRow}>
+          <Text style={styles.customerName} numberOfLines={1}>{c.name}</Text>
+          <Text style={[styles.outstandingText, clear && styles.clearText]}>
+            {clear ? 'Clear' : money(c.outstanding)}
+          </Text>
+        </View>
+        <Text style={styles.customerMeta} numberOfLines={1}>
+          {c.phone ?? 'No number'} · {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · last {sinceLabel(c.lastActivityAt)}
+        </Text>
+      </View>
+      <Icon name="chevron-right" size={18} color={COLORS.muted} />
+    </TouchableOpacity>
+  );
+});
+
 export const KhatabookScreen = () => {
   const { isDesktopWeb } = useResponsive();
   const COLORS = useThemeColors();
-  const styles = makeStyles(COLORS, isDesktopWeb);
+  // Memoized so the StyleSheet isn't rebuilt every keystroke and KhataCard's React.memo holds.
+  const styles = useMemo(() => makeStyles(COLORS, isDesktopWeb), [COLORS, isDesktopWeb]);
   const navigation = useNavigation<any>();
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
@@ -76,12 +108,14 @@ export const KhatabookScreen = () => {
   const current = khata?.customer ?? openCustomer;
   const outstanding = current?.outstanding ?? 0;
 
-  const openLedger = (customer: KhataCustomer) => {
+  // useCallback so its identity is stable — otherwise KhataCard's React.memo would re-render the
+  // whole list on every keystroke. All the setters it calls are already stable.
+  const openLedger = useCallback((customer: KhataCustomer) => {
     setOpenCustomer(customer);
     setSettleAmount('');
     setSettleMethod('Cash');
     setSettleNote('');
-  };
+  }, []);
 
   const submitSettle = async () => {
     if (!openCustomer) return;
@@ -204,28 +238,9 @@ export const KhatabookScreen = () => {
                 </Text>
               )}
 
-              {customers.map((c) => {
-                const clear = c.outstanding <= 0.005;
-                return (
-                  <TouchableOpacity key={c.customerId} style={[styles.khataCard, webNoOutline]} onPress={() => openLedger(c)}>
-                    <View style={styles.avatarBox}>
-                      <Text style={styles.avatarText}>{c.name.trim().charAt(0).toUpperCase() || '?'}</Text>
-                    </View>
-                    <View style={{ flex: 1 }}>
-                      <View style={styles.cardTopRow}>
-                        <Text style={styles.customerName} numberOfLines={1}>{c.name}</Text>
-                        <Text style={[styles.outstandingText, clear && styles.clearText]}>
-                          {clear ? 'Clear' : money(c.outstanding)}
-                        </Text>
-                      </View>
-                      <Text style={styles.customerMeta} numberOfLines={1}>
-                        {c.phone ?? 'No number'} · {c.entryCount} {c.entryCount === 1 ? 'entry' : 'entries'} · last {sinceLabel(c.lastActivityAt)}
-                      </Text>
-                    </View>
-                    <Icon name="chevron-right" size={18} color={COLORS.muted} />
-                  </TouchableOpacity>
-                );
-              })}
+              {customers.map((c) => (
+                <KhataCard key={c.customerId} c={c} styles={styles} COLORS={COLORS} onOpen={openLedger} />
+              ))}
             </>
           )}
         </ScrollView>

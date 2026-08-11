@@ -176,9 +176,13 @@ const NoteSuggestionChips = ({
  * React Query's structural sharing keeps an unchanged item's identity stable across
  * refetches — so a row re-renders only when its own item's data actually changes.
  * The JSX is exactly the block that previously lived inline in menuAndCategoryPicker. */
-const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesktopWeb, isTablet }: {
+const MenuRow = React.memo(({ item, qty, onPress, onDecrement, onTogglePin, styles, COLORS, isDesktopWeb, isTablet }: {
   item: ApiMenuItem;
+  // Total units of this menu item currently in the cart (summed across every variant/
+  // topping/MRP line it produced). 0 → the ADD button; >0 → the −/qty/+ stepper.
+  qty: number;
   onPress: (item: ApiMenuItem) => void;
+  onDecrement: (item: ApiMenuItem) => void;
   onTogglePin: (item: ApiMenuItem) => void;
   styles: ReturnType<typeof makeStyles>;
   COLORS: ReturnType<typeof useThemeColors>;
@@ -278,10 +282,35 @@ const MenuRow = React.memo(({ item, onPress, onTogglePin, styles, COLORS, isDesk
           />
         </TouchableOpacity>
       </Tooltip>
-      <View style={[styles.addBtn, !item.available && styles.addBtnDisabled]}>
-        <Text style={styles.addBtnText}>ADD</Text>
-        <Icon name="plus" size={11} color={COLORS.accent} />
-      </View>
+      {qty > 0 ? (
+        // Already in the cart — the ADD button becomes an inline stepper so the count is
+        // visible and adjustable without opening the cart. − removes one unit (deletes the
+        // line at 0), + rings up another (re-runs the same add flow the row body uses, so a
+        // variant/topping item re-opens its picker). Both are nested touchables, so tapping
+        // them never falls through to the row's own add-on-press.
+        <View style={styles.menuQtyStepper}>
+          <TouchableOpacity
+            onPress={() => onDecrement(item)}
+            hitSlop={{ top: 8, bottom: 8, left: 6, right: 4 }}
+            style={styles.menuQtyBtn}
+          >
+            <Icon name="minus" size={13} color={COLORS.cardAlt} />
+          </TouchableOpacity>
+          <Text style={styles.menuQtyValue}>{qty}</Text>
+          <TouchableOpacity
+            onPress={() => onPress(item)}
+            hitSlop={{ top: 8, bottom: 8, left: 4, right: 6 }}
+            style={styles.menuQtyBtn}
+          >
+            <Icon name="plus" size={13} color={COLORS.cardAlt} />
+          </TouchableOpacity>
+        </View>
+      ) : (
+        <View style={[styles.addBtn, !item.available && styles.addBtnDisabled]}>
+          <Text style={styles.addBtnText}>ADD</Text>
+          <Icon name="plus" size={11} color={COLORS.accent} />
+        </View>
+      )}
     </View>
   </TouchableOpacity>
   );
@@ -641,6 +670,35 @@ export const POSCheckoutScreen = () => {
   const addToCartRef = useRef(addToCart);
   addToCartRef.current = addToCart;
   const onMenuRowPress = useCallback((item: ApiMenuItem) => addToCartRef.current(item), []);
+
+  // Total units of each menu item sitting in the cart, keyed by menuItemId — one item can
+  // span several cart lines (variants, toppings, MRP rates), so they're summed. Feeds each
+  // MenuRow's qty prop, which switches it between the ADD button and the −/qty/+ stepper.
+  const menuItemQty = useMemo(() => {
+    const map: Record<number, number> = {};
+    for (const line of cart) map[line.menuItemId] = (map[line.menuItemId] ?? 0) + line.qty;
+    return map;
+  }, [cart]);
+
+  // The stepper's "−": drop one unit of this menu item from the cart. Removes it from the
+  // most-recently-added matching line (and deletes that line when it hits 0) — for a plain
+  // one-tap item there's only ever the single line, and for a multi-line item this peels
+  // back the last thing added, which is the intuitive undo.
+  const decrementMenuItem = (item: ApiMenuItem) => {
+    setCart((prev) => {
+      let idx = -1;
+      for (let i = prev.length - 1; i >= 0; i--) {
+        if (prev[i].menuItemId === item.id) { idx = i; break; }
+      }
+      if (idx === -1) return prev;
+      const line = prev[idx];
+      if (line.qty > 1) return prev.map((c, i) => (i === idx ? { ...c, qty: c.qty - 1 } : c));
+      return prev.filter((_, i) => i !== idx);
+    });
+  };
+  const decrementMenuItemRef = useRef(decrementMenuItem);
+  decrementMenuItemRef.current = decrementMenuItem;
+  const onMenuRowDecrement = useCallback((item: ApiMenuItem) => decrementMenuItemRef.current(item), []);
 
   // Pin/unpin straight from the till — see MenuRow's pin button. Stable identity for the same
   // React.memo reason as onMenuRowPress above; the mutation object itself never changes identity,
@@ -2018,7 +2076,9 @@ export const POSCheckoutScreen = () => {
             <MenuRow
               key={item.id}
               item={item}
+              qty={menuItemQty[item.id] ?? 0}
               onPress={onMenuRowPress}
+              onDecrement={onMenuRowDecrement}
               onTogglePin={onMenuRowTogglePin}
               styles={styles}
               COLORS={COLORS}
@@ -2877,7 +2937,7 @@ export const POSCheckoutScreen = () => {
             <View style={styles.guestInputWrap}>
               <TextInput
                 style={styles.guestInput}
-                placeholder="e.g. 9876543210"
+                placeholder="10-digit mobile number"
                 placeholderTextColor={COLORS.placeholder}
                 value={guestPhoneDraft}
                 onChangeText={(text) => setGuestPhoneDraft(text.replace(/[^0-9]/g, '').slice(0, 10))}
@@ -2953,7 +3013,7 @@ export const POSCheckoutScreen = () => {
                 <View style={styles.guestInputWrap}>
                   <TextInput
                     style={styles.guestInput}
-                    placeholder="9876543210"
+                    placeholder="10-digit mobile number"
                     placeholderTextColor={COLORS.placeholder}
                     value={guestPhoneDraft}
                     onChangeText={(text) => setGuestPhoneDraft(text.replace(/[^0-9]/g, '').slice(0, 10))}
@@ -3394,6 +3454,32 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
     fontWeight: '800',
     color: COLORS.accent,
     letterSpacing: 0.2,
+  },
+  // Replaces the ADD button in-place once the item is in the cart — same footprint (flex:1,
+  // shares the action row with the pin), filled accent so an "in the order" item reads at a
+  // glance against the outlined ADD buttons around it.
+  menuQtyStepper: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderRadius: 6,
+    backgroundColor: COLORS.accent,
+    paddingVertical: 1,
+    paddingHorizontal: 2,
+  },
+  menuQtyBtn: {
+    width: 22,
+    paddingVertical: 3,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  menuQtyValue: {
+    fontSize: 12,
+    fontWeight: '800',
+    color: COLORS.cardAlt,
+    minWidth: 16,
+    textAlign: 'center',
   },
   resumeBanner: {
     marginHorizontal: 10,

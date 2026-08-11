@@ -47,6 +47,62 @@ const PLAN_OPTIONS: { key: SubscriptionTier; label: string }[] = [
 const PLAN_LABEL: Record<string, string> = { FREETRIAL: 'Free Trial', STARTER: 'Basic', PROFESSIONAL: 'Plus', ENTERPRISE: 'Enterprise', NONE: 'No plan' };
 const planLabel = (plan: string) => PLAN_LABEL[plan] ?? plan;
 
+// One tenant row. React.memo'd so the whole list skips re-render while the user types in the
+// search box — module-level `styles`/`COLORS` are already stable, and the passed setters are
+// stable setState functions, so a row re-renders only when its own tenant data changes.
+const TenantCard = React.memo(({ tenant, onViewSales, onManageScreens, onManageStaff, onChangePlan }: {
+  tenant: ApiTenantSummary;
+  onViewSales: (t: ApiTenantSummary) => void;
+  onManageScreens: (t: ApiTenantSummary) => void;
+  onManageStaff: (t: ApiTenantSummary) => void;
+  onChangePlan: (t: ApiTenantSummary) => void;
+}) => {
+  const style = STATUS_STYLES[tenant.status] ?? STATUS_STYLES.TRIAL;
+  const expiresText = tenant.planExpiresAt
+    ? new Date(tenant.planExpiresAt) < new Date()
+      ? 'Expired'
+      : `Expires ${new Date(tenant.planExpiresAt).toLocaleDateString()}`
+    : 'No expiry';
+  return (
+    <View style={styles.tenantCard}>
+      <View style={styles.tenantTopRow}>
+        <Text style={styles.tenantName}>{tenant.name}</Text>
+        <View style={[styles.statusPill, { backgroundColor: style.bg }]}>
+          <Text style={[styles.statusPillText, { color: style.text }]}>{tenant.status}</Text>
+        </View>
+      </View>
+      <View style={styles.metaRow}>
+        <Icon name="domain" size={14} color={COLORS.muted} />
+        <Text style={styles.metaText}>{tenant.branchCount} branches · {tenant.staffCount} staff</Text>
+      </View>
+      <Text style={styles.expiryText}>{expiresText}</Text>
+
+      <View style={styles.tenantBottomRow}>
+        <View style={styles.planPill}>
+          <Text style={styles.planPillText}>{planLabel(tenant.plan)}</Text>
+        </View>
+        <View style={{ flexDirection: 'row', gap: 8 }}>
+          <TouchableOpacity style={styles.salesBtn} onPress={() => onViewSales(tenant)}>
+            <Icon name="chart-line" size={13} color={COLORS.heading} />
+            <Text style={styles.salesBtnText}>Sales</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.salesBtn} onPress={() => onManageScreens(tenant)}>
+            <Icon name="shield-account-outline" size={13} color={COLORS.heading} />
+            <Text style={styles.salesBtnText}>Screens</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.salesBtn} onPress={() => onManageStaff(tenant)}>
+            <Icon name="account-cog-outline" size={13} color={COLORS.heading} />
+            <Text style={styles.salesBtnText}>Staff Access</Text>
+          </TouchableOpacity>
+          <TouchableOpacity style={styles.manageBtn} onPress={() => onChangePlan(tenant)}>
+            <Text style={styles.manageBtnText}>Change Plan</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    </View>
+  );
+});
+
 export const TenantManagementScreen = () => {
   const { isDesktopWeb } = useResponsive();
   const [search, setSearch] = useState('');
@@ -120,52 +176,16 @@ export const TenantManagementScreen = () => {
 
             {!isLoading && filtered.length === 0 && <Text style={styles.emptyText}>No tenants found.</Text>}
 
-            {filtered.map((tenant) => {
-              const style = STATUS_STYLES[tenant.status] ?? STATUS_STYLES.TRIAL;
-              const expiresText = tenant.planExpiresAt
-                ? new Date(tenant.planExpiresAt) < new Date()
-                  ? 'Expired'
-                  : `Expires ${new Date(tenant.planExpiresAt).toLocaleDateString()}`
-                : 'No expiry';
-              return (
-                <View key={tenant.id} style={styles.tenantCard}>
-                  <View style={styles.tenantTopRow}>
-                    <Text style={styles.tenantName}>{tenant.name}</Text>
-                    <View style={[styles.statusPill, { backgroundColor: style.bg }]}>
-                      <Text style={[styles.statusPillText, { color: style.text }]}>{tenant.status}</Text>
-                    </View>
-                  </View>
-                  <View style={styles.metaRow}>
-                    <Icon name="domain" size={14} color={COLORS.muted} />
-                    <Text style={styles.metaText}>{tenant.branchCount} branches · {tenant.staffCount} staff</Text>
-                  </View>
-                  <Text style={styles.expiryText}>{expiresText}</Text>
-
-                  <View style={styles.tenantBottomRow}>
-                    <View style={styles.planPill}>
-                      <Text style={styles.planPillText}>{planLabel(tenant.plan)}</Text>
-                    </View>
-                    <View style={{ flexDirection: 'row', gap: 8 }}>
-                      <TouchableOpacity style={styles.salesBtn} onPress={() => setViewingSales(tenant)}>
-                        <Icon name="chart-line" size={13} color={COLORS.heading} />
-                        <Text style={styles.salesBtnText}>Sales</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.salesBtn} onPress={() => setManagingScreens(tenant)}>
-                        <Icon name="shield-account-outline" size={13} color={COLORS.heading} />
-                        <Text style={styles.salesBtnText}>Screens</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.salesBtn} onPress={() => setManagingStaffAccess(tenant)}>
-                        <Icon name="account-cog-outline" size={13} color={COLORS.heading} />
-                        <Text style={styles.salesBtnText}>Staff Access</Text>
-                      </TouchableOpacity>
-                      <TouchableOpacity style={styles.manageBtn} onPress={() => setManaging(tenant)}>
-                        <Text style={styles.manageBtnText}>Change Plan</Text>
-                      </TouchableOpacity>
-                    </View>
-                  </View>
-                </View>
-              );
-            })}
+            {filtered.map((tenant) => (
+              <TenantCard
+                key={tenant.id}
+                tenant={tenant}
+                onViewSales={setViewingSales}
+                onManageScreens={setManagingScreens}
+                onManageStaff={setManagingStaffAccess}
+                onChangePlan={setManaging}
+              />
+            ))}
           </>
         )}
       </ScrollView>

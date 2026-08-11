@@ -25,7 +25,7 @@ jest.mock('../../../../../core/api/inventoryApi', () => ({
         id: mockNextOrderId++,
         vendorId: req.vendorId ?? null,
         supplierName: req.vendorId ? 'Acme Supplies' : (req.supplierName ?? null),
-        vendorPhone: req.vendorId ? '9876543210' : null,
+        vendorPhone: req.vendorId ? '9000000000' : null,
         note: req.note ?? null,
         status: 'ORDERED',
         createdByName: 'Tester',
@@ -71,7 +71,7 @@ jest.mock('../../../../../core/api/inventoryApi', () => ({
 }));
 
 jest.mock('../../../../../core/api/vendorsApi', () => ({
-  vendorsApi: { list: jest.fn(async () => [{ id: 1, name: 'Acme Supplies', phone: '9876543210', isActive: true }]) },
+  vendorsApi: { list: jest.fn(async () => [{ id: 1, name: 'Acme Supplies', phone: '9000000000', isActive: true }]) },
 }));
 
 jest.mock('../../../../../core/api/settingsApi', () => ({

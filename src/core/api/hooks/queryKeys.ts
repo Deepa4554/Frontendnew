@@ -11,6 +11,8 @@ export const queryKeys = {
   categories: ['categories'] as const,
   menuOnlyQrToken: ['tables', 'menu-qr-token'] as const,
   deliveryQrToken: ['tables', 'delivery-qr-token'] as const,
+  /** Status of the cafe's uploaded PDF menu shown on the general QR — see menuPdfApi. */
+  menuPdf: ['menu-pdf'] as const,
   /** Third-party courier settings for this cafe (Borzo) — see DeliveryPartnerScreen. */
   deliverySettings: ['delivery', 'settings'] as const,
   /** Courier state for one order, and the un-booked price quote for it. */

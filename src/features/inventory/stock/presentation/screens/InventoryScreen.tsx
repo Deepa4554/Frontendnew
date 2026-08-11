@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useMemo, useRef, useState, useEffect } from 'react';
 import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Alert } from 'react-native';
 import { useDispatch, useSelector } from 'react-redux';
@@ -50,11 +50,109 @@ const formatRestockDate = (iso: string | null) => {
 
 const WASTE_REASONS: WasteReasonCode[] = ['Spoiled', 'Expired', 'Burnt', 'Spilled', 'TrialTasting', 'StaffMeal', 'Complimentary', 'Broken', 'Other'];
 
+// One inventory row. React.memo'd + given stable props so the whole list skips re-render while
+// the user types in the search box, or in the Add/Edit modal above the still-mounted list —
+// only a row whose own item data changed re-renders.
+const InventoryItemCard = React.memo(({ item, styles, COLORS, restoreDisabled, onEdit, onAdjust, onWaste, onRestock, onRestore }: {
+  item: InventoryItem;
+  styles: ReturnType<typeof makeStyles>;
+  COLORS: ReturnType<typeof useThemeColors>;
+  restoreDisabled: boolean;
+  onEdit: (item: InventoryItem) => void;
+  onAdjust: (item: InventoryItem) => void;
+  onWaste: (item: InventoryItem) => void;
+  onRestock: (item: InventoryItem) => void;
+  onRestore: (item: InventoryItem) => void;
+}) => {
+  const ratio = item.max > 0 ? Math.max(0, Math.min(1, item.current / item.max)) : 0;
+  return (
+    <View style={[styles.itemCard, !item.isActive && styles.itemCardDeleted]}>
+      <View style={styles.itemTopRow}>
+        <View style={[styles.itemIconBox, item.lowStock && styles.itemIconBoxLow]}>
+          <Icon name={item.icon} size={20} color={item.lowStock ? COLORS.dangerAccent : COLORS.heading} />
+        </View>
+        <View style={styles.itemInfo}>
+          <View style={styles.itemNameRow}>
+            {!item.isActive && (
+              <View style={styles.deletedBadge}>
+                <Text style={styles.deletedBadgeText}>DELETED</Text>
+              </View>
+            )}
+            {item.isActive && item.lowStock && (
+              <View style={styles.lowStockBadge}>
+                <Text style={styles.lowStockText}>LOW STOCK</Text>
+              </View>
+            )}
+            <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+          </View>
+          <Text style={styles.itemCategory}>{item.category}</Text>
+        </View>
+        <View style={styles.itemCurrentBox}>
+          <Text style={styles.itemCurrentLabel}>CURRENT</Text>
+          <Text style={[styles.itemCurrentValue, item.lowStock && { color: COLORS.dangerAccent }]}>
+            {Math.round(item.current * 100) / 100}{item.unit}
+            <Text style={styles.itemMaxValue}> / {item.max}{item.unit}</Text>
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.progressTrack}>
+        <View
+          style={[
+            styles.progressFill,
+            { width: `${ratio * 100}%`, backgroundColor: item.lowStock ? COLORS.dangerAccent : COLORS.heading },
+          ]}
+        />
+      </View>
+
+      <View style={styles.itemBottomRow}>
+        <Text style={styles.lastRestock}>Last Restock: {formatRestockDate(item.lastRestockAt)}</Text>
+        {item.isActive ? (
+          <View style={styles.actionRow}>
+            <Tooltip label="Edit item" placement="top">
+              <TouchableOpacity style={styles.smallActionBtn} onPress={() => onEdit(item)}>
+                <Icon name="pencil-outline" size={14} color={COLORS.heading} />
+              </TouchableOpacity>
+            </Tooltip>
+            <Tooltip label="Adjust stock" placement="top">
+              <TouchableOpacity style={styles.smallActionBtn} onPress={() => onAdjust(item)}>
+                <Icon name="clipboard-edit-outline" size={14} color={COLORS.heading} />
+              </TouchableOpacity>
+            </Tooltip>
+            <Tooltip label="Log waste" placement="top">
+              <TouchableOpacity style={styles.smallActionBtn} onPress={() => onWaste(item)}>
+                <Icon name="delete-outline" size={14} color={COLORS.dangerAccent} />
+              </TouchableOpacity>
+            </Tooltip>
+            <TouchableOpacity
+              style={[styles.restockBtn, item.lowStock && styles.restockBtnFilled]}
+              onPress={() => onRestock(item)}
+            >
+              <Icon name="cart-outline" size={14} color={item.lowStock ? '#FFFFFF' : COLORS.heading} />
+              <Text style={[styles.restockText, item.lowStock && { color: '#FFFFFF' }]}>Restock</Text>
+            </TouchableOpacity>
+          </View>
+        ) : (
+          <TouchableOpacity
+            style={styles.restoreBtn}
+            onPress={() => onRestore(item)}
+            disabled={restoreDisabled}
+          >
+            <Icon name="restore" size={14} color={COLORS.heading} />
+            <Text style={styles.restoreBtnText}>Restore</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+    </View>
+  );
+});
+
 export const InventoryScreen = ({ navigation, route }: any) => {
   const dispatch = useDispatch();
   const COLORS = useThemeColors();
   const { isDesktopWeb } = useResponsive();
-  const styles = makeStyles(COLORS, isDesktopWeb);
+  // Memoized so the StyleSheet isn't rebuilt every keystroke and InventoryItemCard's memo holds.
+  const styles = useMemo(() => makeStyles(COLORS, isDesktopWeb), [COLORS, isDesktopWeb]);
   const insets = useSafeAreaInsets();
   const activeBranchId = useSelector((s: RootState) => s.branch.activeBranchId);
   // Ledger/Purchase Orders/Vendors/Stock Takes/Variance/Food Cost/Expiring are each their
@@ -276,6 +374,29 @@ export const InventoryScreen = ({ navigation, route }: any) => {
     setRestockCost(item.unitCost ? String(item.unitCost) : '');
     setRestockExpiry('');
   };
+
+  // Referentially-stable card callbacks so InventoryItemCard's React.memo holds — otherwise every
+  // search keystroke (and every Add/Edit-modal keystroke) re-renders the whole list. Refs keep the
+  // latest closures without changing identity; setState setters are already stable.
+  const openEditRef = useRef(openEdit);
+  openEditRef.current = openEdit;
+  const onCardEdit = useCallback((item: InventoryItem) => openEditRef.current(item), []);
+
+  const openRestockRef = useRef(openRestock);
+  openRestockRef.current = openRestock;
+  const onCardRestock = useCallback((item: InventoryItem) => openRestockRef.current(item), []);
+
+  const handleRestoreRef = useRef(handleRestore);
+  handleRestoreRef.current = handleRestore;
+  const onCardRestore = useCallback((item: InventoryItem) => handleRestoreRef.current(item), []);
+
+  const onCardAdjust = useCallback((item: InventoryItem) => { setAdjustTarget(item); setAdjustQty(String(item.current)); }, []);
+  const onCardWaste = useCallback((item: InventoryItem) => { setWasteTarget(item); setWasteQty(''); setWasteReason(WASTE_REASONS[0]); setWasteNote(''); }, []);
+
+  const filteredItems = useMemo(
+    () => items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase())),
+    [items, search],
+  );
 
   const submitRestock = async () => {
     // BUG FIX #2: Prevent double-click submissions
@@ -642,89 +763,20 @@ export const InventoryScreen = ({ navigation, route }: any) => {
 
         {isLoading && <SkeletonList rows={5} avatarShape="square" style={{ marginTop: 4 }} />}
 
-        {!isLoading && items.filter((i) => i.name.toLowerCase().includes(search.toLowerCase())).map((item) => {
-          const ratio = item.max > 0 ? Math.max(0, Math.min(1, item.current / item.max)) : 0;
-          return (
-            <View key={item.id} style={[styles.itemCard, !item.isActive && styles.itemCardDeleted]}>
-              <View style={styles.itemTopRow}>
-                <View style={[styles.itemIconBox, item.lowStock && styles.itemIconBoxLow]}>
-                  <Icon name={item.icon} size={20} color={item.lowStock ? COLORS.dangerAccent : COLORS.heading} />
-                </View>
-                <View style={styles.itemInfo}>
-                  <View style={styles.itemNameRow}>
-                    {!item.isActive && (
-                      <View style={styles.deletedBadge}>
-                        <Text style={styles.deletedBadgeText}>DELETED</Text>
-                      </View>
-                    )}
-                    {item.isActive && item.lowStock && (
-                      <View style={styles.lowStockBadge}>
-                        <Text style={styles.lowStockText}>LOW STOCK</Text>
-                      </View>
-                    )}
-                    <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
-                  </View>
-                  <Text style={styles.itemCategory}>{item.category}</Text>
-                </View>
-                <View style={styles.itemCurrentBox}>
-                  <Text style={styles.itemCurrentLabel}>CURRENT</Text>
-                  <Text style={[styles.itemCurrentValue, item.lowStock && { color: COLORS.dangerAccent }]}>
-                    {Math.round(item.current * 100) / 100}{item.unit}
-                    <Text style={styles.itemMaxValue}> / {item.max}{item.unit}</Text>
-                  </Text>
-                </View>
-              </View>
-
-              <View style={styles.progressTrack}>
-                <View
-                  style={[
-                    styles.progressFill,
-                    { width: `${ratio * 100}%`, backgroundColor: item.lowStock ? COLORS.dangerAccent : COLORS.heading },
-                  ]}
-                />
-              </View>
-
-              <View style={styles.itemBottomRow}>
-                <Text style={styles.lastRestock}>Last Restock: {formatRestockDate(item.lastRestockAt)}</Text>
-                {item.isActive ? (
-                  <View style={styles.actionRow}>
-                    <Tooltip label="Edit item" placement="top">
-                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => openEdit(item)}>
-                        <Icon name="pencil-outline" size={14} color={COLORS.heading} />
-                      </TouchableOpacity>
-                    </Tooltip>
-                    <Tooltip label="Adjust stock" placement="top">
-                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => { setAdjustTarget(item); setAdjustQty(String(item.current)); }}>
-                        <Icon name="clipboard-edit-outline" size={14} color={COLORS.heading} />
-                      </TouchableOpacity>
-                    </Tooltip>
-                    <Tooltip label="Log waste" placement="top">
-                      <TouchableOpacity style={styles.smallActionBtn} onPress={() => { setWasteTarget(item); setWasteQty(''); setWasteReason(WASTE_REASONS[0]); setWasteNote(''); }}>
-                        <Icon name="delete-outline" size={14} color={COLORS.dangerAccent} />
-                      </TouchableOpacity>
-                    </Tooltip>
-                    <TouchableOpacity
-                      style={[styles.restockBtn, item.lowStock && styles.restockBtnFilled]}
-                      onPress={() => openRestock(item)}
-                    >
-                      <Icon name="cart-outline" size={14} color={item.lowStock ? '#FFFFFF' : COLORS.heading} />
-                      <Text style={[styles.restockText, item.lowStock && { color: '#FFFFFF' }]}>Restock</Text>
-                    </TouchableOpacity>
-                  </View>
-                ) : (
-                  <TouchableOpacity
-                    style={styles.restoreBtn}
-                    onPress={() => handleRestore(item)}
-                    disabled={reactivateInventoryItem.isPending}
-                  >
-                    <Icon name="restore" size={14} color={COLORS.heading} />
-                    <Text style={styles.restoreBtnText}>Restore</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-            </View>
-          );
-        })}
+        {!isLoading && filteredItems.map((item) => (
+          <InventoryItemCard
+            key={item.id}
+            item={item}
+            styles={styles}
+            COLORS={COLORS}
+            restoreDisabled={reactivateInventoryItem.isPending}
+            onEdit={onCardEdit}
+            onAdjust={onCardAdjust}
+            onWaste={onCardWaste}
+            onRestock={onCardRestock}
+            onRestore={onCardRestore}
+          />
+        ))}
       </ScrollView>
       </ScreenContainer>
 

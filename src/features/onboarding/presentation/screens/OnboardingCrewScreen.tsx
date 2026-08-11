@@ -196,7 +196,7 @@ export const OnboardingCrewScreen = ({ navigation }: any) => {
             style={styles.input}
             value={contact}
             onChangeText={setContact}
-            placeholder="9876543210 or barista@cafe.com"
+            placeholder="Mobile number or barista@cafe.com"
             placeholderTextColor={COLORS.placeholder}
             autoCapitalize="none"
           />

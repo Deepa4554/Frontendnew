@@ -97,7 +97,7 @@ export const LoginScreen = ({ navigation }: any) => {
               style={[styles.input, webNoOutline]}
               value={value}
               onChangeText={(t) => { onChange(t); if (error) dispatch(clearError()); }}
-              placeholder="manager@prabandhos.ai or 9876543210"
+              placeholder="manager@prabandhos.ai"
               placeholderTextColor={COLORS.placeholder}
               keyboardType={emailKeyboardType}
               autoCapitalize="none"

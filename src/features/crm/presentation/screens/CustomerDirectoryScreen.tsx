@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Image, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,18 +23,70 @@ const hoverTitle = (text: string) => (Platform.OS === 'web' ? ({ title: text } a
 import { SearchClearButton } from '../../../../shared/components/atoms/SearchClearButton';
 
 import { modalHeadingOverride } from '../../../../shared/design/commonStyles';
-export const CustomerDirectoryScreen = ({ navigation }: any) => {
-  const dispatch = useDispatch();
-  const COLORS = useThemeColors();
-  const { isDesktopWeb, isTablet } = useResponsive();
-  const styles = makeStyles(COLORS, isDesktopWeb, isTablet);
-  const insets = useSafeAreaInsets();
+
+type DirectoryMember = NonNullable<ReturnType<typeof useCustomers>['data']>['items'][number];
+
+// One directory row. React.memo'd + given stable props so the whole list skips re-render while
+// the user types in the search box (each keystroke re-queries and re-renders the screen) or in
+// the Add Customer modal above the still-mounted list. React Query's structural sharing keeps an
+// unchanged customer's identity stable, so a row re-renders only when its own data changes.
+const MemberCard = React.memo(({ m, styles, COLORS, isDesktopWeb, onOpenProfile }: {
+  m: DirectoryMember;
+  styles: ReturnType<typeof makeStyles>;
+  COLORS: ReturnType<typeof useThemeColors>;
+  isDesktopWeb: boolean;
+  onOpenProfile: (id: number) => void;
+}) => {
   const TIER_STYLES: Record<MembershipTier, { bg: string; text: string }> = {
     PLATINUM: { bg: '#5B4636', text: '#FFFFFF' },
     GOLD: { bg: COLORS.heading, text: '#FFFFFF' },
     SILVER: { bg: '#9E9186', text: '#FFFFFF' },
     BRONZE: { bg: COLORS.vibeCrema, text: COLORS.heading },
   };
+  const tier = TIER_STYLES[m.tier] ?? TIER_STYLES.BRONZE;
+  const daysSinceVisit = Math.floor((Date.now() - new Date(m.lastVisitAt).getTime()) / 86400000);
+  const lapsing = daysSinceVisit >= 21 ? `Lapsing (Last visit: ${daysSinceVisit}d ago)` : null;
+  const memberMetaText = `${m.visitCount} Visits · ${m.visitsLast30Days} this month · ${m.totalPoints.toLocaleString()} pts`;
+  return (
+    <TouchableOpacity
+      style={[styles.memberCard, isDesktopWeb && styles.memberCardDesktop, lapsing && styles.memberCardLapsing]}
+      onPress={() => onOpenProfile(m.id)}
+      activeOpacity={0.85}
+    >
+      {m.profilePhotoUrl ? (
+        <Image source={{ uri: m.profilePhotoUrl }} style={styles.memberImage} />
+      ) : (
+        <InitialsAvatar name={m.name} size={40} style={{ borderRadius: 11 }} />
+      )}
+      <View style={styles.memberInfo}>
+        <Text style={styles.memberName} numberOfLines={1} {...hoverTitle(m.name)}>{m.name}</Text>
+        {lapsing ? (
+          <Text style={styles.lapsingText}>{lapsing}</Text>
+        ) : (
+          <Text style={styles.memberMeta} numberOfLines={1} {...hoverTitle(memberMetaText)}>
+            {memberMetaText}
+          </Text>
+        )}
+      </View>
+      <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
+        <Text style={[styles.tierText, { color: tier.text }]}>{m.tier}</Text>
+      </View>
+      <TouchableOpacity style={styles.pointsBtn} onPress={() => onOpenProfile(m.id)}>
+        <Icon name="plus-circle-outline" size={16} color="#FFFFFF" />
+        <Text style={styles.pointsBtnText}>Points</Text>
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+});
+
+export const CustomerDirectoryScreen = ({ navigation }: any) => {
+  const dispatch = useDispatch();
+  const COLORS = useThemeColors();
+  const { isDesktopWeb, isTablet } = useResponsive();
+  // Memoized so the StyleSheet isn't rebuilt every keystroke and MemberCard's React.memo holds.
+  const styles = useMemo(() => makeStyles(COLORS, isDesktopWeb, isTablet), [COLORS, isDesktopWeb, isTablet]);
+  const insets = useSafeAreaInsets();
+  const onOpenProfile = useCallback((id: number) => navigation.navigate('CustomerProfile', { customerId: id }), [navigation]);
   const [search, setSearch] = useState('');
   const { data, isLoading, isError, refetch } = useCustomers(search || undefined);
   const members = data?.items ?? [];
@@ -135,43 +187,16 @@ export const CustomerDirectoryScreen = ({ navigation }: any) => {
             )}
 
             <View style={isDesktopWeb && styles.memberGridDesktop}>
-            {members.map((m) => {
-              const tier = TIER_STYLES[m.tier] ?? TIER_STYLES.BRONZE;
-              const daysSinceVisit = Math.floor((Date.now() - new Date(m.lastVisitAt).getTime()) / 86400000);
-              const lapsing = daysSinceVisit >= 21 ? `Lapsing (Last visit: ${daysSinceVisit}d ago)` : null;
-              const memberMetaText = `${m.visitCount} Visits · ${m.visitsLast30Days} this month · ${m.totalPoints.toLocaleString()} pts`;
-              return (
-                <TouchableOpacity
-                  key={m.id}
-                  style={[styles.memberCard, isDesktopWeb && styles.memberCardDesktop, lapsing && styles.memberCardLapsing]}
-                  onPress={() => navigation.navigate('CustomerProfile', { customerId: m.id })}
-                  activeOpacity={0.85}
-                >
-                  {m.profilePhotoUrl ? (
-                    <Image source={{ uri: m.profilePhotoUrl }} style={styles.memberImage} />
-                  ) : (
-                    <InitialsAvatar name={m.name} size={40} style={{ borderRadius: 11 }} />
-                  )}
-                  <View style={styles.memberInfo}>
-                    <Text style={styles.memberName} numberOfLines={1} {...hoverTitle(m.name)}>{m.name}</Text>
-                    {lapsing ? (
-                      <Text style={styles.lapsingText}>{lapsing}</Text>
-                    ) : (
-                      <Text style={styles.memberMeta} numberOfLines={1} {...hoverTitle(memberMetaText)}>
-                        {memberMetaText}
-                      </Text>
-                    )}
-                  </View>
-                  <View style={[styles.tierBadge, { backgroundColor: tier.bg }]}>
-                    <Text style={[styles.tierText, { color: tier.text }]}>{m.tier}</Text>
-                  </View>
-                  <TouchableOpacity style={styles.pointsBtn} onPress={() => navigation.navigate('CustomerProfile', { customerId: m.id })}>
-                    <Icon name="plus-circle-outline" size={16} color="#FFFFFF" />
-                    <Text style={styles.pointsBtnText}>Points</Text>
-                  </TouchableOpacity>
-                </TouchableOpacity>
-              );
-            })}
+            {members.map((m) => (
+              <MemberCard
+                key={m.id}
+                m={m}
+                styles={styles}
+                COLORS={COLORS}
+                isDesktopWeb={isDesktopWeb}
+                onOpenProfile={onOpenProfile}
+              />
+            ))}
             </View>
           </>
         )}

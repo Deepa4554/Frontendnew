@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useCallback, useMemo, useState } from 'react';
 import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, Switch } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -53,23 +53,69 @@ const monthlyJoinCounts = (list: ApiStaff[]): number[] => {
   return buckets;
 };
 
-export const TeamOverviewScreen = ({ navigation }: any) => {
-  const dispatch = useDispatch();
-  const insets = useSafeAreaInsets();
-  const COLORS = useThemeColors();
-  const { isDesktopWeb } = useResponsive();
-  const styles = makeStyles(COLORS, isDesktopWeb);
-  // HR Reports is its own catalog key, so plain Team Portal access doesn't imply it —
-  // hide the shortcut rather than let it bounce off HRReports' own route guard.
-  const user = useSelector((s: RootState) => s.auth.user);
-  const { category: planCategory } = usePlanCategory();
-  const canSeeHRReports = canAccessRoute(user ?? undefined, 'HRReports', planCategory);
+// One staff row. React.memo'd + given stable props so the whole directory skips re-render while
+// the user types in the search box, or in the Add Staff modal above the still-mounted list.
+const StaffCard = React.memo(({ s, styles, COLORS, isDesktopWeb, onOpenProfile }: {
+  s: ApiStaff;
+  styles: ReturnType<typeof makeStyles>;
+  COLORS: ReturnType<typeof useThemeColors>;
+  isDesktopWeb: boolean;
+  onOpenProfile: (id: number) => void;
+}) => {
   const STATUS_DOT: Record<StaffStatus, string> = {
     ACTIVE: COLORS.success,
     ON_LEAVE: COLORS.warning,
     SUSPENDED: COLORS.muted,
     TERMINATED: COLORS.muted,
   };
+  return (
+    <TouchableOpacity
+      style={[styles.staffCard, isDesktopWeb && styles.staffCardDesktop]}
+      onPress={() => onOpenProfile(s.id)}
+      activeOpacity={0.85}
+    >
+      <View style={styles.staffAvatar}>
+        <Text style={styles.staffAvatarText}>{s.name.substring(0, 2).toUpperCase()}</Text>
+      </View>
+      <View style={styles.staffInfo}>
+        <View style={styles.staffNameRow}>
+          <Text style={styles.staffName} numberOfLines={1}>{s.name}</Text>
+          <View style={styles.roleBadge}>
+            <Text style={styles.roleBadgeText}>{s.role.toUpperCase()}</Text>
+          </View>
+        </View>
+        <View style={styles.statusRow}>
+          <View style={[styles.statusDot, { backgroundColor: STATUS_DOT[s.status] }]} />
+          <Text style={styles.statusText}>{STATUS_LABEL[s.status]}</Text>
+        </View>
+      </View>
+      <TouchableOpacity
+        style={styles.staffMoreBtn}
+        hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+        onPress={(e) => {
+          e.stopPropagation();
+          onOpenProfile(s.id);
+        }}
+      >
+        <Icon name="dots-vertical" size={18} color={COLORS.muted} />
+      </TouchableOpacity>
+    </TouchableOpacity>
+  );
+});
+
+export const TeamOverviewScreen = ({ navigation }: any) => {
+  const dispatch = useDispatch();
+  const insets = useSafeAreaInsets();
+  const COLORS = useThemeColors();
+  const { isDesktopWeb } = useResponsive();
+  // Memoized so the StyleSheet isn't rebuilt every keystroke and StaffCard's React.memo holds.
+  const styles = useMemo(() => makeStyles(COLORS, isDesktopWeb), [COLORS, isDesktopWeb]);
+  const onOpenStaff = useCallback((id: number) => navigation.navigate('StaffProfile', { staffId: id }), [navigation]);
+  // HR Reports is its own catalog key, so plain Team Portal access doesn't imply it —
+  // hide the shortcut rather than let it bounce off HRReports' own route guard.
+  const user = useSelector((s: RootState) => s.auth.user);
+  const { category: planCategory } = usePlanCategory();
+  const canSeeHRReports = canAccessRoute(user ?? undefined, 'HRReports', planCategory);
   const [search, setSearch] = useState('');
   const [filter, setFilter] = useState('All');
   const [filterPickerVisible, setFilterPickerVisible] = useState(false);
@@ -352,38 +398,14 @@ export const TeamOverviewScreen = ({ navigation }: any) => {
 
         <View style={isDesktopWeb && styles.staffGridDesktop}>
         {!isLoading && sorted.map((s: ApiStaff) => (
-          <TouchableOpacity
+          <StaffCard
             key={s.id}
-            style={[styles.staffCard, isDesktopWeb && styles.staffCardDesktop]}
-            onPress={() => navigation.navigate('StaffProfile', { staffId: s.id })}
-            activeOpacity={0.85}
-          >
-            <View style={styles.staffAvatar}>
-              <Text style={styles.staffAvatarText}>{s.name.substring(0, 2).toUpperCase()}</Text>
-            </View>
-            <View style={styles.staffInfo}>
-              <View style={styles.staffNameRow}>
-                <Text style={styles.staffName} numberOfLines={1}>{s.name}</Text>
-                <View style={styles.roleBadge}>
-                  <Text style={styles.roleBadgeText}>{s.role.toUpperCase()}</Text>
-                </View>
-              </View>
-              <View style={styles.statusRow}>
-                <View style={[styles.statusDot, { backgroundColor: STATUS_DOT[s.status] }]} />
-                <Text style={styles.statusText}>{STATUS_LABEL[s.status]}</Text>
-              </View>
-            </View>
-            <TouchableOpacity
-              style={styles.staffMoreBtn}
-              hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
-              onPress={(e) => {
-                e.stopPropagation();
-                navigation.navigate('StaffProfile', { staffId: s.id });
-              }}
-            >
-              <Icon name="dots-vertical" size={18} color={COLORS.muted} />
-            </TouchableOpacity>
-          </TouchableOpacity>
+            s={s}
+            styles={styles}
+            COLORS={COLORS}
+            isDesktopWeb={isDesktopWeb}
+            onOpenProfile={onOpenStaff}
+          />
         ))}
         </View>
       </ScrollView>

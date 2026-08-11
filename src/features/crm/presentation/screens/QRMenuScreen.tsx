@@ -1,12 +1,14 @@
 import React, { useMemo, useState } from 'react';
 import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, Share } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, Share, Switch, ActivityIndicator, Alert, Linking } from 'react-native';
 import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../../../core/theme/useThemeColors';
 import { useTables, useMenuOnlyQrToken, useDeliveryQrToken } from '../../../../core/api/hooks/useTables';
+import { useMenuPdfStatus, useUploadMenuPdf, useToggleMenuPdf, useRemoveMenuPdf } from '../../../../core/api/hooks/useMenuPdf';
+import { pickPdfAsDataUri } from '../../../../core/utils/pdfPicker';
 import { ApiTable } from '../../../../core/api/tablesApi';
 import { getPublicOrderBaseUrl } from '../../../../core/config/env';
 import { SkeletonGrid } from '../../../../shared/components/atoms/Skeleton';
@@ -27,9 +29,64 @@ export const QRMenuScreen = ({ navigation }: any) => {
   const { data: allTables = [], isLoading, isError, refetch } = useTables();
   const { data: menuOnlyToken } = useMenuOnlyQrToken();
   const { data: deliveryToken } = useDeliveryQrToken();
+  const { data: pdfStatus } = useMenuPdfStatus();
+  const uploadPdf = useUploadMenuPdf();
+  const togglePdf = useToggleMenuPdf();
+  const removePdf = useRemoveMenuPdf();
   const [selected, setSelected] = useState<ApiTable | null>(null);
   const [genericVisible, setGenericVisible] = useState(false);
   const [deliveryVisible, setDeliveryVisible] = useState(false);
+
+  // When a PDF is uploaded AND switched on, the general (menu-only) QR redirects to it
+  // server-side (see backend PublicOrderPageController) — so the same printed code now opens
+  // the PDF instead of the live digital menu.
+  const pdfMenuActive = !!pdfStatus?.hasPdf && !!pdfStatus?.enabled;
+  // Preview opens the exact page a customer's scan lands on — the /order/{token} viewer that
+  // renders the PDF in-browser (same as genericOrderUrl). Absolute origin so it opens as its
+  // own page load, not an in-app XHR.
+  const pdfPreviewUrl = menuOnlyToken ? `${getPublicOrderBaseUrl()}/order/${menuOnlyToken.token}` : null;
+
+  const openUrl = (url: string) => {
+    const win: any = typeof window !== 'undefined' ? window : null;
+    if (win?.open) win.open(url, '_blank');
+    else Linking.openURL(url).catch(() => dispatch(showToast({ message: 'Could not open the PDF', tone: 'warning' })));
+  };
+
+  const handleUploadPdf = async () => {
+    try {
+      const picked = await pickPdfAsDataUri();
+      if (!picked) return;
+      await uploadPdf.mutateAsync({ dataUri: picked.dataUri, fileName: picked.fileName });
+      dispatch(showToast({ message: 'Menu PDF uploaded — general QR now opens it', tone: 'success' }));
+    } catch (e) {
+      dispatch(showToast({ message: e instanceof Error ? e.message : 'Could not upload the PDF', tone: 'warning' }));
+    }
+  };
+
+  const handleTogglePdf = async (enabled: boolean) => {
+    try {
+      await togglePdf.mutateAsync(enabled);
+    } catch (e) {
+      dispatch(showToast({ message: e instanceof Error ? e.message : 'Could not update the setting', tone: 'warning' }));
+    }
+  };
+
+  const handleRemovePdf = () => {
+    const doRemove = async () => {
+      try {
+        await removePdf.mutateAsync();
+        dispatch(showToast({ message: 'Menu PDF removed', tone: 'success' }));
+      } catch (e) {
+        dispatch(showToast({ message: e instanceof Error ? e.message : 'Could not remove the PDF', tone: 'warning' }));
+      }
+    };
+    Alert.alert('Remove menu PDF?', 'The general QR will go back to showing the live digital menu.', [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Remove', style: 'destructive', onPress: doRemove },
+    ]);
+  };
+
+  const formatPdfSize = (bytes: number) => (bytes >= 1024 * 1024 ? `${(bytes / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(bytes / 1024))} KB`);
 
   // The cafe and table are never exposed in plain text — the URL carries only an
   // encrypted token (see backend QrTokenService) that the server decodes itself.
@@ -102,8 +159,11 @@ export const QRMenuScreen = ({ navigation }: any) => {
           <Icon name="silverware-fork-knife" size={22} color="#FFFFFF" />
           <View style={{ flex: 1 }}>
             <Text style={styles.genericCardTitle}>General Menu (No Table)</Text>
-            <Text style={styles.genericCardSub}>Browse only — ordering still needs a table's own code</Text>
+            <Text style={styles.genericCardSub}>
+              {pdfMenuActive ? 'PDF menu ON — scanning opens your uploaded PDF' : "Browse only — ordering still needs a table's own code"}
+            </Text>
           </View>
+          {pdfMenuActive && <Icon name="file-pdf-box" size={18} color="#FFFFFF" style={{ marginRight: 2 }} />}
           <Icon name="chevron-right" size={20} color="#FFFFFF" />
         </TouchableOpacity>
 
@@ -217,6 +277,54 @@ export const QRMenuScreen = ({ navigation }: any) => {
               still table-only. Good for a counter display, printed flyers, or handing to a guest
               while every table is full, so they can look at the menu before they're seated.
             </Text>
+
+            <View style={styles.pdfSection}>
+              <View style={styles.pdfHeaderRow}>
+                <Icon name="file-pdf-box" size={20} color={COLORS.accent} />
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.pdfTitle}>PDF Menu</Text>
+                  <Text style={styles.pdfSub} numberOfLines={1}>
+                    {pdfStatus?.hasPdf ? `${pdfStatus.fileName} · ${formatPdfSize(pdfStatus.sizeBytes)}` : 'No PDF uploaded yet'}
+                  </Text>
+                </View>
+                {pdfStatus?.hasPdf && (
+                  togglePdf.isPending
+                    ? <ActivityIndicator size="small" color={COLORS.accent} />
+                    : <Switch value={pdfStatus.enabled} onValueChange={handleTogglePdf} />
+                )}
+              </View>
+
+              <Text style={styles.pdfExplain}>
+                {pdfMenuActive
+                  ? 'This general QR now opens your PDF menu when scanned. Turn it off to go back to the live digital menu.'
+                  : 'Upload a designed PDF and turn it on — the same general QR above will then open the PDF instead of the live menu. Table QRs are never affected.'}
+              </Text>
+
+              <View style={styles.pdfBtnRow}>
+                <TouchableOpacity style={styles.pdfPrimaryBtn} onPress={handleUploadPdf} disabled={uploadPdf.isPending}>
+                  {uploadPdf.isPending
+                    ? <ActivityIndicator size="small" color="#FFFFFF" />
+                    : <>
+                        <Icon name={pdfStatus?.hasPdf ? 'file-replace' : 'upload'} size={14} color="#FFFFFF" />
+                        <Text style={styles.pdfPrimaryBtnText}>{pdfStatus?.hasPdf ? 'Replace' : 'Upload PDF'}</Text>
+                      </>}
+                </TouchableOpacity>
+
+                {pdfStatus?.hasPdf && pdfPreviewUrl && (
+                  <TouchableOpacity style={styles.pdfGhostBtn} onPress={() => openUrl(pdfPreviewUrl)}>
+                    <Icon name="eye-outline" size={14} color={COLORS.heading} />
+                    <Text style={styles.pdfGhostBtnText}>Preview</Text>
+                  </TouchableOpacity>
+                )}
+
+                {pdfStatus?.hasPdf && (
+                  <TouchableOpacity style={styles.pdfGhostBtn} onPress={handleRemovePdf} disabled={removePdf.isPending}>
+                    <Icon name="trash-can-outline" size={14} color={COLORS.dangerAccent} />
+                    <Text style={[styles.pdfGhostBtnText, { color: COLORS.dangerAccent }]}>Remove</Text>
+                  </TouchableOpacity>
+                )}
+              </View>
+            </View>
           </View>
         </View>
       </Modal>
@@ -376,4 +484,39 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   shareBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   hintText: { fontSize: 12, color: COLORS.muted, textAlign: 'center', lineHeight: 17 },
+  pdfSection: {
+    width: '100%',
+    marginTop: 12,
+    paddingTop: 12,
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: COLORS.divider,
+  },
+  pdfHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 9 },
+  pdfTitle: { fontSize: 13, fontWeight: '800', color: COLORS.heading },
+  pdfSub: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
+  pdfExplain: { fontSize: 11, color: COLORS.muted, lineHeight: 16, marginTop: 8 },
+  pdfBtnRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 10 },
+  pdfPrimaryBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.accent,
+    borderRadius: 6,
+    paddingVertical: 7.5,
+    paddingHorizontal: 12,
+    minWidth: 108,
+  },
+  pdfPrimaryBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+  pdfGhostBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 6,
+    paddingVertical: 7.5,
+    paddingHorizontal: 12,
+  },
+  pdfGhostBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
 });

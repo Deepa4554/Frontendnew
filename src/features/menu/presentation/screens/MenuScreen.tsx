@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Image, Switch, Modal, ActivityIndicator, Platform } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -574,12 +574,79 @@ const MenuItemImageGallery = ({ menuItemId }: { menuItemId: number }) => {
     </View>
   );
 };
+// One menu-grid card. React.memo'd and given referentially-stable props (memoized `styles`,
+// ref-backed callbacks) so the whole grid skips re-render while the user types — in the search
+// box, or in the Add/Edit modal that sits above this still-mounted grid. React Query's
+// structural sharing keeps an unchanged item's identity stable across refetches, so a card
+// re-renders only when its own item's data actually changes. Same pattern as POSCheckout's MenuRow.
+const MenuCard = React.memo(({ item, cardWidthPct, styles, COLORS, onEditPrice, onEdit, onOpenRecipe, onToggleAvailable }: {
+  item: MenuItem;
+  cardWidthPct: '48%' | '31%' | '23%';
+  styles: ReturnType<typeof makeStyles>;
+  COLORS: ReturnType<typeof useThemeColors>;
+  onEditPrice: (item: MenuItem) => void;
+  onEdit: (item: MenuItem) => void;
+  onOpenRecipe: (item: MenuItem) => void;
+  onToggleAvailable: (item: MenuItem) => void;
+}) => (
+  <View style={[styles.itemCard, { width: cardWidthPct }, !item.available && styles.itemCardDisabled]}>
+    {item.popular && item.available && (
+      <View style={styles.aiSuggestBadge}>
+        <Icon name="star" size={10} color={COLORS.accent} />
+        <Text style={styles.aiSuggestText}>POPULAR</Text>
+      </View>
+    )}
+    {!item.available && (
+      <View style={styles.unavailableBadge}>
+        <Text style={styles.unavailableBadgeText}>UNAVAILABLE</Text>
+      </View>
+    )}
+
+    <View style={styles.menuIconRow}>
+      <Image source={item.image ? { uri: item.image } : menuPlaceholderImage} style={styles.menuThumb} />
+      <TouchableOpacity onPress={() => onEditPrice(item)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+        <Text style={styles.menuPrice}>₹{item.price.toFixed(2)}</Text>
+      </TouchableOpacity>
+    </View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <VegNonVegBadge type={item.vegNonVegType} size={11} />
+      <Text style={styles.menuName} numberOfLines={1}>{item.name}</Text>
+    </View>
+    <View style={styles.menuMetaRow}>
+      <Text style={styles.menuSubtitle} numberOfLines={1}>{item.category}</Text>
+      {!!item.shortCode && (
+        <View style={styles.shortCodeBadge}>
+          <Text style={styles.shortCodeBadgeText}>{item.shortCode}</Text>
+        </View>
+      )}
+    </View>
+
+    <View style={styles.itemIconsRow}>
+      <TouchableOpacity onPress={() => onEdit(item)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+        <Icon name="pencil-outline" size={14} color={COLORS.accent} />
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => onOpenRecipe(item)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
+        <Icon name="chef-hat" size={14} color={COLORS.accent} />
+      </TouchableOpacity>
+      <Switch
+        value={item.available}
+        onValueChange={() => onToggleAvailable(item)}
+        trackColor={{ false: '#DDD1C6', true: COLORS.accent }}
+        thumbColor="#FFFFFF"
+        style={styles.cardSwitch}
+      />
+    </View>
+  </View>
+));
+
 export const MenuScreen = ({ navigation }: any) => {
   const COLORS = useThemeColors();
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
   const { screenSize, isDesktopWeb } = useResponsive();
-  const styles = makeStyles(COLORS, isDesktopWeb);
+  // Memoized so the large StyleSheet isn't rebuilt on every keystroke re-render, and so
+  // MenuCard's React.memo actually holds — an unstable `styles` identity would defeat it.
+  const styles = useMemo(() => makeStyles(COLORS, isDesktopWeb), [COLORS, isDesktopWeb]);
   // Same breakpoints as the POS Checkout menu grid, so this screen's cards match it exactly.
   const cardWidthPct = screenSize === 'mobile' ? '48%' : screenSize === 'tablet' ? '31%' : '23%';
   const { data: items = [], isLoading: menuLoading } = useMenuItems();
@@ -701,10 +768,6 @@ export const MenuScreen = ({ navigation }: any) => {
     return counts;
   }, [items]);
 
-  const toggleAvailable = (id: number) => {
-    toggleAvailability.mutate(id);
-  };
-
   const openPriceEditor = (item: MenuItem) => {
     setPriceEditor(item);
     setDraftPrice(item.price);
@@ -740,6 +803,24 @@ export const MenuScreen = ({ navigation }: any) => {
     setEditIsOpenPrice(item.isOpenPrice);
   };
 
+  // Referentially-stable card callbacks so MenuCard's React.memo holds. Each parent re-render
+  // (every search keystroke, every Add/Edit-modal keystroke) would otherwise hand all cards
+  // fresh function props and re-render the whole grid. Refs always point at the latest closure,
+  // so behaviour is identical to calling the handlers directly. See POSCheckoutScreen's MenuRow.
+  const openPriceEditorRef = useRef(openPriceEditor);
+  openPriceEditorRef.current = openPriceEditor;
+  const onCardEditPrice = useCallback((item: MenuItem) => openPriceEditorRef.current(item), []);
+
+  const openEditModalRef = useRef(openEditModal);
+  openEditModalRef.current = openEditModal;
+  const onCardEdit = useCallback((item: MenuItem) => openEditModalRef.current(item), []);
+
+  const toggleAvailabilityRef = useRef(toggleAvailability);
+  toggleAvailabilityRef.current = toggleAvailability;
+  const onCardToggleAvailable = useCallback((item: MenuItem) => toggleAvailabilityRef.current.mutate(item.id), []);
+
+  const onCardOpenRecipe = useCallback((item: MenuItem) => navigation.navigate('RecipeBuilder', { menuItemId: item.id }), [navigation]);
+
   const saveEditedItem = async () => {
     if (!editingItem) return;
     const price = parseFloat(editPrice);
@@ -747,17 +828,21 @@ export const MenuScreen = ({ navigation }: any) => {
       dispatch(showToast({ message: 'Give the item a name before saving.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
-    if (!editPrice.trim() || isNaN(price) || price <= 0) {
+    // MRP items bill at the rate typed at the till, so their menu price is only the
+    // prompt's pre-fill default — allow saving one without a price (falls back to 0).
+    // Non-MRP items still need a real price greater than 0.
+    if (!editIsOpenPrice && (!editPrice.trim() || isNaN(price) || price <= 0)) {
       dispatch(showToast({ message: 'Enter a price greater than 0.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
+    const safePrice = isNaN(price) || price < 0 ? 0 : price;
     try {
       await updateMenuItem.mutateAsync({
         id: editingItem.id,
         req: {
           name: editName.trim(),
           category: editCategory.trim() || editingItem.category,
-          price,
+          price: safePrice,
           subtitle: editSubtitle.trim(),
           description: editDescription.trim() || undefined,
           image: editImage ?? '',
@@ -848,15 +933,19 @@ export const MenuScreen = ({ navigation }: any) => {
       dispatch(showToast({ message: 'Give the item a name before saving.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
-    if (!newPrice.trim() || isNaN(price) || price <= 0) {
+    // MRP items bill at the rate typed at the till, so their menu price is only the
+    // prompt's pre-fill default — allow saving one without a price (falls back to 0).
+    // Non-MRP items still need a real price greater than 0.
+    if (!newIsOpenPrice && (!newPrice.trim() || isNaN(price) || price <= 0)) {
       dispatch(showToast({ message: 'Enter a price greater than 0.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
+    const safePrice = isNaN(price) || price < 0 ? 0 : price;
     try {
       const created = await createMenuItem.mutateAsync({
         name: newName.trim(),
         category: newCategory,
-        price,
+        price: safePrice,
         subtitle: newSubtitle.trim() || undefined,
         description: newDescription.trim() || undefined,
         productType: newProductType,
@@ -1194,54 +1283,17 @@ export const MenuScreen = ({ navigation }: any) => {
 
         <View style={styles.grid}>
           {!menuLoading && filteredItems.map((item) => (
-            <View key={item.id} style={[styles.itemCard, { width: cardWidthPct }, !item.available && styles.itemCardDisabled]}>
-              {item.popular && item.available && (
-                <View style={styles.aiSuggestBadge}>
-                  <Icon name="star" size={10} color={COLORS.accent} />
-                  <Text style={styles.aiSuggestText}>POPULAR</Text>
-                </View>
-              )}
-              {!item.available && (
-                <View style={styles.unavailableBadge}>
-                  <Text style={styles.unavailableBadgeText}>UNAVAILABLE</Text>
-                </View>
-              )}
-
-              <View style={styles.menuIconRow}>
-                <Image source={item.image ? { uri: item.image } : menuPlaceholderImage} style={styles.menuThumb} />
-                <TouchableOpacity onPress={() => openPriceEditor(item)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                  <Text style={styles.menuPrice}>₹{item.price.toFixed(2)}</Text>
-                </TouchableOpacity>
-              </View>
-              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
-                <VegNonVegBadge type={item.vegNonVegType} size={11} />
-                <Text style={styles.menuName} numberOfLines={1}>{item.name}</Text>
-              </View>
-              <View style={styles.menuMetaRow}>
-                <Text style={styles.menuSubtitle} numberOfLines={1}>{item.category}</Text>
-                {!!item.shortCode && (
-                  <View style={styles.shortCodeBadge}>
-                    <Text style={styles.shortCodeBadgeText}>{item.shortCode}</Text>
-                  </View>
-                )}
-              </View>
-
-              <View style={styles.itemIconsRow}>
-                <TouchableOpacity onPress={() => openEditModal(item)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                  <Icon name="pencil-outline" size={14} color={COLORS.accent} />
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => navigation.navigate('RecipeBuilder', { menuItemId: item.id })} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
-                  <Icon name="chef-hat" size={14} color={COLORS.accent} />
-                </TouchableOpacity>
-                <Switch
-                  value={item.available}
-                  onValueChange={() => toggleAvailable(item.id)}
-                  trackColor={{ false: '#DDD1C6', true: COLORS.accent }}
-                  thumbColor="#FFFFFF"
-                  style={styles.cardSwitch}
-                />
-              </View>
-            </View>
+            <MenuCard
+              key={item.id}
+              item={item}
+              cardWidthPct={cardWidthPct}
+              styles={styles}
+              COLORS={COLORS}
+              onEditPrice={onCardEditPrice}
+              onEdit={onCardEdit}
+              onOpenRecipe={onCardOpenRecipe}
+              onToggleAvailable={onCardToggleAvailable}
+            />
           ))}
         </View>
       </ScrollView>
