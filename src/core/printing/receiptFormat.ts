@@ -35,14 +35,45 @@ export interface PrintableReceiptItem {
   taxAmount?: number;
 }
 
+const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/** Halves a GST figure into the Central and State components a tax invoice must state
+ * separately — one combined "GST 5%" line does not make a valid tax invoice. The halves are
+ * always equal (every slab a restaurant bills at divides evenly), and IGST never applies
+ * because a meal is consumed where it is sold, so this is purely a presentation split.
+ *
+ * An odd paise cannot be halved — ₹16.65 becomes 8.32/8.33 — so the remainder goes to SGST
+ * rather than rounding both halves up and printing tax rows that out-total the tax.
+ *
+ * Works in whole paise rather than halving the rupee figure: halving forces a rounding
+ * decision, and floating point resolves it differently from the server's decimal arithmetic —
+ * the printed slip and the PDF of the same bill have to state identical tax. Mirrors
+ * GstSplit.Split exactly. */
+export const splitGst = (taxAmount: number): { cgst: number; sgst: number } => {
+  const totalPaise = Math.round(taxAmount * 100);
+  const cgstPaise = Math.floor(totalPaise / 2);
+  return { cgst: cgstPaise / 100, sgst: (totalPaise - cgstPaise) / 100 };
+};
+
 /** The bill's tax summary, one row per rate. A GST invoice has to show taxable value and
  * tax per slab, so an order mixing a 5% item with a 12% one prints two rows instead of one
  * combined figure. Lines with no rate of their own (placed before tax groups existed, or an
- * item with no group and no cafe default) fold into `fallbackRatePct`. */
+ * item with no group and no cafe default) fold into `fallbackRatePct`.
+ *
+ * Each slab also carries its CGST/SGST halves and the half-rate to label them with. Those are
+ * additional fields rather than a replacement for `taxAmount`, so callers that only want the
+ * combined figure keep working untouched. */
 export const buildTaxBreakdown = (
   items: PrintableReceiptItem[],
   fallbackRatePct: number,
-): { ratePct: number; taxableAmount: number; taxAmount: number }[] => {
+): {
+  ratePct: number;
+  taxableAmount: number;
+  taxAmount: number;
+  halfRatePct: number;
+  cgstAmount: number;
+  sgstAmount: number;
+}[] => {
   const byRate = new Map<number, { taxableAmount: number; taxAmount: number }>();
   for (const item of items) {
     // A caller that predates per-line tax (the printer-settings sample receipt) sends
@@ -56,7 +87,10 @@ export const buildTaxBreakdown = (
   }
   return [...byRate.entries()]
     .sort((a, b) => a[0] - b[0])
-    .map(([ratePct, sums]) => ({ ratePct, ...sums }));
+    .map(([ratePct, sums]) => {
+      const { cgst, sgst } = splitGst(sums.taxAmount);
+      return { ratePct, ...sums, halfRatePct: ratePct / 2, cgstAmount: cgst, sgstAmount: sgst };
+    });
 };
 
 export interface PrintableReceipt {
@@ -74,6 +108,10 @@ export interface PrintableReceipt {
   subtotal: number;
   discountPct?: number;
   discountAmount?: number;
+  /** Total taken off by auto-applied offers (BOGO, happy hour, category/item). */
+  offerDiscountAmount?: number;
+  /** Names of the offers that fired — the offer line's label. */
+  appliedOfferTitle?: string | null;
   taxRatePct: number;
   tax: number;
   total: number;
@@ -242,14 +280,30 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): Rece
   if (receipt.discountPct && receipt.discountAmount) {
     pushAmountRow(push, `Discount (${receipt.discountPct}%)`, `-${money(receipt.discountAmount)}`, columns);
   }
-  // One row per slab when the bill mixes rates; otherwise the original single Tax line.
+  if (receipt.offerDiscountAmount && receipt.offerDiscountAmount > 0) {
+    // Name the offer so the drop is explained on the slip, not a bare "Offer".
+    const label = receipt.appliedOfferTitle?.trim() || 'Offer';
+    pushAmountRow(push, label, `-${money(receipt.offerDiscountAmount)}`, columns);
+  }
+  // One pair of rows per slab when the bill mixes rates, each slab shown as its CGST and
+  // SGST halves — a tax invoice has to state the two components separately (see splitGst).
   const taxBreakdown = buildTaxBreakdown(receipt.items, receipt.taxRatePct);
-  if (taxBreakdown.length > 1) {
+  if (receipt.tax <= 0) {
+    // Nothing charged (unregistered or composition scheme) — a single plain row reads better
+    // than a CGST and an SGST line that both say 0.00.
+    pushAmountRow(push, 'Tax', money(receipt.tax), columns);
+  } else if (taxBreakdown.length > 1) {
     for (const slab of taxBreakdown) {
-      pushAmountRow(push, `Tax ${slab.ratePct}% on ${money(slab.taxableAmount)}`, money(slab.taxAmount), columns);
+      pushAmountRow(push, `CGST ${slab.halfRatePct}% on ${money(slab.taxableAmount)}`, money(slab.cgstAmount), columns);
+      pushAmountRow(push, `SGST ${slab.halfRatePct}% on ${money(slab.taxableAmount)}`, money(slab.sgstAmount), columns);
     }
   } else {
-    pushAmountRow(push, `Tax (${taxBreakdown[0]?.ratePct ?? receipt.taxRatePct}%)`, money(receipt.tax), columns);
+    // Halve the receipt's own total rather than the slab's figure, so the printed rows always
+    // reconcile against the amount being charged.
+    const ratePct = taxBreakdown[0]?.ratePct ?? receipt.taxRatePct;
+    const { cgst, sgst } = splitGst(receipt.tax);
+    pushAmountRow(push, `CGST (${ratePct / 2}%)`, money(cgst), columns);
+    pushAmountRow(push, `SGST (${ratePct / 2}%)`, money(sgst), columns);
   }
   pushAmountRow(push, 'TOTAL', money(receipt.total), columns, true);
   push({ kind: 'dashes' });

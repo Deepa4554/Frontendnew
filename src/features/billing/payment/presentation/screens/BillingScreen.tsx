@@ -9,6 +9,7 @@ import { useOrders } from '../../../../../core/api/hooks/useOrders';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { ApiOrder, OrderStatus } from '../../../../../core/api/ordersApi';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
+import { splitGst } from '../../../../../core/printing/receiptFormat';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { ordersApi } from '../../../../../core/api/ordersApi';
@@ -75,6 +76,8 @@ export const BillingScreen = () => {
       subtotal: openOrder.subtotal,
       discountPct: openOrder.discountPct || undefined,
       discountAmount: openOrder.discountAmount || undefined,
+      offerDiscountAmount: openOrder.offerDiscountAmount || undefined,
+      appliedOfferTitle: openOrder.appliedOfferTitle,
       // Order doesn't store the tax rate directly — back-derive it from the taxable
       // base (subtotal minus discount) for an accurate "Tax (n%)" label on the print.
       taxRatePct: (() => {
@@ -318,6 +321,12 @@ export const BillingScreen = () => {
                         <Text style={[styles.slipTotalVal, styles.slipPositive]}>−₹{openOrder.couponDiscountAmount.toFixed(2)}</Text>
                       </View>
                     )}
+                    {(openOrder.offerDiscountAmount ?? 0) > 0 && (
+                      <View style={styles.slipTotalRow}>
+                        <Text style={[styles.slipTotalLabel, styles.slipPositive]} numberOfLines={1}>{openOrder.appliedOfferTitle?.trim() || 'Offer'}</Text>
+                        <Text style={[styles.slipTotalVal, styles.slipPositive]}>−₹{(openOrder.offerDiscountAmount ?? 0).toFixed(2)}</Text>
+                      </View>
+                    )}
                     {openOrder.giftCardAmountApplied > 0 && (
                       <View style={styles.slipTotalRow}>
                         <Text style={[styles.slipTotalLabel, styles.slipPositive]}>Gift Card{openOrder.giftCardCode ? ` (${openOrder.giftCardCode})` : ''}</Text>
@@ -330,10 +339,26 @@ export const BillingScreen = () => {
                         <Text style={[styles.slipTotalVal, styles.slipPositive]}>−₹{(openOrder.loyaltyDiscountAmount ?? 0).toFixed(2)}</Text>
                       </View>
                     )}
-                    <View style={styles.slipTotalRow}>
-                      <Text style={styles.slipTotalLabel}>Tax</Text>
-                      <Text style={styles.slipTotalVal}>₹{openOrder.tax.toFixed(2)}</Text>
-                    </View>
+                    {/* Shown as the two halves the printed invoice states separately, so what
+                        the cashier reads back matches the slip the customer is handed. Falls
+                        back to a single row when no GST is charged at all. */}
+                    {openOrder.tax > 0 ? (
+                      <>
+                        <View style={styles.slipTotalRow}>
+                          <Text style={styles.slipTotalLabel}>CGST</Text>
+                          <Text style={styles.slipTotalVal}>₹{splitGst(openOrder.tax).cgst.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.slipTotalRow}>
+                          <Text style={styles.slipTotalLabel}>SGST</Text>
+                          <Text style={styles.slipTotalVal}>₹{splitGst(openOrder.tax).sgst.toFixed(2)}</Text>
+                        </View>
+                      </>
+                    ) : (
+                      <View style={styles.slipTotalRow}>
+                        <Text style={styles.slipTotalLabel}>Tax</Text>
+                        <Text style={styles.slipTotalVal}>₹{openOrder.tax.toFixed(2)}</Text>
+                      </View>
+                    )}
                     {(openOrder.serviceChargeAmount ?? 0) > 0 && (
                       <View style={styles.slipTotalRow}>
                         <Text style={styles.slipTotalLabel}>Service Charge</Text>

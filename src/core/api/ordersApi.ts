@@ -158,6 +158,10 @@ export interface ApiOrder {
   billDiscountAmount: number;
   /** Coupon reduction applied at billing time. Paired with couponCode. */
   couponDiscountAmount: number;
+  /** Total taken off by auto-applied rule-driven offers (BOGO, happy hour, category/item). */
+  offerDiscountAmount: number;
+  /** Names of the offers that fired, comma-joined — for the bill's offer line. Null if none. */
+  appliedOfferTitle?: string | null;
   /** Loyalty points redeemed as a bill-time discount (1 point = ₹1). Paired with
    * loyaltyPointsRedeemed. */
   loyaltyDiscountAmount: number;
