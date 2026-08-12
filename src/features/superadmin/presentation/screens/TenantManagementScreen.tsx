@@ -61,7 +61,7 @@ const TenantCard = React.memo(({ tenant, onViewSales, onManageScreens, onManageS
   const expiresText = tenant.planExpiresAt
     ? new Date(tenant.planExpiresAt) < new Date()
       ? 'Expired'
-      : `Expires ${new Date(tenant.planExpiresAt).toLocaleDateString()}`
+      : `Expires ${new Date(tenant.planExpiresAt).toLocaleDateString('en-GB')}`
     : 'No expiry';
   return (
     <View style={styles.tenantCard}>
@@ -121,9 +121,13 @@ export const TenantManagementScreen = () => {
 
   const applyPlan = async (plan: SubscriptionTier) => {
     if (!managing) return;
+    const tenantName = managing.name;
     try {
       await changePlan.mutateAsync({ tenantId: managing.id, plan });
       setManaging(null);
+      // The modal closing was the only feedback before this — no confirmation that the
+      // change actually landed, easy to mistake for a silent no-op.
+      dispatch(showToast({ message: `${tenantName}'s plan changed to ${planLabel(plan)}.`, icon: 'check-circle-outline', tone: 'success' }));
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not change plan'), icon: 'alert-circle-outline', tone: 'danger' }));
     }

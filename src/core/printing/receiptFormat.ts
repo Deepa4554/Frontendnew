@@ -15,9 +15,8 @@ export interface PrintableReceiptItem {
   name: string;
   qty: number;
   price: number;
-  /** Veg/non-veg mark for this line (see OrderItem.vegNonVegType) — prints as a `[V]`/`[N]`
-   * prefix, since a thermal printer's codepage can't render the green-circle/red-triangle
-   * symbol the screens use (toPrinterAscii would turn it into "?"). */
+  /** Veg/non-veg tag (see OrderItem.vegNonVegType). Not printed — kept on the payload for
+   * callers/future use, but the bill and KOT text intentionally carry no veg/non-veg mark. */
   vegNonVegType?: PrintableVegNonVegType | null;
   /** Variant (Half/Full/...) billed instead of the base price — printed beside the name. */
   variantName?: string | null;
@@ -155,16 +154,6 @@ const money = (n: number) => `Rs.${n.toFixed(2)}`;
 const itemLabel = (item: { name: string; variantName?: string | null }): string =>
   item.variantName ? `${item.name} (${item.variantName})` : item.name;
 
-/** "[N] " for a non-veg line, "" when the item carries no tag. Letters, not symbols: a
- * thermal printer's built-in codepage has no green circle / red triangle, and
- * toPrinterAscii would replace one with "?". Untagged stays blank rather than defaulting
- * to veg — printing "[V]" on an untagged item would be a claim nobody made. */
-const vegMark = (type?: PrintableVegNonVegType | null): string => {
-  if (!type) return '';
-  const letter = type === 'NonVeg' ? 'N' : type === 'Jain' ? 'J' : type === 'Eggetarian' ? 'E' : 'V';
-  return `[${letter}] `;
-};
-
 /** Strips anything a thermal printer's built-in codepage likely can't render — both
  * renderers (escpos.ts, blePrinterMarkup.ts) need this, since free-text fields (footer,
  * guest name, item names) aren't guaranteed ASCII-only the way the money lines are. */
@@ -179,7 +168,7 @@ export const toPrinterAscii = (s: string): string =>
 /**
  * Splits text that's wider than the paper into pieces that each fit `width` columns,
  * breaking at a space wherever possible. A printer given an over-long line wraps it itself,
- * but only ever mid-character-count — a real 58mm KOT printed "[N] 1x Chicken B" / "iryani".
+ * but only ever mid-character-count — a real 58mm KOT printed "1x Chicken Birya" / "ni".
  * A single word longer than the whole line still has to be cut hard; there's nowhere else to
  * break it. Leading indentation is repeated on continuation lines so a wrapped add-on stays
  * visually attached to the item it belongs to.
@@ -223,7 +212,7 @@ const makePush = (lines: ReceiptLine[], columns: number) => (line: ReceiptLine) 
  *
  * When both fit on one line this is just twoCol. When they don't, twoCol would keep the
  * amount and truncate the label to whatever's left, which on a 58mm bill turns
- * "[V] 2x Paneer Butter Masala (Full)" into "[V] 2x Paneer Butter M" — the guest can't tell
+ * "2x Paneer Butter Masala (Full)" into "2x Paneer Butter Masala (Fu" — the guest can't tell
  * which item they're being charged for. So the label instead gets the full width to itself
  * (makePush wraps it at a space) and the amount drops to its own line beneath, still against
  * the right margin so the column of figures stays readable down the bill.
@@ -268,7 +257,7 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): Rece
   push({ kind: 'dashes' });
 
   for (const item of receipt.items) {
-    pushAmountRow(push, `${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, money(item.price * item.qty), columns);
+    pushAmountRow(push, `${item.qty}x ${itemLabel(item)}`, money(item.price * item.qty), columns);
     for (const addOn of item.selectedModifiers ?? []) {
       push({ kind: 'text', text: `  + ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
     }
@@ -350,8 +339,7 @@ export interface PrintableAddOn {
 export interface PrintableKotItem {
   name: string;
   qty: number;
-  /** Veg/non-veg mark (see PrintableReceiptItem.vegNonVegType) — arguably matters more here
-   * than on the bill, since it's what tells the kitchen which prep area/utensils to use. */
+  /** Veg/non-veg tag (see PrintableReceiptItem.vegNonVegType). Not printed on the ticket. */
   vegNonVegType?: PrintableVegNonVegType | null;
   /** Variant (Half/Full/...) that was ordered — the kitchen makes the wrong portion without it. */
   variantName?: string | null;
@@ -454,7 +442,7 @@ export function buildKotLines(kot: PrintableKot, columns = 32): ReceiptLine[] {
     // and an item list is the one part of this ticket that grows without limit — a ten-item
     // order ran to 12cm. The title above stays big so the ticket is still identifiable at a
     // glance on the rail; the items only have to be readable, and bold does that.
-    push({ kind: 'text', text: `${seq}${vegMark(item.vegNonVegType)}${item.qty}x ${itemLabel(item)}`, bold: true });
+    push({ kind: 'text', text: `${seq}${item.qty}x ${itemLabel(item)}`, bold: true });
     // Add-ons and notes indent past the serial number so they hang under their item's text
     // rather than under its number, which would read as another numbered line.
     const indent = ' '.repeat(seq.length);

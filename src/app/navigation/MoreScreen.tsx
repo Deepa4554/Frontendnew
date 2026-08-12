@@ -67,6 +67,7 @@ export const MoreScreen = () => {
         { label: 'QR Ordering', icon: 'qrcode', route: 'QRMenu' },
         { label: 'Billing', icon: 'credit-card-outline', route: 'Billing' },
         { label: 'Customers (CRM)', icon: 'account-heart', route: 'CRM' },
+        { label: 'Tiffin', icon: 'silverware-fork-knife', route: 'Tiffin' },
         { label: 'Team Portal', icon: 'account-group', route: 'TeamPortal' },
         { label: 'Menu', icon: 'food', route: 'Menu' },
         { label: 'Inventory', icon: 'clipboard-list', route: 'Inventory' },

@@ -30,7 +30,7 @@ const CMD = {
   // WIDE (height + width) is what a heading wants — the cafe name on a bill, a token number —
   // but it halves how many characters fit, and every line is composed against the full
   // `columns`. A long line printed WIDE therefore ran off the paper and continued on the next
-  // one mid-word: a real 58mm KOT printed "[N] 1x Chicken B" / "iryani". So renderLine only
+  // one mid-word: a real 58mm KOT printed "1x Chicken Birya" / "ni". So renderLine only
   // uses WIDE when the text genuinely fits in half the width, and falls back to TALL (double
   // height, normal width) otherwise — still clearly emphasised, still honest about columns.
   TALL_ON: [GS, 0x21, 0x01],

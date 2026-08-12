@@ -110,6 +110,7 @@ export const SCREEN_SEARCH_INDEX: ScreenSearchEntry[] = [
   { id: 'branches', label: 'Branches', icon: 'storefront', permissionRouteKey: 'Branches', navigate: nav('Branches') },
   { id: 'expenses', label: 'Expenses', icon: 'cash-minus', permissionRouteKey: 'Expenses', navigate: nav('Expenses') },
   { id: 'khatabook', label: 'Khatabook', keywords: ['due', 'udhaar', 'credit', 'khata'], icon: 'notebook-outline', permissionRouteKey: 'Khatabook', navigate: nav('Khatabook') },
+  { id: 'tiffin', label: 'Tiffin', keywords: ['thali', 'thaali', 'meal', 'subscription', 'dabba', 'roster'], icon: 'silverware-fork-knife', permissionRouteKey: 'Tiffin', navigate: nav('Tiffin') },
   { id: 'saas', label: 'Subscription', keywords: ['plan', 'billing plan'], icon: 'cloud-check', permissionRouteKey: 'SaaS', navigate: nav('SaaS') },
 
   // Super Admin

@@ -71,6 +71,7 @@ const NAV_GROUPS = (unreadCount: number, pendingApprovals: number): NavGroup[] =
     items: [
       { label: 'Team', icon: 'account-group-outline', route: 'TeamPortal' },
       { label: 'CRM', icon: 'account-heart-outline', route: 'CRM' },
+      { label: 'Tiffin', icon: 'silverware-fork-knife', route: 'Tiffin' },
     ],
   },
   {
@@ -110,6 +111,14 @@ const NAV_GROUPS = (unreadCount: number, pendingApprovals: number): NavGroup[] =
     ],
   },
 ];
+
+// Where the nav sidebar's ScrollView was last scrolled to. A plain module-level variable, not
+// Redux/local state — same remount reason `collapsed` below is in Redux (this shell is
+// re-instantiated fresh on every navigation), but the scroll offset itself is fired on every
+// pixel of scrolling and never needs to trigger a re-render, so writing it to the store would
+// just be a flood of pointless dispatches. Restored (not reset) on the next mount, so opening
+// an item you scrolled down to find doesn't kick the list back to the top from under you.
+let lastSidebarScrollY = 0;
 
 interface Props {
   children: React.ReactNode;
@@ -154,6 +163,14 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
     const t = setTimeout(() => setSearchDebounced(searchQuery), 300);
     return () => clearTimeout(t);
   }, [searchQuery]);
+
+  // Restores the nav list's scroll position on this fresh mount (see lastSidebarScrollY above) —
+  // animated: false so it lands there instantly instead of visibly scrolling past everything
+  // above it on every single navigation.
+  const navScrollRef = useRef<ScrollView>(null);
+  useEffect(() => {
+    if (lastSidebarScrollY > 0) navScrollRef.current?.scrollTo({ y: lastSidebarScrollY, animated: false });
+  }, []);
 
   const { data: searchResults = [], isFetching: searchFetching } = useSearch(searchDebounced);
   const isSearchingLive = searchQuery.trim().length >= 2;
@@ -240,7 +257,13 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
           </Tooltip>
         </View>
 
-        <ScrollView style={styles.navScroll} showsVerticalScrollIndicator={false}>
+        <ScrollView
+          ref={navScrollRef}
+          style={styles.navScroll}
+          showsVerticalScrollIndicator={false}
+          onScroll={(e) => { lastSidebarScrollY = e.nativeEvent.contentOffset.y; }}
+          scrollEventThrottle={32}
+        >
           {groups.map((group) => (
             <View key={group.title} style={styles.navGroup}>
               {!collapsed && <Text style={styles.navGroupLabel}>{group.title}</Text>}

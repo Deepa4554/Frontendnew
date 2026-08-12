@@ -935,9 +935,13 @@ export const MenuScreen = ({ navigation }: any) => {
     return items.filter((item) => {
       const matchesCategory = activeCategory === 'All' || item.category === activeCategory;
       const q = search.toLowerCase();
+      // A fully-numeric query is a full short code (e.g. "24") — match it exactly so it
+      // doesn't also hit "124"/"244". Alphabetic codes stay substring-matched.
+      const numericQ = /^\d+$/.test(q);
+      const code = (item.shortCode ?? '').toLowerCase();
       const matchesSearch =
         item.name.toLowerCase().includes(q) ||
-        (item.shortCode ?? '').toLowerCase().includes(q);
+        (numericQ ? code === q : code.includes(q));
       return matchesCategory && matchesSearch;
     });
   }, [items, activeCategory, search]);

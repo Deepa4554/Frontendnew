@@ -34,6 +34,10 @@ export const SCREEN_CATALOG: ScreenCatalogEntry[] = [
   // Normal, deliberately below the CRM screens it shares a Customer record with — running a
   // khata (udhaar) for regulars is what the smallest, cheapest-plan shops do most, not least.
   { key: 'Khatabook', label: 'Khatabook (Due)', icon: 'notebook-outline', minPlan: 'NORMAL' },
+  // Normal, beside the khata — a tiffin/thali round is the standing plate-and-credit business
+  // the smallest shops run. Deliberately NOT in FLOOR_STAFF_HIDDEN_ROUTES: the daily roster is a
+  // floor task; only the Billing tab inside it is gated (Owner/Manager) by the server.
+  { key: 'Tiffin', label: 'Tiffin', icon: 'silverware-fork-knife', minPlan: 'NORMAL' },
   { key: 'TeamPortal', label: 'Team Portal', icon: 'account-group', minPlan: 'NORMAL' },
   { key: 'Attendance', label: 'Attendance', icon: 'clock-check-outline', minPlan: 'PLUS', parent: 'TeamPortal' },
   { key: 'Leave', label: 'Leave Requests', icon: 'calendar-remove-outline', minPlan: 'PLUS', parent: 'TeamPortal' },

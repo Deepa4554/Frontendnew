@@ -758,25 +758,30 @@ export const POSCheckoutScreen = () => {
 
   const filteredMenu = useMemo(() => {
     const q = menuSearchQuery.trim().toLowerCase();
-    const matched = menuItems.filter(
-      m =>
-        (activeCategory === 'All Items' || m.category === activeCategory) &&
-        (q === '' ||
-          m.name.toLowerCase().includes(q) ||
-          (m.shortCode ?? '').toLowerCase().includes(q)) &&
-        (dietFilter === 'ALL' ||
-          (dietFilter === 'VEG' &&
-            (m.vegNonVegType == null ||
-              m.vegNonVegType === 'Veg' ||
-              m.vegNonVegType === 'Jain')) ||
-          (dietFilter === 'NONVEG' && m.vegNonVegType === 'NonVeg')),
-    );
+    // A fully-numeric query is a short code typed in full (e.g. "24") — match it exactly,
+    // not as a substring, so "24" doesn't also pull in "124"/"244". Alphabetic codes stay
+    // substring-matched so partials like "pan" still work.
+    const numericQ = /^\d+$/.test(q);
+    const codeMatches = (code: string) => (numericQ ? code === q : code.includes(q));
+    const matched = menuItems.filter((m) =>
+      (activeCategory === 'All Items' || m.category === activeCategory) &&
+      (q === '' ||
+        m.name.toLowerCase().includes(q) ||
+        codeMatches((m.shortCode ?? '').toLowerCase())) &&
+      (dietFilter === 'ALL' ||
+        (dietFilter === 'VEG' && (m.vegNonVegType == null || m.vegNonVegType === 'Veg' || m.vegNonVegType === 'Jain')) ||
+        (dietFilter === 'NONVEG' && m.vegNonVegType === 'NonVeg')));
     // Pinned items lead every view — the handful a till rings up all day shouldn't have to be
     // found in the alphabetical scroll (see backend MenuItem.Pinned). Applied here rather than in
     // the query because MenuController.List also serves the customer QR menu, which keeps its own
     // plain ordering. `sort` is stable, so within a category everything holds the server's Name order.
-    const byPin = (a: (typeof matched)[number], b: (typeof matched)[number]) =>
-      Number(b.pinned) - Number(a.pinned);
+    // Beverages come right after the pinned block — they're the highest-frequency ring-up after
+    // whatever's pinned, so they shouldn't wait for the alphabetical category scroll either.
+    const byPin = (a: (typeof matched)[number], b: (typeof matched)[number]) => {
+      const pinDiff = Number(b.pinned) - Number(a.pinned);
+      if (pinDiff !== 0) return pinDiff;
+      return Number(b.category === 'Beverages') - Number(a.category === 'Beverages');
+    };
     // Then the Owner's category order, so All Items reads top-to-bottom in the same
     // sequence as the category strip above it.
     const byCategory = (a: (typeof matched)[number], b: (typeof matched)[number]) =>
@@ -3112,7 +3117,7 @@ export const POSCheckoutScreen = () => {
           sidebar already shows the cafe name and its topbar owns search, so that variant
           is replaced by the shared page header above. */}
       {!isDesktopWeb && (
-        <View style={[styles.header, { paddingTop: insets.top + 8 }]}>
+        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <Text style={styles.brandTitle} numberOfLines={1}>
             {settings?.businessName ?? 'PrabandhOS'}
           </Text>
@@ -4689,9 +4694,9 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) =>
       flexDirection: 'row',
       alignItems: 'center',
       justifyContent: 'space-between',
-      paddingHorizontal: 10,
-      paddingTop: 8,
-      paddingBottom: 6,
+      paddingHorizontal: 12,
+      paddingTop: 12,
+      paddingBottom: 9,
     },
     branchPill: {
       flexDirection: 'row',
@@ -4744,7 +4749,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) =>
       flex: 1,
     },
     brandTitle: {
-      fontSize: 20,
+      fontSize: 14,
       fontWeight: 'bold',
       color: COLORS.heading,
     },

@@ -134,6 +134,7 @@ export const linking: LinkingOptions<any> = {
           Branches: 'branches',
           Expenses: 'expenses',
           Khatabook: 'khatabook',
+          Tiffin: 'tiffin',
           SaaS: 'saas',
           SuperAdmin: 'super-admin',
           Profile: 'profile',

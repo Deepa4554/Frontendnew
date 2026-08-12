@@ -80,6 +80,7 @@ import { HelpArticleScreen } from '../../features/management/help/presentation/s
 import { SupportTicketScreen } from '../../features/management/help/presentation/screens/SupportTicketScreen';
 import { CafeExpensesScreen } from '../../features/management/expenses/presentation/screens/CafeExpensesScreen';
 import { KhatabookScreen } from '../../features/management/khatabook/presentation/screens/KhatabookScreen';
+import { TiffinScreen } from '../../features/tiffin/presentation/screens/TiffinScreen';
 import { MoreScreen } from './MoreScreen';
 
 const Tab = createBottomTabNavigator();
@@ -149,6 +150,7 @@ const DeliveryPartnerScreenComp = withRouteGuard(withDesktopShell(DeliveryPartne
 const BranchesScreenComp = withRouteGuard(withDesktopShell(BranchManagementScreen, 'Branches'), 'Branches');
 const ExpensesScreenComp = withRouteGuard(withDesktopShell(CafeExpensesScreen, 'Expenses'), 'Expenses');
 const KhatabookScreenComp = withRouteGuard(withDesktopShell(KhatabookScreen, 'Khatabook'), 'Khatabook');
+const TiffinScreenComp = withRouteGuard(withDesktopShell(TiffinScreen, 'Tiffin'), 'Tiffin');
 const SaaSScreenComp = withRouteGuard(withDesktopShell(SubscriptionScreen, 'SaaS'), 'SaaS');
 const SuperAdminScreenComp = withRouteGuard(SuperAdminNavigator, 'SuperAdmin');
 const ProfileScreenComp = withRouteGuard(withDesktopShell(CafeSettingsScreen, 'Profile'), 'Profile');
@@ -334,6 +336,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="Branches" component={BranchesScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Expenses" component={ExpensesScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Khatabook" component={KhatabookScreenComp} options={{ headerShown: false }} />
+      <Stack.Screen name="Tiffin" component={TiffinScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="SaaS" component={SaaSScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="SuperAdmin" component={SuperAdminScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Profile" component={ProfileScreenComp} options={{ headerShown: false }} />

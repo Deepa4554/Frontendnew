@@ -382,7 +382,7 @@ export const KDSScreen = () => {
     <View style={styles.container}>
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <Icon name="chef-hat" size={24} color={COLORS.heading} />
+          <Icon name="chef-hat" size={22} color={COLORS.heading} />
           <Text style={styles.brandTitle} numberOfLines={1}>{settings?.businessName ?? 'PrabandhOS'}</Text>
           <GlobalSearchTrigger navigation={navigation} style={styles.searchBtn} />
           <View style={styles.clockPill}>
@@ -732,8 +732,8 @@ export const KDSScreen = () => {
 
 const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean, isTablet: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 12 : 9, paddingBottom: isDesktopWeb ? 12 : 9 },
-  brandTitle: { fontSize: 22, fontWeight: 'bold', color: COLORS.heading, flex: 1 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 8 : 7, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 12 : 9, paddingBottom: isDesktopWeb ? 12 : 9 },
+  brandTitle: { fontSize: 14, fontWeight: 'bold', color: COLORS.heading, flex: 1 },
   searchBtn: { padding: isDesktopWeb ? 6 : 4.5, marginRight: isDesktopWeb ? 8 : 6 },
   clockPill: { flexDirection: 'row', alignItems: 'center', backgroundColor: COLORS.button, borderRadius: 8, paddingHorizontal: isDesktopWeb ? 8 : 7.5, paddingVertical: isDesktopWeb ? 5 : 4.5, gap: isDesktopWeb ? 5 : 4.5 },
   clockText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
