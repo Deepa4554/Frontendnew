@@ -198,11 +198,16 @@ export const KDSScreen = () => {
   // One ticket per (order, non-served fire batch). A KOT is always ONE card even when its
   // items sit at different stages — the card lives in the column of its least-progressed item.
   const matchesStation = (it: OrderItem) => activeStation === 'ALL' || it.stationName === activeStation;
+  // A voided line is one the kitchen has been told to STOP making. Its own status freezes at
+  // whatever stage it was cancelled in (nobody advances it further), so without this it sat on
+  // the board forever as apparently-outstanding work — and a partially-voided KOT still shows
+  // as an active ticket, so the cancelled dish rode along on a card the kitchen does cook from.
+  const isLive = (it: OrderItem) => !it.voided;
 
   const tickets: KdsTicket[] = useMemo(() => orders.flatMap((order) =>
     order.fireBatches
       .filter((b) => b.status !== 'SERVED')
-      .map((batch) => ({ order, batch, items: order.items.filter((it) => it.fireBatch === batch.batchNumber && matchesStation(it)) }))
+      .map((batch) => ({ order, batch, items: order.items.filter((it) => it.fireBatch === batch.batchNumber && isLive(it) && matchesStation(it)) }))
       .filter((t) => t.items.length > 0)
   ), [orders, activeStation]);
 
@@ -236,7 +241,7 @@ export const KDSScreen = () => {
   // Production-view tab counts = total units at that stage across every fired line.
   const unitCounts = useMemo(() => {
     const c: Record<OrderStatus, number> = { NEW: 0, READ: 0, PREPARING: 0, READY: 0, SERVED: 0 };
-    orders.forEach((o) => o.items.filter((it) => it.fireBatch > 0 && matchesStation(it)).forEach((it) => {
+    orders.forEach((o) => o.items.filter((it) => it.fireBatch > 0 && isLive(it) && matchesStation(it)).forEach((it) => {
       STAGE_FLOW.forEach((s) => { c[s] += unitsAtStage(it, s); });
     }));
     return c;

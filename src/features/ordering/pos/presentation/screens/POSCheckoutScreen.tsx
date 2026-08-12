@@ -2457,8 +2457,11 @@ export const POSCheckoutScreen = () => {
             KOT.
           </Text>
           {resumeOrder.fireBatches.map(b => {
+            // Cancelled lines aren't "already in the kitchen" — the kitchen was told to
+            // stop making them and they're off the bill (see PrintableReceiptItem.voided),
+            // so listing them here re-shows an item the till just removed on the table.
             const bItems = resumeOrder.items.filter(
-              it => it.fireBatch === b.batchNumber,
+              it => it.fireBatch === b.batchNumber && !it.voided,
             );
             if (bItems.length === 0) return null;
             return (
@@ -4160,7 +4163,10 @@ export const POSCheckoutScreen = () => {
                   )}
                   <View style={styles.slipDash} />
 
-                  {receipt.items.map((item, idx) => (
+                  {/* Cancelled lines are off the bill — see the same filter on BillingScreen's
+                      slip and PrintableReceiptItem.voided. This preview is meant to match the
+                      slip that prints, so it has to drop them too. */}
+                  {receipt.items.filter((i) => !i.voided).map((item, idx) => (
                     <View key={idx} style={styles.slipItemBlock}>
                       <View style={styles.slipItemRow}>
                         <View

@@ -235,7 +235,10 @@ export const BillingScreen = () => {
                     </Text>
                     <Text style={styles.txnMeta}>
                       {new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} ·{' '}
-                      {order.items.reduce((n, i) => n + i.qty, 0)} items
+                      {/* Cancelled lines are off the bill, so they're off this count too —
+                          otherwise the card promises more items than the slip behind it
+                          itemises (and than the total charged). Same rule as the slip below. */}
+                      {order.items.reduce((n, i) => (i.voided ? n : n + i.qty), 0)} items
                       {!!(order.servedByName ?? order.createdByName) && ` · ${order.servedByName ?? order.createdByName}`}
                     </Text>
                   </View>
@@ -286,7 +289,11 @@ export const BillingScreen = () => {
                     )}
                     <View style={styles.slipDash} />
 
-                    {openOrder.items.map((item, idx) => (
+                    {/* Cancelled lines are off the bill — the totals below already exclude them
+                        (the server sums live lines only), so listing them makes this slip
+                        itemise to more than the Subtotal printed under it. Same rule the
+                        printed/PDF/WhatsApp bills follow, see PrintableReceiptItem.voided. */}
+                    {openOrder.items.filter((i) => !i.voided).map((item, idx) => (
                       <View key={idx} style={styles.slipItemBlock}>
                         <View style={styles.slipItemRow}>
                           <Text style={styles.slipItemName}>
