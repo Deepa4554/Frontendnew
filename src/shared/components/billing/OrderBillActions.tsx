@@ -11,7 +11,7 @@ import { getApiErrorMessage } from '../../../core/network/api';
 import { canApplyBillDiscount } from '../../../core/auth/permissions';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
 import { LoadingOverlay } from '../atoms/LoadingOverlay';
-import { useApplyBillDiscount, useBillCoupon, useBillGiftCard, useBillCharges, useBillLoyalty, useCloseOrder, useUpdateOrderGuest, useServeAll } from '../../../core/api/hooks/useOrders';
+import { useApplyBillDiscount, useBillCoupon, useBillGiftCard, useBillCharges, useBillLoyalty, useCloseOrder, useUpdateOrderGuest, useServeAll, useFireOrder, useRemoveOrderItem } from '../../../core/api/hooks/useOrders';
 import { useSettings } from '../../../core/api/hooks/useSettings';
 import { useKhata } from '../../../core/api/hooks/useKhatabook';
 import { PaymentMethodPicker, PaymentMethodPickerResult, PaymentMethod, PaymentSplit } from './PaymentMethodPicker';
@@ -55,13 +55,18 @@ interface Props {
    *  `guest` carries the name/mobile typed into the payment picker's khata fields when the
    *  settle includes a Due (udhaar) leg — the caller must pass these through to
    *  ordersApi.pay's guestName/guestPhone, which is what the server hangs the khata entry on
-   *  (and which it rejects the settle without). Undefined for every ordinary settle. */
+   *  (and which it rejects the settle without). Undefined for every ordinary settle.
+   *  `unfiredItems` is 'keep' only when this bill still carries a line the kitchen never saw and
+   *  the cashier chose to charge it anyway — the server refuses the settle without it (see
+   *  PayOptions.unfiredItems), so it must be passed straight through to ordersApi.pay. Undefined
+   *  for every ordinary settle, which has nothing unfired on it. */
   onMarkPaid: (
     payments: PaymentSplit[],
     allowPartial?: boolean,
     andThen?: 'print' | 'whatsapp',
     phoneOverride?: string,
     guest?: { name: string; phone: string },
+    unfiredItems?: 'keep',
   ) => void;
   onPrintBill: () => void;
   /** phoneOverride: see onMarkPaid. Every implementation is already async (it mints a
@@ -141,6 +146,8 @@ export const OrderBillActions: React.FC<Props> = ({
   const billLoyalty = useBillLoyalty();
   const closeOrder = useCloseOrder();
   const serveAll = useServeAll();
+  const fireOrder = useFireOrder();
+  const removeOrderItem = useRemoveOrderItem();
   const adjustmentPending = applyBillDiscount.isPending || billCoupon.isPending || billGiftCard.isPending || billCharges.isPending || billLoyalty.isPending;
   // Only the three charge switches. billCharges.isPending is shared with the pencil-edit
   // path, which already renders its own spinner inside BillAdjustmentsPanel — gating the
@@ -158,6 +165,19 @@ export const OrderBillActions: React.FC<Props> = ({
   // Served — see OrdersController.ServeAll), so the tick disappears once there's genuinely
   // nothing left for it to do rather than sitting there as a no-op.
   const hasUnservedFiredItems = order.items.some((i) => i.fireBatch > 0 && !i.voided && i.status !== 'SERVED');
+
+  // Lines the kitchen was never told about (fireBatch 0) — a round left on Hold and never fired.
+  // The bill charges them exactly like any other line (the server totals on `voided` alone), so
+  // settling with one on the bill takes money for food nobody made. The server refuses such a
+  // settle outright (see PayOptions.unfiredItems); everything below is this panel making that
+  // refusal something the cashier answers up front rather than hits as an error.
+  const unfiredItems = order.items.filter((i) => i.fireBatch === 0 && !i.voided);
+  const unfiredTotal = unfiredItems.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const hasUnfired = !order.paid && unfiredItems.length > 0;
+  // Removing every line would leave a bill for nothing, which the server rejects (an order must
+  // keep at least one item) — that situation is a cancellation, not a settle, so the choice is
+  // hidden rather than offered as something that will fail.
+  const canRemoveUnfired = order.items.some((i) => !i.voided && i.fireBatch > 0);
   const showServeOnSettle = offerServeOnSettle && !order.paid && hasUnservedFiredItems;
   const willServeOnSettle = showServeOnSettle && serveOnSettle;
   // The standalone serve action, back only when the tick ISN'T going to cover it: either the
@@ -282,7 +302,8 @@ export const OrderBillActions: React.FC<Props> = ({
     }
   };
 
-  const handleSettle = async (andThen?: 'print' | 'whatsapp', phoneOverride?: string) => {
+  // The settle itself, once the unfired-items question (if there was one) has been answered.
+  const runSettle = async (andThen?: 'print' | 'whatsapp', phoneOverride?: string, unfiredChoice?: 'keep') => {
     if (paymentResult.splits.length === 0) return;
     if (!(await serveAllForSettle())) return;
     // Only forwarded when there's actually credit in play — see onMarkPaid's `guest`. The
@@ -290,7 +311,59 @@ export const OrderBillActions: React.FC<Props> = ({
     const guest = paymentResult.dueAmount > 0
       ? { name: paymentResult.guestName, phone: paymentResult.guestPhone }
       : undefined;
-    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride, guest);
+    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride, guest, unfiredChoice);
+  };
+
+  // Which action the unfired-items prompt is standing in front of, so it can be resumed with the
+  // cashier's answer. Null whenever the prompt is closed.
+  const [unfiredPrompt, setUnfiredPrompt] = useState<
+    { kind: 'settle'; andThen?: 'print' | 'whatsapp'; phoneOverride?: string } | { kind: 'close' } | null
+  >(null);
+  const [resolvingUnfired, setResolvingUnfired] = useState(false);
+
+  const handleSettle = async (andThen?: 'print' | 'whatsapp', phoneOverride?: string) => {
+    if (paymentResult.splits.length === 0) return;
+    if (hasUnfired) {
+      setUnfiredPrompt({ kind: 'settle', andThen, phoneOverride });
+      return;
+    }
+    await runSettle(andThen, phoneOverride);
+  };
+
+  // Fire and Remove both change what the bill comes to, so neither chains straight into the
+  // settle: they apply, close the prompt, and hand the cashier back a corrected bill to look at
+  // before taking any money. Only "charge them anyway" leaves the total alone, so only that one
+  // continues into the action the prompt interrupted.
+  const resolveUnfired = async (choice: 'fire' | 'remove' | 'keep') => {
+    const pending = unfiredPrompt;
+    if (!pending || resolvingUnfired) return;
+
+    if (choice === 'keep') {
+      setUnfiredPrompt(null);
+      if (pending.kind === 'close') await runClose('keep');
+      else await runSettle(pending.andThen, pending.phoneOverride, 'keep');
+      return;
+    }
+
+    setResolvingUnfired(true);
+    try {
+      if (choice === 'fire') {
+        await fireOrder.mutateAsync(order.id);
+        dispatch(showToast({ message: 'Sent to the kitchen as a new KOT — settle once it goes out.', icon: 'chef-hat', tone: 'success' }));
+      } else {
+        // Sequentially, not in parallel: each removal re-prices the whole bill server-side (see
+        // OrdersController.RemoveItem), and concurrent writes to the same order would race.
+        for (const item of unfiredItems) {
+          await removeOrderItem.mutateAsync({ id: order.id, itemId: item.id, reason: 'Never sent to the kitchen' });
+        }
+        dispatch(showToast({ message: `${unfiredItems.length} item${unfiredItems.length === 1 ? '' : 's'} taken off the bill — check the new total.`, icon: 'check-circle', tone: 'success' }));
+      }
+      setUnfiredPrompt(null);
+    } catch (err) {
+      fail(err, choice === 'fire' ? 'Could not send the items to the kitchen' : 'Could not take the items off the bill');
+    } finally {
+      setResolvingUnfired(false);
+    }
   };
 
   // Every WhatsApp action needs a number to send to. When one was never taken, the tap opens
@@ -354,14 +427,25 @@ export const OrderBillActions: React.FC<Props> = ({
   // Close Bill is a prepaid order's version of settling (the money's already in), so it
   // honours the same tick — otherwise a Pay First table could never be bulk-served at all
   // now that the standalone "Mark All as Served" button is gone.
-  const handleClose = async () => {
+  const runClose = async (unfiredChoice?: 'keep') => {
     if (!(await serveAllForSettle())) return;
     try {
-      await closeOrder.mutateAsync(order.id);
+      await closeOrder.mutateAsync({ id: order.id, unfiredItems: unfiredChoice });
       dispatch(showToast({ message: 'Bill closed.', icon: 'check-circle', tone: 'success' }));
     } catch (err) {
       fail(err, 'Could not close the bill');
     }
+  };
+
+  // Closes the bill for good, so it faces the same unfired-items question a settle does — see
+  // runSettle/resolveUnfired. (Pay First's earlier payment call is exempt server-side: that one
+  // leaves the order open precisely because more items are still expected.)
+  const handleClose = async () => {
+    if (hasUnfired) {
+      setUnfiredPrompt({ kind: 'close' });
+      return;
+    }
+    await runClose();
   };
 
   const maxLoyaltyPoints = Math.min(customerAvailablePoints ?? 0, Math.floor(owed));
@@ -755,6 +839,18 @@ export const OrderBillActions: React.FC<Props> = ({
         </TouchableOpacity>
   ) : null;
 
+  // Sits above the action row so the problem is visible BEFORE the settle is tapped — the prompt
+  // that interrupts the tap is the backstop, not the first warning.
+  const unfiredWarningBlock = hasUnfired ? (
+        <View style={styles.unfiredWarnBox}>
+          <Icon name="alert-circle-outline" size={16} color={COLORS.warning} />
+          <Text style={styles.unfiredWarnText}>
+            {unfiredItems.length} item{unfiredItems.length === 1 ? '' : 's'} never went to the kitchen
+            {' '}({money(unfiredTotal)}) — still on this bill.
+          </Text>
+        </View>
+  ) : null;
+
   const actionsBlock = (
       <View style={styles.actionsRow}>
         <View style={styles.printBtnGroup}>
@@ -900,6 +996,80 @@ export const OrderBillActions: React.FC<Props> = ({
         </TouchableOpacity>
       </Modal>
 
+      {/* Stands between the settle tap and the money. Three answers, none of them a default:
+          the guest is still getting the food (Fire), they aren't and shouldn't pay for it
+          (Remove), or the charge is deliberate — a packed item, a service line — and stands
+          (Charge anyway). Fire and Remove both change the total, so they hand the bill back for
+          a look instead of settling on the spot; see resolveUnfired. */}
+      <Modal visible={unfiredPrompt !== null} transparent animationType="fade" onRequestClose={() => setUnfiredPrompt(null)}>
+        <View style={styles.unfiredBackdrop}>
+          <View style={styles.unfiredCard}>
+            <View style={styles.unfiredHeader}>
+              <Icon name="alert-circle-outline" size={20} color={COLORS.warning} />
+              <Text style={styles.unfiredTitle}>
+                {unfiredItems.length} item{unfiredItems.length === 1 ? '' : 's'} never went to the kitchen
+              </Text>
+            </View>
+            <Text style={styles.unfiredBody}>
+              These are on the bill but were never sent as a KOT, so nobody has made them.
+            </Text>
+
+            <View style={styles.unfiredList}>
+              {unfiredItems.map((item) => (
+                <View key={item.id} style={styles.unfiredRow}>
+                  <Text style={styles.unfiredRowName} numberOfLines={1}>{item.name} ×{item.qty}</Text>
+                  <Text style={styles.unfiredRowAmount}>{money(item.price * item.qty)}</Text>
+                </View>
+              ))}
+              <View style={[styles.unfiredRow, styles.unfiredTotalRow]}>
+                <Text style={styles.unfiredTotalLabel}>On the bill</Text>
+                <Text style={styles.unfiredTotalAmount}>{money(unfiredTotal)}</Text>
+              </View>
+            </View>
+
+            <TouchableOpacity
+              style={[styles.unfiredPrimaryBtn, webNoOutline]}
+              onPress={() => resolveUnfired('fire')}
+              disabled={resolvingUnfired}
+            >
+              {resolvingUnfired && fireOrder.isPending
+                ? <ActivityIndicator size="small" color="#FFFFFF" />
+                : <Icon name="chef-hat" size={16} color="#FFFFFF" />}
+              <Text style={styles.unfiredPrimaryText}>Send to kitchen</Text>
+            </TouchableOpacity>
+
+            {canRemoveUnfired && (
+              <TouchableOpacity
+                style={[styles.unfiredDangerBtn, webNoOutline]}
+                onPress={() => resolveUnfired('remove')}
+                disabled={resolvingUnfired}
+              >
+                {resolvingUnfired && removeOrderItem.isPending
+                  ? <ActivityIndicator size="small" color={COLORS.dangerAccent} />
+                  : <Icon name="close-circle-outline" size={16} color={COLORS.dangerAccent} />}
+                <Text style={styles.unfiredDangerText}>Take off the bill</Text>
+              </TouchableOpacity>
+            )}
+
+            <TouchableOpacity
+              style={[styles.unfiredGhostBtn, webNoOutline]}
+              onPress={() => resolveUnfired('keep')}
+              disabled={resolvingUnfired}
+            >
+              <Text style={styles.unfiredGhostText}>Charge anyway and settle</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.unfiredCancelBtn, webNoOutline]}
+              onPress={() => setUnfiredPrompt(null)}
+              disabled={resolvingUnfired}
+            >
+              <Text style={styles.unfiredCancelText}>Cancel</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
       <LoadingOverlay visible={chargeToggleBusy} message="Updating bill…" />
     </>
   );
@@ -922,6 +1092,7 @@ export const OrderBillActions: React.FC<Props> = ({
             </View>
           </View>
           {serveAllBlock}
+          {unfiredWarningBlock}
           {actionsBlock}
         </>
       ) : (
@@ -932,6 +1103,7 @@ export const OrderBillActions: React.FC<Props> = ({
           {adjustmentsBlock}
           {serveAllBlock}
           {serveOnSettleBlock}
+          {unfiredWarningBlock}
           {actionsBlock}
         </>
       )}
@@ -1055,6 +1227,45 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     borderLeftWidth: 1,
     borderLeftColor: 'rgba(255,255,255,0.28)',
   },
+  // Unfired-items warning strip + its prompt. Warning-toned rather than danger: nothing has gone
+  // wrong yet, this is the last point at which it's still free to fix.
+  unfiredWarnBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    backgroundColor: COLORS.warningBg,
+    borderRadius: RADIUS.button,
+    paddingHorizontal: 10,
+    paddingVertical: 7,
+  },
+  unfiredWarnText: { flex: 1, fontSize: 12, fontWeight: '700', color: COLORS.warning },
+  unfiredBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.55)', alignItems: 'center', justifyContent: 'center', padding: 24 },
+  unfiredCard: { backgroundColor: COLORS.card, borderRadius: RADIUS.card, padding: 18, gap: 8, maxWidth: 380, width: '100%' },
+  unfiredHeader: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  unfiredTitle: { flex: 1, fontSize: 15.5, fontWeight: '800', color: COLORS.heading },
+  unfiredBody: { fontSize: 12.5, lineHeight: 18, color: COLORS.muted },
+  unfiredList: { backgroundColor: COLORS.cardAlt, borderRadius: RADIUS.card, padding: 10, gap: 5, marginTop: 2 },
+  unfiredRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 10 },
+  unfiredRowName: { flex: 1, fontSize: 12.5, color: COLORS.heading },
+  unfiredRowAmount: { fontSize: 12.5, fontWeight: '600', color: COLORS.heading },
+  unfiredTotalRow: { borderTopWidth: 1, borderTopColor: COLORS.divider, paddingTop: 5, marginTop: 1 },
+  unfiredTotalLabel: { flex: 1, fontSize: 12.5, fontWeight: '800', color: COLORS.heading },
+  unfiredTotalAmount: { fontSize: 13.5, fontWeight: '800', color: COLORS.heading },
+  unfiredPrimaryBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    backgroundColor: COLORS.button, borderRadius: RADIUS.button, paddingVertical: 11, marginTop: 4,
+  },
+  unfiredPrimaryText: { fontSize: 13.5, fontWeight: '700', color: '#FFFFFF' },
+  unfiredDangerBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6,
+    borderRadius: RADIUS.button, paddingVertical: 11,
+    borderWidth: INPUT_BORDER_WIDTH, borderColor: COLORS.dangerAccent,
+  },
+  unfiredDangerText: { fontSize: 13.5, fontWeight: '700', color: COLORS.dangerAccent },
+  unfiredGhostBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 10, borderRadius: RADIUS.button, backgroundColor: COLORS.cardAlt },
+  unfiredGhostText: { fontSize: 13, fontWeight: '700', color: COLORS.heading },
+  unfiredCancelBtn: { alignItems: 'center', justifyContent: 'center', paddingVertical: 6 },
+  unfiredCancelText: { fontSize: 12.5, fontWeight: '600', color: COLORS.muted },
   paidBadge: {
     flexDirection: 'row',
     alignItems: 'center',

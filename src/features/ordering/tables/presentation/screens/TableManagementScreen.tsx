@@ -318,7 +318,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }) => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep') => {
     if (!occupiedModal?.orderId) {
       setOccupiedModal(null);
       return;
@@ -326,7 +326,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
     try {
       // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
       // server needs them to open the customer's khata and rejects the settle without.
-      await payOrder.mutateAsync({ id: occupiedModal.orderId, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone });
+      // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
+      // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
+      await payOrder.mutateAsync({ id: occupiedModal.orderId, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems });
       // Deliberately don't close the modal here — it re-renders in its "paid"
       // state (see occupiedOrder?.paid below) so the WhatsApp option can show
       // up as the next step. "Done"/"Close" is what dismisses it now.
@@ -1106,7 +1108,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 </TouchableOpacity>
               )}
 
-              {occupiedOrder && !isOpenOrder && unfiredCount > 0 && (
+              {/* Hidden once the bill is settled: the backend refuses Fire on a paid order
+                  ("Order is already paid"), so this could only ever throw an error toast. */}
+              {occupiedOrder && !isOpenOrder && !occupiedOrder.paid && unfiredCount > 0 && (
                 <TouchableOpacity style={styles.modalPayBtn} onPress={handleFire} disabled={fireOrder.isPending}>
                   {fireOrder.isPending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon name="chef-hat" size={16} color="#FFFFFF" />}
                   <Text style={styles.modalPayText}>Fire New Items ({unfiredCount})</Text>

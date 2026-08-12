@@ -191,7 +191,8 @@ export const useUpdateOrderGuest = () => {
 export const useCloseOrder = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (id: number) => ordersApi.close(id),
+    mutationFn: ({ id, unfiredItems }: { id: number; unfiredItems?: 'keep' }) =>
+      ordersApi.close(id, unfiredItems),
     // onSettled for the same reason as usePayOrder above — it's the same paid transition,
     // guarded by the same "already paid" conflict.
     onSettled: () => {

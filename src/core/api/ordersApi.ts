@@ -136,6 +136,14 @@ export interface PayOptions {
   keepOpen?: boolean;
   guestName?: string;
   guestPhone?: string;
+  /** An explicit "yes, bill the lines that never went to the kitchen (fireBatch === 0)". The
+   *  server REQUIRES it whenever such a line exists and the call would close the bill, refusing
+   *  the settle with a 409 otherwise (see backend EnsureUnfiredItemsResolved) — the bill charges
+   *  an unfired line like any other, so settling with one silently bills food nobody made.
+   *  The two answers that change the total are separate calls made BEFORE settling, with the new
+   *  total on screen: `fire` to send them to the kitchen, `removeItem` to take them off. Either
+   *  leaves nothing unfired, and the settle then needs nothing here. Omit on the ordinary bill. */
+  unfiredItems?: 'keep';
 }
 
 export interface ApiOrder {
@@ -363,8 +371,10 @@ export const ordersApi = {
   pay: (id: number, paymentMethod?: string, splits?: PaymentSplit[], opts?: PayOptions) =>
     apiClient.patch<ApiOrder>(`/orders/${id}/pay`, { paymentMethod, splits, ...opts }).then((r) => r.data),
   /** Finalizes a keepOpen (Pay First) order once no more items are going to be added — the
-   * balance is already fully covered, so this just flips it to paid with no new payment. */
-  close: (id: number) => apiClient.patch<ApiOrder>(`/orders/${id}/close`).then((r) => r.data),
+   * balance is already fully covered, so this just flips it to paid with no new payment.
+   * unfiredItems: see PayOptions — this closes the bill too, so it asks the same question. */
+  close: (id: number, unfiredItems?: 'keep') =>
+    apiClient.patch<ApiOrder>(`/orders/${id}/close`, { unfiredItems }).then((r) => r.data),
   refund: (id: number, amount?: number, reason?: string) =>
     apiClient.post<ApiOrder | PendingApprovalResponse>(`/orders/${id}/refund`, { amount, reason }).then((r) => r.data),
   getReceiptToken: (id: number) => apiClient.get<{ token: string }>(`/orders/${id}/receipt-token`).then((r) => r.data.token),

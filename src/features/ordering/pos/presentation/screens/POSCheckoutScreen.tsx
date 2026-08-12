@@ -1407,7 +1407,7 @@ export const POSCheckoutScreen = () => {
   // Resume/append mode: add the cart's new items to the already-open order, then (unless
   // holdOnly) fire them as a fresh KOT — the existing fired KOTs are never touched. Guest
   // and table already live on the order, so nothing is re-asked. Returns to Orders after.
-  const submitAppend = async (holdOnly: boolean, andPrint: boolean = true) => {
+  const submitAppend = async (andPrint: boolean = true) => {
     if (resumeOrderId == null || addOrderItemMutation.isPending) return;
     try {
       for (const c of cart) {
@@ -1423,11 +1423,11 @@ export const POSCheckoutScreen = () => {
           openPrice: c.openPrice,
         });
       }
-      if (!holdOnly) {
-        // Fire creates a NEW KOT containing only these just-added (unfired) items.
-        const firedOrder = await fireOrderMutation.mutateAsync(resumeOrderId);
-        if (andPrint) autoPrintKot(firedOrder);
-      }
+      // Always fires: appending used to be able to stop here and leave the round unfired, which
+      // billed the guest for food the kitchen was never told to make. Fire creates a NEW KOT
+      // containing only these just-added items.
+      const firedOrder = await fireOrderMutation.mutateAsync(resumeOrderId);
+      if (andPrint) autoPrintKot(firedOrder);
       clearCart();
       dispatch(clearSelectedTable()); // exit resume mode
       // A tableless QSR order came from the Token Dashboard's "Add Item" — return there
@@ -1435,12 +1435,8 @@ export const POSCheckoutScreen = () => {
       const isTokenOrder = resumeOrder?.orderType === 'QSR';
       dispatch(
         showToast({
-          message: holdOnly
-            ? `Items added — pending. Fire them from the ${
-                isTokenOrder ? 'Token Dashboard' : 'Tables screen'
-              } when ready.`
-            : 'New KOT sent to the kitchen.',
-          icon: holdOnly ? 'clock-outline' : 'check-circle',
+          message: 'New KOT sent to the kitchen.',
+          icon: 'check-circle',
           tone: 'success',
         }),
       );
@@ -1504,7 +1500,7 @@ export const POSCheckoutScreen = () => {
   const fireToKitchen = (andPrint: boolean) => {
     if (ensureOrderReady(false, andPrint)) return;
     if (resumeMode) {
-      submitAppend(false, andPrint);
+      submitAppend(andPrint);
       return;
     }
     submitOrder(
@@ -1516,11 +1512,13 @@ export const POSCheckoutScreen = () => {
   };
 
   const holdOrder = () => {
+    // Fresh orders only — resume mode no longer offers Hold at all (see the header button),
+    // because a round appended without a KOT got billed for food nobody made.
+    //
     // The backend auto-fires a QSR order inside Create (no one comes back to press
     // Fire) and a Cash Sale has no kitchen step at all — so a fresh order of either
     // type can't be held: pressing Hold used to silently fire it to the kitchen.
-    // Appending to an existing Token order (resumeMode) CAN hold, so that stays.
-    if (!resumeMode && (orderType === 'QSR' || orderType === 'CASH')) {
+    if (orderType === 'QSR' || orderType === 'CASH') {
       dispatch(
         showToast({
           message:
@@ -1534,10 +1532,6 @@ export const POSCheckoutScreen = () => {
       return;
     }
     if (ensureOrderReady(true)) return;
-    if (resumeMode) {
-      submitAppend(true);
-      return;
-    }
     submitOrder(orderType === 'DINE_IN' ? selectedTable : null, true);
   };
 
@@ -2192,17 +2186,21 @@ export const POSCheckoutScreen = () => {
     andThen?: 'print' | 'whatsapp',
     phoneOverride?: string,
     guest?: { name: string; phone: string },
+    unfiredItems?: 'keep',
   ) => {
     if (!receipt) return;
     try {
       // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
       // server needs them to open the customer's khata and rejects the settle without.
+      // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
+      // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
       await payOrderMutation.mutateAsync({
         id: receipt.orderId,
         splits: payments,
         allowPartial,
         guestName: guest?.name,
         guestPhone: guest?.phone,
+        unfiredItems,
       });
       dispatch(
         showToast({
@@ -2486,16 +2484,20 @@ export const POSCheckoutScreen = () => {
             {resumeMode ? 'New Items' : 'Current Order'}
           </Text>
           <View style={styles.orderHeaderActions}>
-            {(resumeMode || (orderType !== 'QSR' && orderType !== 'CASH')) && (
+            {/* Fresh orders only. This used to show in resume mode too, labelled "Add" — which
+                read as "add another item" directly under an "New Items" heading, while what it
+                actually did was attach the round to the order WITHOUT a KOT. Rounds appended that
+                way were billed but never made, and pinned the order at New so its table could
+                never be freed. Appending now always goes through New KOT / KOT & Print below, so
+                anything on an existing order has genuinely reached the kitchen. */}
+            {!resumeMode && orderType !== 'QSR' && orderType !== 'CASH' && (
               <TouchableOpacity
                 style={styles.holdHeaderBtn}
                 onPress={holdOrder}
                 disabled={submitting}
               >
                 <Icon name="clock-outline" size={14} color={COLORS.heading} />
-                <Text style={styles.holdHeaderBtnText}>
-                  {resumeMode ? 'Add' : 'Hold'}
-                </Text>
+                <Text style={styles.holdHeaderBtnText}>Hold</Text>
               </TouchableOpacity>
             )}
             <Tooltip label="Clear cart" placement="left">
@@ -3201,8 +3203,8 @@ export const POSCheckoutScreen = () => {
                 </View>
                 <Icon name="chevron-up" size={20} color={COLORS.muted} />
               </TouchableOpacity>
-              {(resumeMode ||
-                (orderType !== 'QSR' && orderType !== 'CASH')) && (
+              {/* Fresh orders only — same reasoning as the order-header Hold button above. */}
+              {!resumeMode && orderType !== 'QSR' && orderType !== 'CASH' && (
                 <TouchableOpacity
                   style={[
                     styles.cartBarHoldBtn,
@@ -3212,9 +3214,7 @@ export const POSCheckoutScreen = () => {
                   disabled={submitting}
                 >
                   <Icon name="clock-outline" size={16} color={COLORS.heading} />
-                  <Text style={styles.cartBarHoldBtnText}>
-                    {resumeMode ? 'Add' : 'Hold'}
-                  </Text>
+                  <Text style={styles.cartBarHoldBtnText}>Hold</Text>
                 </TouchableOpacity>
               )}
               <TouchableOpacity

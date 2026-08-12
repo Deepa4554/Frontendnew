@@ -186,12 +186,14 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }) => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep') => {
     if (!order) return;
     try {
       // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
       // server needs them to open the customer's khata and rejects the settle without.
-      await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone });
+      // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
+      // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
+      await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems });
       if (andThen === 'print') await printBill();
       else if (andThen === 'whatsapp') await sendViaWhatsApp(phoneOverride);
     } catch (err) {
