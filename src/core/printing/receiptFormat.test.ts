@@ -1,4 +1,4 @@
-import { splitGst, buildTaxBreakdown, PrintableReceiptItem } from './receiptFormat';
+import { splitGst, buildTaxBreakdown, buildReceiptLines, PrintableReceipt, PrintableReceiptItem } from './receiptFormat';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -87,5 +87,62 @@ describe('buildTaxBreakdown', () => {
     // The printer-settings sample receipt predates per-line tax; it must not produce a bogus
     // 0% row.
     expect(buildTaxBreakdown([item()], 5)).toEqual([]);
+  });
+
+  it('leaves a voided line out of the slab it was billed at', () => {
+    // A voided line keeps the taxableAmount/taxAmount it last held — the server only
+    // recomputes live lines — so counting it would overstate the slab's taxable value.
+    const slabs = buildTaxBreakdown(
+      [
+        item({ taxRatePct: 5, taxableAmount: 1000, taxAmount: 50 }),
+        item({ taxRatePct: 5, taxableAmount: 400, taxAmount: 20, voided: true }),
+      ],
+      5,
+    );
+    expect(slabs).toHaveLength(1);
+    expect(slabs[0]).toMatchObject({ ratePct: 5, taxableAmount: 1000, taxAmount: 50 });
+  });
+});
+
+describe('buildReceiptLines — cancelled items', () => {
+  const receipt = (items: PrintableReceiptItem[]): PrintableReceipt => ({
+    businessName: 'Cafe',
+    orderNumber: '#1294',
+    time: '02:07 PM',
+    title: 'Table #T1',
+    orderTypeLabel: 'Dine In',
+    items,
+    subtotal: 100,
+    taxRatePct: 5,
+    tax: 5,
+    total: 105,
+    footer: 'Thanks!',
+  });
+
+  const textOf = (lines: ReturnType<typeof buildReceiptLines>) =>
+    lines.map((l) => ('text' in l ? l.text : '')).join('\n');
+
+  it('does not print a cancelled line on the bill', () => {
+    // The guest is not charged for it (the server drops voided lines from every total), so
+    // itemising it makes the printed lines add up to more than the subtotal beneath them.
+    const out = textOf(buildReceiptLines(receipt([
+      item({ name: 'Chicken Lolipop', price: 100 }),
+      item({ name: 'Mineral Water', qty: 2, price: 20, voided: true }),
+    ])));
+
+    expect(out).toContain('Chicken Lolipop');
+    expect(out).not.toContain('Mineral Water');
+  });
+
+  it('still prints the live lines when every other line was cancelled', () => {
+    const out = textOf(buildReceiptLines(receipt([
+      item({ name: 'Chapati Plain', qty: 8, price: 12.5 }),
+      item({ name: 'Chicken Dana', voided: true }),
+      item({ name: '7 up', voided: true }),
+    ])));
+
+    expect(out).toContain('Chapati Plain');
+    expect(out).not.toContain('Chicken Dana');
+    expect(out).not.toContain('7 up');
   });
 });

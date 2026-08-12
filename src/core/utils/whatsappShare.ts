@@ -3,6 +3,10 @@ export interface BillLineForShare {
   qty: number;
   price: number;
   modifier?: string | null;
+  /** Cancelled line — on the order, off the bill. Callers pass `order.items` straight through,
+   * so it is filtered here for the same reason the printed slip filters it (see
+   * PrintableReceiptItem.voided in core/printing/receiptFormat). */
+  voided?: boolean;
 }
 
 export interface ShareBillParams {
@@ -43,7 +47,7 @@ const formatBillText = (p: ShareBillParams): string => {
     `*${p.businessName}*`,
     `Order ${p.orderNumber}`,
     '',
-    ...p.items.map((i) => `${i.qty}x ${i.name}${i.modifier ? ` (${i.modifier})` : ''} - ₹${(i.price * i.qty).toFixed(2)}`),
+    ...p.items.filter((i) => !i.voided).map((i) => `${i.qty}x ${i.name}${i.modifier ? ` (${i.modifier})` : ''} - ₹${(i.price * i.qty).toFixed(2)}`),
     '',
     `Subtotal: ₹${p.subtotal.toFixed(2)}`,
   ];

@@ -32,6 +32,13 @@ export interface PrintableReceiptItem {
   taxableAmount?: number;
   /** Tax charged on this line. */
   taxAmount?: number;
+  /** Cancelled line — kept on the order (never deleted, so the KOT/void history survives) but
+   * NOT part of the bill. Filtered out here rather than at each caller: every screen that
+   * prints hands over `order.items` wholesale, and one that forgets would print food the guest
+   * is not being charged for. The money fields are already void-aware server-side
+   * (RecomputeTotals sums live lines only), which is exactly why the lines had to be filtered
+   * too — an unfiltered list itemises to more than the subtotal it sits above. */
+  voided?: boolean;
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
@@ -75,6 +82,12 @@ export const buildTaxBreakdown = (
 }[] => {
   const byRate = new Map<number, { taxableAmount: number; taxAmount: number }>();
   for (const item of items) {
+    // Cancelled lines are not billed, so they owe no tax — and they keep whatever
+    // taxableAmount/taxAmount they last held (the server recomputes live lines only), so
+    // counting one would overstate its slab's taxable value on the invoice. Filtered inside
+    // this function rather than by each caller: the POS checkout's on-screen GST preview
+    // calls it directly with the raw line list too.
+    if (item.voided) continue;
     // A caller that predates per-line tax (the printer-settings sample receipt) sends
     // neither field — it gets the single-rate path below rather than a bogus 0% row.
     if (item.taxAmount === undefined && item.taxableAmount === undefined) continue;
@@ -256,7 +269,10 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): Rece
   if (receipt.guestPhone && receipt.showGuestPhone !== false) push({ kind: 'text', text: twoCol('Mobile', receipt.guestPhone, columns) });
   push({ kind: 'dashes' });
 
-  for (const item of receipt.items) {
+  // Cancelled lines are off the bill entirely — see PrintableReceiptItem.voided.
+  const billedItems = receipt.items.filter((i) => !i.voided);
+
+  for (const item of billedItems) {
     pushAmountRow(push, `${item.qty}x ${itemLabel(item)}`, money(item.price * item.qty), columns);
     for (const addOn of item.selectedModifiers ?? []) {
       push({ kind: 'text', text: `  + ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
@@ -279,7 +295,7 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): Rece
   }
   // One pair of rows per slab when the bill mixes rates, each slab shown as its CGST and
   // SGST halves — a tax invoice has to state the two components separately (see splitGst).
-  const taxBreakdown = buildTaxBreakdown(receipt.items, receipt.taxRatePct);
+  const taxBreakdown = buildTaxBreakdown(billedItems, receipt.taxRatePct);
   if (receipt.tax <= 0) {
     // Nothing charged (unregistered or composition scheme) — a single plain row reads better
     // than a CGST and an SGST line that both say 0.00.
