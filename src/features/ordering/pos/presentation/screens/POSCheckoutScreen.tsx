@@ -2434,12 +2434,15 @@ export const POSCheckoutScreen = () => {
   // items, and Split/Discount/Fire actions either way, just different chrome
   // around it depending on how much screen width is available.
   //
-  // Split into two pieces (items vs. summary) so the desktop side panel can
-  // keep Subtotal/Total/Fire-to-Kitchen pinned at the bottom instead of
-  // requiring a scroll down a long cart to reach them — mobile's modal sheet
-  // just renders both pieces back to back via renderCartBody() below.
-  const renderCartItems = () => (
-    <>
+  // Split into three pieces (header / items / summary) so both layouts can keep
+  // the order header and the Total + KOT buttons pinned while only the line
+  // items scroll — a long cart used to push Total/KOT off the bottom of the
+  // mobile sheet, so the cashier had to scroll a full order to reach them.
+  //
+  // A real View rather than a fragment: as a pinned flex child it must keep its own
+  // height when the item list overflows, which needs a node to put flexShrink: 0 on.
+  const renderCartHeader = () => (
+    <View style={styles.cartHeaderBlock}>
       {/* Resume/append mode: existing order's already-fired KOTs, shown read-only. */}
       {resumeMode && resumeOrder && (
         <View style={styles.resumeBanner}>
@@ -2570,7 +2573,11 @@ export const POSCheckoutScreen = () => {
           )}
         </View>
       </View>
+    </View>
+  );
 
+  const renderCartItems = () => (
+    <>
       {cart.length === 0 && (
         <View style={styles.emptyCartBox}>
           <Icon name="cart-outline" size={28} color={COLORS.muted} />
@@ -2799,15 +2806,6 @@ export const POSCheckoutScreen = () => {
           </View>
         )}
       </View>
-    </>
-  );
-
-  // Mobile's expanded cart sheet has no room for a separately-pinned footer —
-  // both pieces just scroll together there.
-  const renderCartBody = () => (
-    <>
-      {renderCartItems()}
-      {renderCartSummary()}
     </>
   );
 
@@ -3165,6 +3163,10 @@ export const POSCheckoutScreen = () => {
               isDesktopWeb && styles.wideCartPaneDesktopWeb,
             ]}
           >
+            {/* Pinned above the scroll area for the same reason as the summary below:
+                the order's table/guest/waiter is what the cashier checks against while
+                scrolling a long cart. */}
+            {renderCartHeader()}
             <ScrollView
               style={styles.wideCartScroll}
               showsVerticalScrollIndicator={false}
@@ -3247,14 +3249,30 @@ export const POSCheckoutScreen = () => {
                 activeOpacity={1}
                 onPress={() => setCartExpanded(false)}
               />
+              {/* Header and summary sit outside the ScrollView so only the line items
+                  move: on a full order the Total and the KOT buttons used to scroll off
+                  the bottom of the sheet, and the cashier had to swipe past every line
+                  to fire the order. */}
               <View style={styles.cartSheet}>
                 <View style={styles.cartSheetHandle} />
+                {renderCartHeader()}
                 <ScrollView
+                  style={styles.cartSheetScroll}
                   showsVerticalScrollIndicator={false}
-                  contentContainerStyle={{ paddingBottom: 24 }}
+                  contentContainerStyle={{ paddingBottom: 8 }}
                 >
-                  {renderCartBody()}
+                  {renderCartItems()}
                 </ScrollView>
+                {/* Bottom inset added here, not on the scroll's contentContainer — the
+                    footer is now the node actually sitting against the gesture bar. */}
+                <View
+                  style={[
+                    styles.cartSheetFooter,
+                    { paddingBottom: insets.bottom },
+                  ]}
+                >
+                  {renderCartSummary()}
+                </View>
               </View>
             </View>
           </Modal>
@@ -6351,7 +6369,23 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) =>
       borderRadius: 2,
       backgroundColor: COLORS.divider,
       marginBottom: 6,
+      flexShrink: 0,
     },
+    // minHeight: 0 so this actually shrinks against the pinned header/footer once the
+    // sheet hits its maxHeight — without it the list keeps its full content height and
+    // pushes the footer out of view again (same fix as receiptScroll).
+    cartSheetScroll: { flex: 1, minHeight: 0 },
+    // The pinned Total + KOT bar. Divider so it reads as a footer sitting over the
+    // list rather than the last row that happened to stop scrolling.
+    cartSheetFooter: {
+      flexShrink: 0,
+      paddingTop: 7,
+      borderTopWidth: 1,
+      borderTopColor: COLORS.divider,
+      backgroundColor: COLORS.background,
+    },
+    // Pinned order header (title, Hold, clear, table/guest/waiter row).
+    cartHeaderBlock: { flexShrink: 0 },
     // --- Receipt slip ---
     receiptOverlay: {
       flex: 1,
