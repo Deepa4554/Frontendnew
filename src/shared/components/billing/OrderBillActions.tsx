@@ -572,6 +572,17 @@ export const OrderBillActions: React.FC<Props> = ({
             <Text style={styles.billLabel}>Subtotal</Text>
             <Text style={styles.billVal}>{money(order.subtotal)}</Text>
           </View>
+          {/* Auto-applied Offers, named so the total's drop is explainable — without this row the
+              bill just silently reads lower than the items add up to. Sits directly under Subtotal
+              because offers come off the lines first, before the proportional pool below (see
+              RecomputeTotals). appliedOfferTitle is comma-joined when several fired, so cap it to
+              one line. Same label/fallback the printed receipt uses. */}
+          {(order.offerDiscountAmount ?? 0) > 0 && (
+            <View style={styles.billRow}>
+              <Text style={[styles.billLabel, styles.positive]} numberOfLines={1}>{order.appliedOfferTitle?.trim() || 'Offer'}</Text>
+              <Text style={[styles.billVal, styles.positive]}>−{money(order.offerDiscountAmount ?? 0)}</Text>
+            </View>
+          )}
           {order.discountAmount > 0 && (
             <View style={styles.billRow}>
               <Text style={[styles.billLabel, styles.positive]}>Discount</Text>

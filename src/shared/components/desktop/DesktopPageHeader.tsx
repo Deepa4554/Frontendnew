@@ -13,6 +13,13 @@ interface Props {
   onBack?: () => void;
   /** Filters, export buttons, "Add" CTAs — anything the screen pins to the right. */
   right?: React.ReactNode;
+  /**
+   * Fills the empty run between the title and `right` — meant for a horizontally
+   * scrollable strip (e.g. POS's category tabs), so it takes the spare width and
+   * shrinks instead of pushing `right` off the edge. The title stops flexing when
+   * this is present.
+   */
+  center?: React.ReactNode;
 }
 
 /**
@@ -26,7 +33,7 @@ interface Props {
  * Deliberately has no subtitle slot — the per-screen descriptive lines were the
  * main source of header drift across screens.
  */
-export const DesktopPageHeader: React.FC<Props> = ({ icon, title, onBack, right }) => {
+export const DesktopPageHeader: React.FC<Props> = ({ icon, title, onBack, right, center }) => {
   const { isDesktopWeb } = useResponsive();
   if (!isDesktopWeb) return null;
 
@@ -40,7 +47,8 @@ export const DesktopPageHeader: React.FC<Props> = ({ icon, title, onBack, right 
         </Tooltip>
       )}
       <Icon name={icon} size={20} color={COLORS.accent} />
-      <Text style={styles.title} numberOfLines={1}>{title}</Text>
+      <Text style={[styles.title, !!center && styles.titleWithCenter]} numberOfLines={1}>{title}</Text>
+      {!!center && <View style={styles.centerSlot}>{center}</View>}
       {!!right && <View style={styles.rightSlot}>{right}</View>}
     </View>
   );
@@ -64,6 +72,23 @@ const styles = StyleSheet.create({
     fontSize: 17,
     fontWeight: 'bold',
     color: COLORS.heading,
+  },
+  // Longhands, not `flex: 0` — react-native-web expands `flex: 0` to a `flex-basis: 0%`
+  // with no grow, which collapsed the title to zero width instead of sizing it to its
+  // text. (`flex: undefined` is no good either: style flattening keeps the explicit
+  // undefined and leaves the base `flex: 1` unbeaten.)
+  titleWithCenter: {
+    flexGrow: 0,
+    flexShrink: 0,
+    flexBasis: 'auto',
+  },
+  // minWidth:0 is what actually lets an inner horizontal ScrollView shrink below its
+  // content width — without it the strip forces the header wider and `right` gets
+  // pushed past the edge instead of the strip scrolling.
+  centerSlot: {
+    flex: 1,
+    minWidth: 0,
+    justifyContent: 'center',
   },
   rightSlot: {
     flexDirection: 'row',

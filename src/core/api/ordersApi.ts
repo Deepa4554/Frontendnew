@@ -258,6 +258,9 @@ export interface CreateOrderRequest {
   guestPhone?: string | null;
   items: CreateOrderItemRequest[];
   discountPct?: number;
+  /** A flat ₹ order-time discount, as an alternative to discountPct. Stored as-is by the
+   * backend so it never drifts; when both are sent the flat amount wins. */
+  discountAmount?: number;
   branchId?: number | null;
   /** Which staff member actually took/served this order — omit to default to the
    * logged-in user's own StaffMember record (self-service waiter). */

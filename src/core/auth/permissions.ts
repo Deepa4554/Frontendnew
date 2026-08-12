@@ -39,6 +39,7 @@ const FLOOR_STAFF_HIDDEN_ROUTES = new Set([
   'TaxSlabManagement',
   'OrderTypesSettings',
   'AutoChargesSettings',
+  'Offers',
   'ReceiptBuilder',
   'CafeProfileDetail',
   'Approvals',

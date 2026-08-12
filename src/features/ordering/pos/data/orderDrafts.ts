@@ -13,6 +13,9 @@ export interface OrderDraft<TLine> {
   guestName: string;
   guestPhone: string;
   discountPct: number;
+  /** Flat ₹ discount, mutually exclusive with discountPct. Optional so drafts saved before this
+   * field existed still load (treated as no flat discount). */
+  discountFlat?: number;
   cart: TLine[];
 }
 

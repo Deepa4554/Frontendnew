@@ -71,6 +71,7 @@ export const queryKeys = {
   integrations: ['integrations'] as const,
   whatsAppStatus: ['whatsapp', 'status'] as const,
   rewards: ['rewards'] as const,
+  offers: ['offers'] as const,
   dashboard: (range: unknown) => ['dashboard', range] as const,
   salesForecast: (forecastDays: number) => ['dashboard', 'forecast', forecastDays] as const,
   shiftOptimization: (date: string) => ['staff', 'shift-optimization', date] as const,

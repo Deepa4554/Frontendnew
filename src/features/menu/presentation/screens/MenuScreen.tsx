@@ -35,9 +35,18 @@ import {
 import { useStations } from '../../../../core/api/hooks/useStations';
 import { useTaxGroups } from '../../../../core/api/hooks/useTaxGroups';
 import { useSettings } from '../../../../core/api/hooks/useSettings';
-import { useCategories, useSetCategoryDefaultStation, useApplyCategoryStationToItems } from '../../../../core/api/hooks/useCategories';
+import {
+  useCategories,
+  useSetCategoryDefaultStation,
+  useApplyCategoryStationToItems,
+  useCreateCategory,
+  useRenameCategory,
+  useDeleteCategory,
+  useReorderCategories,
+} from '../../../../core/api/hooks/useCategories';
 import { useBulkImportRecipes } from '../../../../core/api/hooks/useRecipe';
 import { MenuItem, CreateMenuItemRequest } from '../../../../core/api/menuApi';
+import { Category, CategoryMutationResult } from '../../../../core/api/categoriesApi';
 import { RecipeImportRowError } from '../../../../core/api/recipeApi';
 import { getApiErrorMessage } from '../../../../core/network/api';
 import { pickAndParseCsv, normalizeMenuCsvRows } from '../../../../core/utils/csvMenuImport';
@@ -650,12 +659,20 @@ export const MenuScreen = ({ navigation }: any) => {
   // Same breakpoints as the POS Checkout menu grid, so this screen's cards match it exactly.
   const cardWidthPct = screenSize === 'mobile' ? '48%' : screenSize === 'tablet' ? '31%' : '23%';
   const { data: items = [], isLoading: menuLoading } = useMenuItems();
-  // Derived from whatever categories actually exist on the menu — no hardcoded
-  // list that could drift from reality (same reasoning as `zones` on Tables).
-  const CATEGORIES = useMemo(
-    () => ['All', ...Array.from(new Set(items.map((i) => i.category))).sort()],
-    [items],
-  );
+  const { data: categories = [] } = useCategories();
+  // Union of the categories items actually sit in and the ones the server knows about —
+  // no hardcoded list that could drift from reality (same reasoning as `zones` on Tables).
+  // The server side of that union is what makes a category created empty from Manage
+  // Categories pickable: with nothing in it yet, the items alone don't know it exists.
+  //
+  // Order follows the server's list (the Owner's arrangement, see MenuCategory.SortOrder);
+  // anything the server hasn't caught up on yet trails alphabetically behind it.
+  const CATEGORIES = useMemo(() => {
+    const ordered = categories.map((c) => c.name);
+    const known = new Set(ordered);
+    const rest = Array.from(new Set(items.map((i) => i.category))).filter((c) => !known.has(c)).sort();
+    return ['All', ...ordered, ...rest];
+  }, [items, categories]);
   const ADD_ITEM_CATEGORIES = useMemo(() => CATEGORIES.filter((c) => c !== 'All'), [CATEGORIES]);
   const { data: bestSellers = [] } = useBestSellers();
   const { data: todaysBestSellers = [] } = useTodaysBestSeller();
@@ -666,9 +683,12 @@ export const MenuScreen = ({ navigation }: any) => {
   // bills at, rather than just saying "Default".
   const defaultTaxGroup = useMemo(() => taxGroups.find((t) => t.isDefault), [taxGroups]);
   const { data: settings } = useSettings();
-  const { data: categories = [] } = useCategories();
   const setCategoryDefaultStation = useSetCategoryDefaultStation();
   const applyCategoryStationToItems = useApplyCategoryStationToItems();
+  const createCategory = useCreateCategory();
+  const renameCategory = useRenameCategory();
+  const deleteCategory = useDeleteCategory();
+  const reorderCategories = useReorderCategories();
   const createMenuItem = useCreateMenuItem();
   const updateMenuItem = useUpdateMenuItem();
   const deleteMenuItem = useDeleteMenuItem();
@@ -682,6 +702,14 @@ export const MenuScreen = ({ navigation }: any) => {
   const [activeCategory, setActiveCategory] = useState('All');
   const [categoryPickerVisible, setCategoryPickerVisible] = useState(false);
   const [categoryManagerVisible, setCategoryManagerVisible] = useState(false);
+  // Manage Categories row state. Only one row can be mid-edit at a time — starting a
+  // rename cancels a pending delete and vice versa — so these are single values rather
+  // than per-row maps. null on the drafts means "that inline editor is closed".
+  const [addCategoryDraft, setAddCategoryDraft] = useState<string | null>(null);
+  const [renamingCategory, setRenamingCategory] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  const [deletingCategory, setDeletingCategory] = useState<string | null>(null);
+  const [deleteMoveTo, setDeleteMoveTo] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [priceEditor, setPriceEditor] = useState<MenuItem | null>(null);
   const [draftPrice, setDraftPrice] = useState(0);
@@ -734,6 +762,161 @@ export const MenuScreen = ({ navigation }: any) => {
   // posted to the API right after that create call succeeds.
   const [newVariants, setNewVariants] = useState<DraftVariant[]>([]);
   const [newModifierGroups, setNewModifierGroups] = useState<DraftModifierGroup[]>([]);
+
+  /** The tenant's existing spelling of a category name, or undefined. Case-insensitive so
+   * "rolls" resolves to "Rolls" — the same rule the server enforces, checked here first so
+   * a merge can be spelled out to the user before anything is written. */
+  const existingCategoryMatch = (name: string) =>
+    ADD_ITEM_CATEGORIES.find((c) => c.toLowerCase() === name.trim().toLowerCase());
+
+  const openCategoryManager = () => {
+    setAddCategoryDraft(null);
+    setRenamingCategory(null);
+    setRenameDraft('');
+    setDeletingCategory(null);
+    setDeleteMoveTo(null);
+    setCategoryManagerVisible(true);
+  };
+
+  /** Rename and delete both shuffle items and offers around behind a single tap, so the
+   * toast states what actually moved rather than a bare "Saved". */
+  const mutationSummary = (lead: string, res: CategoryMutationResult) => {
+    const parts = [lead];
+    if (res.movedItemCount > 0) parts.push(`${res.movedItemCount} item${res.movedItemCount === 1 ? '' : 's'} moved`);
+    if (res.updatedOfferCount > 0) parts.push(`${res.updatedOfferCount} offer${res.updatedOfferCount === 1 ? '' : 's'} updated`);
+    return parts.join(' · ');
+  };
+
+  /** Moves one category a single place up or down and persists the whole resulting order.
+   * The server is sent every category, not just the two that swapped, because a menu that
+   * has never been arranged has no stored positions at all — this first move is what pins
+   * the rest of the order down as the alphabetical one the user is looking at. */
+  const moveCategory = async (name: string, direction: -1 | 1) => {
+    const order = categories.map((c) => c.name);
+    const from = order.indexOf(name);
+    const to = from + direction;
+    if (from < 0 || to < 0 || to >= order.length) return;
+    order.splice(to, 0, ...order.splice(from, 1));
+    try {
+      await reorderCategories.mutateAsync(order);
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not reorder categories'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const submitNewCategory = async () => {
+    const typed = (addCategoryDraft ?? '').trim();
+    if (!typed) {
+      dispatch(showToast({ message: 'Type a category name first.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    const existing = existingCategoryMatch(typed);
+    if (existing) {
+      dispatch(showToast({ message: `"${existing}" already exists.`, icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    try {
+      await createCategory.mutateAsync(typed);
+      setAddCategoryDraft(null);
+      dispatch(showToast({ message: `"${typed}" added — it's empty until you put an item in it.`, icon: 'check-circle', tone: 'success' }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not add the category'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  /** Every place a category name is held in local state has to follow the rename/delete,
+   * or it silently points at a name the menu no longer has: the grid filter would show an
+   * empty menu, and an item modal left open behind this one would re-create the old
+   * category on save. `to` is null when the name is simply gone. */
+  const repointCategoryState = (from: string, to: string | null) => {
+    setActiveCategory((prev) => (prev === from ? to ?? 'All' : prev));
+    setNewCategory((prev) => (prev === from ? to ?? ADD_ITEM_CATEGORIES.find((c) => c !== from) ?? '' : prev));
+    setEditCategory((prev) => (prev === from ? to ?? '' : prev));
+  };
+
+  const runRename = async (from: string, to: string) => {
+    try {
+      const res = await renameCategory.mutateAsync({ name: from, newName: to });
+      repointCategoryState(from, res.name);
+      setRenamingCategory(null);
+      dispatch(showToast({
+        message: mutationSummary(res.mergedInto ? `Merged into "${res.name}"` : `Renamed to "${res.name}"`, res),
+        icon: 'check-circle',
+        tone: 'success',
+      }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not rename the category'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const submitRename = (itemCount: number) => {
+    if (!renamingCategory) return;
+    const typed = renameDraft.trim();
+    if (!typed) {
+      dispatch(showToast({ message: 'Type a category name first.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    if (typed === renamingCategory) {
+      setRenamingCategory(null);
+      return;
+    }
+    const clash = existingCategoryMatch(typed);
+    // A pure change of casing ("rolls" -> "Rolls") matches itself here, and is a rename of
+    // the same category rather than a merge into another one — don't warn about that.
+    if (clash && clash.toLowerCase() !== renamingCategory.toLowerCase()) {
+      confirmAlert(
+        'Merge categories?',
+        `"${clash}" already exists. Its items and the ${itemCount} in "${renamingCategory}" will be merged into one category, and any offer scoped to either one will apply to the whole lot. This can't be undone.`,
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Merge', style: 'destructive', onPress: () => runRename(renamingCategory, typed) },
+        ],
+      );
+      return;
+    }
+    runRename(renamingCategory, typed);
+  };
+
+  const runDelete = async (name: string, moveTo?: string) => {
+    try {
+      const res = await deleteCategory.mutateAsync({ name, moveTo });
+      repointCategoryState(name, moveTo ?? null);
+      setDeletingCategory(null);
+      setDeleteMoveTo(null);
+      dispatch(showToast({ message: mutationSummary(`"${name}" deleted`, res), icon: 'check-circle', tone: 'success' }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not delete the category'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const startDelete = (cat: Category) => {
+    setRenamingCategory(null);
+    // Nothing to rehome, so no "move items to" step to make them sit through.
+    if (cat.itemCount === 0) {
+      confirmAlert('Delete category', `Remove "${cat.name}"? Nothing is in it.`, [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => runDelete(cat.name) },
+      ]);
+      return;
+    }
+    setDeletingCategory(cat.name);
+    setDeleteMoveTo(null);
+  };
+
+  const confirmDeleteWithMove = (cat: Category) => {
+    if (!deleteMoveTo) {
+      dispatch(showToast({ message: 'Choose where these items should go.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    confirmAlert(
+      'Delete category',
+      `"${cat.name}"'s ${cat.itemCount} item${cat.itemCount === 1 ? '' : 's'} will move to "${deleteMoveTo}", and any offer scoped to "${cat.name}" will follow them. This can't be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Delete', style: 'destructive', onPress: () => runDelete(cat.name, deleteMoveTo) },
+      ],
+    );
+  };
 
   const pickCoverImage = async (setter: (dataUri: string) => void, setUploading: (b: boolean) => void) => {
     setUploading(true);
@@ -938,6 +1121,12 @@ export const MenuScreen = ({ navigation }: any) => {
     // Non-MRP items still need a real price greater than 0.
     if (!newIsOpenPrice && (!newPrice.trim() || isNaN(price) || price <= 0)) {
       dispatch(showToast({ message: 'Enter a price greater than 0.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    // Reachable on a brand-new menu: with no items there are no category pills to
+    // preselect, so Manage Categories is the only way to fill this in.
+    if (!newCategory?.trim()) {
+      dispatch(showToast({ message: 'Pick a category, or add a new one.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
     const safePrice = isNaN(price) || price < 0 ? 0 : price;
@@ -1263,8 +1452,9 @@ export const MenuScreen = ({ navigation }: any) => {
           />
           <TouchableOpacity
             style={styles.manageCategoriesBtn}
-            onPress={() => setCategoryManagerVisible(true)}
+            onPress={openCategoryManager}
             hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="Manage categories"
           >
             <Icon name="cog-outline" size={18} color={COLORS.muted} />
           </TouchableOpacity>
@@ -1343,7 +1533,12 @@ export const MenuScreen = ({ navigation }: any) => {
                 )}
               </TouchableOpacity>
 
-              <Text style={styles.fieldLabel}>Category</Text>
+              <View style={styles.fieldLabelRow}>
+                <Text style={styles.fieldLabel}>Category</Text>
+                <TouchableOpacity onPress={() => openCategoryManager()}>
+                  <Text style={styles.manageCategoriesLink}>Manage categories</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.categoryPickerRow}>
                 {ADD_ITEM_CATEGORIES.map((cat) => (
                   <TouchableOpacity
@@ -1542,7 +1737,12 @@ export const MenuScreen = ({ navigation }: any) => {
                 )}
               </TouchableOpacity>
 
-              <Text style={styles.fieldLabel}>Category</Text>
+              <View style={styles.fieldLabelRow}>
+                <Text style={styles.fieldLabel}>Category</Text>
+                <TouchableOpacity onPress={() => openCategoryManager()}>
+                  <Text style={styles.manageCategoriesLink}>Manage categories</Text>
+                </TouchableOpacity>
+              </View>
               <View style={styles.categoryPickerRow}>
                 {ADD_ITEM_CATEGORIES.map((cat) => (
                   <TouchableOpacity
@@ -1767,27 +1967,159 @@ export const MenuScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
-      {/* ---------- Category Default Stations Modal ---------- */}
+      {/* ---------- Manage Categories Modal ---------- */}
       <Modal visible={categoryManagerVisible} transparent animationType="fade" onRequestClose={() => setCategoryManagerVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
             <View style={styles.modalHeaderRow}>
-              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Category Default Stations</Text>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Manage Categories</Text>
               <CloseButton onPress={() => setCategoryManagerVisible(false)} size={18} />
             </View>
             <Text style={styles.modalSubtitle}>
-              New items in a category prefill to its default station. Existing items only change if you tap "Apply to existing items."
+              Add, rename, reorder or delete categories. The order here is the order they appear in on POS. A category's default station is what its new items prefill to — existing items only change if you tap "Apply to existing items."
             </Text>
 
-            <ScrollView style={styles.modalFieldsScroll} showsVerticalScrollIndicator={false}>
-              {activeStations.length === 0 ? (
-                <Text style={styles.emptyStationsHint}>
-                  No stations set up yet — add one from Cafe Settings → Kitchen Stations first.
-                </Text>
+            <ScrollView style={styles.modalFieldsScroll} keyboardShouldPersistTaps="handled" showsVerticalScrollIndicator={false}>
+              {addCategoryDraft === null ? (
+                <TouchableOpacity
+                  style={[styles.categoryPill, styles.newCategoryPill, styles.addCategoryBtn]}
+                  onPress={() => setAddCategoryDraft('')}
+                >
+                  <Icon name="plus" size={12} color={COLORS.accent} />
+                  <Text style={[styles.categoryText, styles.newCategoryPillText]}>Add category</Text>
+                </TouchableOpacity>
               ) : (
-                categories.map((cat) => (
-                  <View key={cat.name} style={styles.categoryManagerRow}>
-                    <Text style={styles.categoryManagerName}>{cat.name} · {cat.itemCount} item{cat.itemCount === 1 ? '' : 's'}</Text>
+                <View style={styles.newCategoryRow}>
+                  <View style={[styles.formInputWrap, styles.newCategoryInputWrap]}>
+                    <TextInput
+                      style={[styles.formInput, styles.formInputNoMargin]}
+                      placeholder="e.g. Rolls"
+                      placeholderTextColor={COLORS.placeholder}
+                      value={addCategoryDraft}
+                      onChangeText={setAddCategoryDraft}
+                      onSubmitEditing={submitNewCategory}
+                      returnKeyType="done"
+                      autoFocus
+                    />
+                  </View>
+                  <TouchableOpacity style={styles.newCategoryActionBtn} onPress={submitNewCategory} disabled={createCategory.isPending}>
+                    <Text style={styles.newCategoryAddText}>Add</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.newCategoryActionBtn} onPress={() => setAddCategoryDraft(null)}>
+                    <Text style={styles.newCategoryCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                </View>
+              )}
+
+              {categories.length === 0 && (
+                <Text style={styles.emptyStationsHint}>No categories yet — add one above, then put items in it from Add Item.</Text>
+              )}
+
+              {categories.map((cat, index) => (
+                <View key={cat.name} style={styles.categoryManagerRow}>
+                  {renamingCategory === cat.name ? (
+                    <View style={styles.newCategoryRow}>
+                      <View style={[styles.formInputWrap, styles.newCategoryInputWrap]}>
+                        <TextInput
+                          style={[styles.formInput, styles.formInputNoMargin]}
+                          placeholder="New name"
+                          placeholderTextColor={COLORS.placeholder}
+                          value={renameDraft}
+                          onChangeText={setRenameDraft}
+                          onSubmitEditing={() => submitRename(cat.itemCount)}
+                          returnKeyType="done"
+                          autoFocus
+                        />
+                      </View>
+                      <TouchableOpacity style={styles.newCategoryActionBtn} onPress={() => submitRename(cat.itemCount)} disabled={renameCategory.isPending}>
+                        <Text style={styles.newCategoryAddText}>Save</Text>
+                      </TouchableOpacity>
+                      <TouchableOpacity style={styles.newCategoryActionBtn} onPress={() => setRenamingCategory(null)}>
+                        <Text style={styles.newCategoryCancelText}>Cancel</Text>
+                      </TouchableOpacity>
+                    </View>
+                  ) : (
+                    <View style={styles.categoryManagerHeaderRow}>
+                      <Text style={[styles.categoryManagerName, styles.categoryManagerNameFlex]} numberOfLines={1}>
+                        {cat.name} · {cat.itemCount} item{cat.itemCount === 1 ? '' : 's'}
+                      </Text>
+                      <TouchableOpacity
+                        style={styles.categoryManagerIconBtn}
+                        onPress={() => moveCategory(cat.name, -1)}
+                        disabled={index === 0 || reorderCategories.isPending}
+                        accessibilityLabel={`Move ${cat.name} up`}
+                      >
+                        <Icon name="chevron-up" size={18} color={index === 0 ? COLORS.inputBorder : COLORS.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.categoryManagerIconBtn}
+                        onPress={() => moveCategory(cat.name, 1)}
+                        disabled={index === categories.length - 1 || reorderCategories.isPending}
+                        accessibilityLabel={`Move ${cat.name} down`}
+                      >
+                        <Icon name="chevron-down" size={18} color={index === categories.length - 1 ? COLORS.inputBorder : COLORS.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.categoryManagerIconBtn}
+                        onPress={() => {
+                          setDeletingCategory(null);
+                          setRenamingCategory(cat.name);
+                          setRenameDraft(cat.name);
+                        }}
+                        accessibilityLabel={`Rename ${cat.name}`}
+                      >
+                        <Icon name="pencil-outline" size={16} color={COLORS.muted} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.categoryManagerIconBtn}
+                        onPress={() => startDelete(cat)}
+                        accessibilityLabel={`Delete ${cat.name}`}
+                      >
+                        <Icon name="trash-can-outline" size={16} color={COLORS.dangerAccent} />
+                      </TouchableOpacity>
+                    </View>
+                  )}
+
+                  {/* Only reached when the category still has items — an empty one is
+                      confirmed and deleted outright from startDelete. */}
+                  {deletingCategory === cat.name && (
+                    <View style={styles.deleteMoveBlock}>
+                      <Text style={styles.emptyStationsHint}>
+                        Move its {cat.itemCount} item{cat.itemCount === 1 ? '' : 's'} to:
+                      </Text>
+                      <View style={styles.categoryPickerRow}>
+                        {ADD_ITEM_CATEGORIES.filter((c) => c !== cat.name).map((other) => (
+                          <TouchableOpacity
+                            key={other}
+                            style={[styles.categoryPill, deleteMoveTo === other && styles.categoryPillActive]}
+                            onPress={() => setDeleteMoveTo(other)}
+                          >
+                            <Text style={[styles.categoryText, deleteMoveTo === other && styles.categoryTextActive]}>{other}</Text>
+                          </TouchableOpacity>
+                        ))}
+                      </View>
+                      {ADD_ITEM_CATEGORIES.filter((c) => c !== cat.name).length === 0 ? (
+                        <Text style={styles.emptyStationsHint}>
+                          This is the only category left, so there's nowhere to move its items — add another one first.
+                        </Text>
+                      ) : (
+                        <View style={styles.newCategoryRow}>
+                          <TouchableOpacity style={styles.newCategoryActionBtn} onPress={() => confirmDeleteWithMove(cat)} disabled={deleteCategory.isPending}>
+                            <Text style={styles.deleteConfirmText}>Delete category</Text>
+                          </TouchableOpacity>
+                          <TouchableOpacity style={styles.newCategoryActionBtn} onPress={() => { setDeletingCategory(null); setDeleteMoveTo(null); }}>
+                            <Text style={styles.newCategoryCancelText}>Cancel</Text>
+                          </TouchableOpacity>
+                        </View>
+                      )}
+                    </View>
+                  )}
+
+                  {activeStations.length === 0 ? (
+                    <Text style={styles.emptyStationsHint}>
+                      No stations set up yet — add one from Cafe Settings → Kitchen Stations to route this category's items.
+                    </Text>
+                  ) : (
                     <View style={styles.categoryPickerRow}>
                       {activeStations.map((station) => (
                         <TouchableOpacity
@@ -1799,27 +2131,27 @@ export const MenuScreen = ({ navigation }: any) => {
                         </TouchableOpacity>
                       ))}
                     </View>
-                    {cat.defaultStationId != null && (
-                      <TouchableOpacity
-                        style={styles.applyToItemsBtn}
-                        onPress={() => confirmAlert(
-                          'Apply to existing items?',
-                          `This sets every item currently in "${cat.name}" to the ${cat.defaultStationName} station, overwriting any individual station picks already made. Continue?`,
-                          [
-                            { text: 'Cancel', style: 'cancel' },
-                            {
-                              text: 'Apply',
-                              onPress: () => applyCategoryStationToItems.mutate({ name: cat.name, stationId: cat.defaultStationId! }),
-                            },
-                          ],
-                        )}
-                      >
-                        <Text style={styles.applyToItemsBtnText}>Apply to existing items</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
-                ))
-              )}
+                  )}
+                  {cat.defaultStationId != null && cat.itemCount > 0 && (
+                    <TouchableOpacity
+                      style={styles.applyToItemsBtn}
+                      onPress={() => confirmAlert(
+                        'Apply to existing items?',
+                        `This sets every item currently in "${cat.name}" to the ${cat.defaultStationName} station, overwriting any individual station picks already made. Continue?`,
+                        [
+                          { text: 'Cancel', style: 'cancel' },
+                          {
+                            text: 'Apply',
+                            onPress: () => applyCategoryStationToItems.mutate({ name: cat.name, stationId: cat.defaultStationId! }),
+                          },
+                        ],
+                      )}
+                    >
+                      <Text style={styles.applyToItemsBtnText}>Apply to existing items</Text>
+                    </TouchableOpacity>
+                  )}
+                </View>
+              ))}
             </ScrollView>
 
             <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setCategoryManagerVisible(false)}>
@@ -2314,6 +2646,78 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     flexWrap: 'wrap',
     gap: isDesktopWeb ? 5 : 4.5,
     marginBottom: isDesktopWeb ? 6 : 6,
+  },
+  // Outlined rather than filled, so it reads as an action next to the solid category
+  // pills instead of looking like one more category you could pick.
+  newCategoryPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 3,
+    backgroundColor: 'transparent',
+    borderWidth: 1,
+    borderColor: COLORS.inputBorder,
+  },
+  newCategoryPillText: {
+    color: COLORS.accent,
+  },
+  addCategoryBtn: {
+    alignSelf: 'flex-start',
+    marginBottom: isDesktopWeb ? 9 : 9,
+  },
+  fieldLabelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  manageCategoriesLink: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.accent,
+  },
+  categoryManagerHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: isDesktopWeb ? 5 : 4.5,
+  },
+  categoryManagerNameFlex: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  categoryManagerIconBtn: {
+    padding: isDesktopWeb ? 5 : 4.5,
+  },
+  deleteMoveBlock: {
+    marginTop: isDesktopWeb ? 6 : 6,
+    marginBottom: isDesktopWeb ? 3 : 3,
+  },
+  deleteConfirmText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.dangerAccent,
+  },
+  newCategoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: isDesktopWeb ? 5 : 4.5,
+    marginBottom: isDesktopWeb ? 6 : 6,
+  },
+  newCategoryInputWrap: {
+    flex: 1,
+    marginBottom: 0,
+  },
+  newCategoryActionBtn: {
+    paddingHorizontal: isDesktopWeb ? 7 : 7.5,
+    paddingVertical: isDesktopWeb ? 6 : 4.5,
+  },
+  newCategoryAddText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: COLORS.accent,
+  },
+  newCategoryCancelText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.muted,
   },
   emptyStationsHint: {
     fontSize: 12,

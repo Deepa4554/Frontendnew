@@ -143,6 +143,7 @@ export const linking: LinkingOptions<any> = {
           TaxSlabManagement: 'profile/tax-slabs',
           OrderTypesSettings: 'profile/order-types',
           AutoChargesSettings: 'profile/auto-charges',
+          Offers: 'profile/offers',
           ReceiptBuilder: 'profile/receipt-builder',
           CafeProfileDetail: 'profile/cafe',
           Help: 'help',

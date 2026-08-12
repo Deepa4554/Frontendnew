@@ -35,6 +35,7 @@ import { StationManagementScreen } from '../../features/management/profile/prese
 import { TaxSlabManagementScreen } from '../../features/management/profile/presentation/screens/TaxSlabManagementScreen';
 import { OrderTypesSettingsScreen } from '../../features/management/profile/presentation/screens/OrderTypesSettingsScreen';
 import { AutoChargesSettingsScreen } from '../../features/management/profile/presentation/screens/AutoChargesSettingsScreen';
+import { OffersScreen } from '../../features/management/profile/presentation/screens/OffersScreen';
 import { ReceiptBuilderScreen } from '../../features/management/profile/presentation/screens/ReceiptBuilderScreen';
 import { TeamPortalNavigator } from '../../features/management/staff/presentation/navigation/TeamPortalNavigator';
 import { StaffAccessScreen } from '../../features/management/staff/presentation/screens/StaffAccessScreen';
@@ -157,6 +158,7 @@ const StationManagementScreenComp = withRouteGuard(withDesktopShell(StationManag
 const TaxSlabManagementScreenComp = withRouteGuard(withDesktopShell(TaxSlabManagementScreen, 'Profile'), 'TaxSlabManagement');
 const OrderTypesSettingsScreenComp = withRouteGuard(withDesktopShell(OrderTypesSettingsScreen, 'Profile'), 'OrderTypesSettings');
 const AutoChargesSettingsScreenComp = withRouteGuard(withDesktopShell(AutoChargesSettingsScreen, 'Profile'), 'AutoChargesSettings');
+const OffersScreenComp = withRouteGuard(withDesktopShell(OffersScreen, 'Profile'), 'Offers');
 const ReceiptBuilderScreenComp = withRouteGuard(withDesktopShell(ReceiptBuilderScreen, 'Profile'), 'ReceiptBuilder');
 const CafeProfileDetailScreenComp = withRouteGuard(withDesktopShell(CafeProfileScreen, 'Profile'), 'CafeProfileDetail');
 const HelpScreenComp = withRouteGuard(withDesktopShell(HelpCenterScreen, 'Help'), 'Help');
@@ -341,6 +343,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="TaxSlabManagement" component={TaxSlabManagementScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="OrderTypesSettings" component={OrderTypesSettingsScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="AutoChargesSettings" component={AutoChargesSettingsScreenComp} options={{ headerShown: false }} />
+      <Stack.Screen name="Offers" component={OffersScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="ReceiptBuilder" component={ReceiptBuilderScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="CafeProfileDetail" component={CafeProfileDetailScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Help" component={HelpScreenComp} options={{ headerShown: false }} />

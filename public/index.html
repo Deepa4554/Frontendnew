@@ -81,6 +81,29 @@
       div:has(> select:focus) {
         box-shadow: 0 0 0 1px rgba(197, 101, 46, 0.25);
       }
+      /* POS's category tab strip (DesktopPageHeader's center slot) scrolls sideways
+         whenever the menu has more categories than fit the header. The bar is left
+         visible — hiding it meant nobody could tell the strip scrolled at all — but
+         Chrome's default horizontal scrollbar is ~15px tall, half the height of the
+         30px pills above it, so it's slimmed here. RN's StyleSheet has no way to
+         express ::-webkit-scrollbar, hence a global rule keyed on the nativeID. */
+      #pos-category-tabs {
+        scrollbar-width: thin;
+        scrollbar-color: rgba(0, 0, 0, 0.28) transparent;
+      }
+      #pos-category-tabs::-webkit-scrollbar {
+        height: 6px;
+      }
+      #pos-category-tabs::-webkit-scrollbar-track {
+        background: transparent;
+      }
+      #pos-category-tabs::-webkit-scrollbar-thumb {
+        background: rgba(0, 0, 0, 0.28);
+        border-radius: 3px;
+      }
+      #pos-category-tabs::-webkit-scrollbar-thumb:hover {
+        background: rgba(0, 0, 0, 0.45);
+      }
     </style>
   </head>
   <body>

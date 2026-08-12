@@ -277,8 +277,11 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): Rece
   push({ kind: 'dashes' });
 
   pushAmountRow(push, 'Subtotal', money(receipt.subtotal), columns);
-  if (receipt.discountPct && receipt.discountAmount) {
-    pushAmountRow(push, `Discount (${receipt.discountPct}%)`, `-${money(receipt.discountAmount)}`, columns);
+  if (receipt.discountAmount && receipt.discountAmount > 0) {
+    // Gated on the amount, not the percentage, so a flat "₹50 off" (which carries no pct) still
+    // prints. Label keeps the rate when there is one.
+    const label = receipt.discountPct ? `Discount (${receipt.discountPct}%)` : 'Discount';
+    pushAmountRow(push, label, `-${money(receipt.discountAmount)}`, columns);
   }
   if (receipt.offerDiscountAmount && receipt.offerDiscountAmount > 0) {
     // Name the offer so the drop is explained on the slip, not a bare "Offer".
