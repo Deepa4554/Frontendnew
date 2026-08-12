@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { attendanceApi, PunchRequest, ManualAttendanceRequest, CorrectAttendanceRequest } from '../attendanceApi';
+import { attendanceApi, PunchRequest, ManualAttendanceRequest, CorrectAttendanceRequest, MarkAttendanceRequest } from '../attendanceApi';
 import { queryKeys } from './queryKeys';
 
 const invalidateAttendance = (qc: ReturnType<typeof useQueryClient>) => {
@@ -35,6 +35,11 @@ export const useAttendanceList = (params: { staffId?: number; date?: string; per
 export const useCreateManualAttendance = () => {
   const qc = useQueryClient();
   return useMutation({ mutationFn: (req: ManualAttendanceRequest) => attendanceApi.createManual(req), onSuccess: () => invalidateAttendance(qc) });
+};
+
+export const useMarkAttendance = () => {
+  const qc = useQueryClient();
+  return useMutation({ mutationFn: (req: MarkAttendanceRequest) => attendanceApi.mark(req), onSuccess: () => invalidateAttendance(qc) });
 };
 
 export const useCorrectAttendance = () => {

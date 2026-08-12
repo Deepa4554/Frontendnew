@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -8,8 +8,9 @@ import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { InitialsAvatar } from '../../../../../shared/components/InitialsAvatar';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { useStaff } from '../../../../../core/api/hooks/useStaff';
-import { useAttendanceList, useCreateManualAttendance, useCorrectAttendance } from '../../../../../core/api/hooks/useAttendance';
-import { AttendanceRecord, AttendanceStatus } from '../../../../../core/api/attendanceApi';
+import { useAttendanceList, useCreateManualAttendance, useCorrectAttendance, useMarkAttendance } from '../../../../../core/api/hooks/useAttendance';
+import { AttendanceRecord, AttendanceStatus, MarkAttendanceStatus } from '../../../../../core/api/attendanceApi';
+import { ApiStaff } from '../../../../../core/api/staffApi';
 import { getApiErrorMessage } from '../../../../../core/network/api';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
@@ -34,6 +35,30 @@ const STATUS_LABEL: Record<AttendanceStatus, string> = {
   HOLIDAY: 'Holiday',
 };
 
+/** The four one-tap roll-call buttons on every staff row, in the order a manager reads
+ * them out. Late/Holiday deliberately aren't tappable — Late is derived from a real
+ * punch-in time and Holiday is a whole-cafe thing; both remain settable through the
+ * correction modal. */
+const MARK_OPTIONS: { key: MarkAttendanceStatus; label: string; icon: string; matches: AttendanceStatus[] }[] = [
+  { key: 'Present', label: 'Present', icon: 'check-circle-outline', matches: ['PRESENT', 'LATE'] },
+  { key: 'HalfDay', label: 'Half Day', icon: 'circle-half-full', matches: ['HALF_DAY'] },
+  { key: 'OnLeave', label: 'Leave', icon: 'palm-tree', matches: ['ON_LEAVE'] },
+  { key: 'Absent', label: 'Absent', icon: 'close-circle-outline', matches: ['ABSENT'] },
+];
+
+const MARK_LABEL: Record<MarkAttendanceStatus, string> = {
+  Present: 'present',
+  HalfDay: 'half day',
+  OnLeave: 'on leave',
+  Absent: 'absent',
+  Holiday: 'holiday',
+};
+
+/** A staff member who has left the roster can't have today's attendance marked, but
+ * their existing records still need to show up on past dates — hence the record check
+ * rather than a plain filter. */
+const isOnRoster = (s: ApiStaff) => s.status !== 'TERMINATED';
+
 export const AttendanceScreen = () => {
   const { isDesktopWeb } = useResponsive();
   const COLORS = useThemeColors();
@@ -51,7 +76,7 @@ export const AttendanceScreen = () => {
 
   const [date, setDate] = useState(toDateInput(new Date()));
   const { data: records = [], isLoading, isError, refetch } = useAttendanceList({ date });
-  const { data: staff = [] } = useStaff();
+  const { data: staff = [], isLoading: staffLoading } = useStaff();
 
   const shiftDate = (deltaDays: number) => {
     const d = new Date(`${date}T00:00:00`);
@@ -61,6 +86,67 @@ export const AttendanceScreen = () => {
 
   const createManual = useCreateManualAttendance();
   const correctAttendance = useCorrectAttendance();
+  const markAttendance = useMarkAttendance();
+
+  /** One row per staff member on the roster — marked or not — so the day reads as a roll
+   * call rather than as a list of whoever happened to punch. Records whose staff member
+   * has since left the roster are appended so history stays visible. */
+  const rows = useMemo(() => {
+    const byStaffId = new Map(records.map((r) => [r.staffId, r]));
+    const roster = staff.filter(isOnRoster).map((s) => ({ staff: s as ApiStaff | null, record: byStaffId.get(s.id) ?? null, name: s.name }));
+    const rosterIds = new Set(staff.filter(isOnRoster).map((s) => s.id));
+    const departed = records
+      .filter((r) => !rosterIds.has(r.staffId))
+      .map((r) => ({ staff: null as ApiStaff | null, record: r as AttendanceRecord | null, name: r.staffName }));
+    return [...roster, ...departed];
+  }, [staff, records]);
+
+  const counts = useMemo(() => {
+    const tally = { present: 0, halfDay: 0, leave: 0, absent: 0, unmarked: 0 };
+    rows.forEach(({ record }) => {
+      if (!record) tally.unmarked += 1;
+      else if (record.status === 'PRESENT' || record.status === 'LATE') tally.present += 1;
+      else if (record.status === 'HALF_DAY') tally.halfDay += 1;
+      else if (record.status === 'ABSENT') tally.absent += 1;
+      else tally.leave += 1;
+    });
+    return tally;
+  }, [rows]);
+
+  // The API rejects a future date outright (attendance that hasn't happened yet); grey
+  // the controls out rather than letting a tap bounce off the server.
+  const isFutureDate = date > toDateInput(new Date());
+  const [markingStaffId, setMarkingStaffId] = useState<number | null>(null);
+
+  const markOne = async (staffId: number, name: string, status: MarkAttendanceStatus) => {
+    setMarkingStaffId(staffId);
+    try {
+      await markAttendance.mutateAsync({ date, entries: [{ staffId, status }] });
+      dispatch(showToast({ message: `${name} marked ${MARK_LABEL[status]}.`, icon: 'check-circle-outline', tone: 'success' }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not mark attendance'), icon: 'alert-circle-outline', tone: 'danger' }));
+    } finally {
+      setMarkingStaffId(null);
+    }
+  };
+
+  /** Only fills the blanks — anyone already marked (including manually corrected rows and
+   * real punches) is left exactly as-is, so this is safe to tap twice. */
+  const markRemainingPresent = async () => {
+    const entries = rows
+      .filter((row) => !row.record && row.staff)
+      .map((row) => ({ staffId: row.staff!.id, status: 'Present' as const }));
+    if (entries.length === 0) {
+      dispatch(showToast({ message: 'Everyone is already marked for this day.', icon: 'information-outline', tone: 'info' }));
+      return;
+    }
+    try {
+      await markAttendance.mutateAsync({ date, entries });
+      dispatch(showToast({ message: `${entries.length} staff marked present.`, icon: 'check-circle-outline', tone: 'success' }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not mark attendance'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
 
   const [manualModalVisible, setManualModalVisible] = useState(false);
   const [staffPickerVisible, setStaffPickerVisible] = useState(false);
@@ -78,8 +164,8 @@ export const AttendanceScreen = () => {
 
   const selectedStaff = staff.find((s) => s.id === selectedStaffId);
 
-  const openManualModal = () => {
-    setSelectedStaffId(null);
+  const openManualModal = (staffId: number | null = null) => {
+    setSelectedStaffId(staffId);
     setPunchInTime('09:00');
     setPunchOutTime('17:00');
     setBreakMinutes('0');
@@ -172,48 +258,108 @@ export const AttendanceScreen = () => {
         </TouchableOpacity>
       </View>
 
+      {!isLoading && !staffLoading && rows.length > 0 && (
+        <View style={styles.summaryRow}>
+          <Text style={styles.summaryText}>
+            {counts.present} present · {counts.halfDay} half · {counts.leave} leave · {counts.absent} absent
+            {counts.unmarked > 0 ? ` · ${counts.unmarked} not marked` : ''}
+          </Text>
+          {isFutureDate && <Text style={styles.hintText}>Future date — nothing to mark yet.</Text>}
+          {counts.unmarked > 0 && !isFutureDate && (
+            <TouchableOpacity testID="mark-rest-present" style={styles.markAllBtn} onPress={markRemainingPresent} disabled={markAttendance.isPending}>
+              {markAttendance.isPending && markingStaffId === null ? (
+                <ActivityIndicator size="small" color={COLORS.button} />
+              ) : (
+                <Icon name="check-all" size={14} color={COLORS.button} />
+              )}
+              <Text style={styles.markAllText}>Mark rest present</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ padding: 16, paddingBottom: 100 }}>
         {isError && records.length === 0 ? (
           <ErrorState title="Couldn't load attendance" message="Check your connection and try again." onRetry={() => refetch()} />
-        ) : isLoading ? (
+        ) : isLoading || staffLoading ? (
           <SkeletonList rows={5} />
-        ) : records.length === 0 ? (
+        ) : rows.length === 0 ? (
           <View style={styles.emptyCard}>
-            <Icon name="clock-outline" size={28} color={COLORS.muted} />
-            <Text style={styles.emptyText}>No attendance recorded for this day yet.</Text>
+            <Icon name="account-group-outline" size={28} color={COLORS.muted} />
+            <Text style={styles.emptyText}>No staff on the roster yet — add your team first.</Text>
           </View>
         ) : (
-          records.map((rec) => {
-            const variant = STATUS_STYLES[rec.status];
+          rows.map(({ staff: member, record: rec, name }) => {
+            const variant = rec ? STATUS_STYLES[rec.status] : null;
+            const isMarking = markingStaffId === member?.id;
+            // A departed staff member's old record can still be corrected, just not re-marked.
+            const canMark = !!member && !isFutureDate;
             return (
-              <TouchableOpacity key={rec.id} style={styles.card} onPress={() => openEditModal(rec)}>
-                <View style={styles.cardTopRow}>
-                  <InitialsAvatar name={rec.staffName} size={40} />
+              <View
+                key={member ? `staff-${member.id}` : `rec-${rec!.id}`}
+                testID={member ? `attendance-row-${member.id}` : `attendance-row-record-${rec!.id}`}
+                style={styles.card}
+              >
+                <TouchableOpacity
+                  style={styles.cardTopRow}
+                  onPress={() => (rec ? openEditModal(rec) : member && openManualModal(member.id))}
+                >
+                  <InitialsAvatar name={name} size={40} />
                   <View style={{ flex: 1 }}>
-                    <Text style={styles.staffName}>{rec.staffName}</Text>
+                    <Text style={styles.staffName}>{name}</Text>
                     <Text style={styles.metaText}>
-                      {rec.punchInAt ? toTimeInput(rec.punchInAt) : '--:--'} → {rec.punchOutAt ? toTimeInput(rec.punchOutAt) : '--:--'}
-                      {rec.workedMinutes != null ? ` · ${(rec.workedMinutes / 60).toFixed(1)}h worked` : ''}
+                      {rec?.punchInAt || rec?.punchOutAt
+                        ? `${rec.punchInAt ? toTimeInput(rec.punchInAt) : '--:--'} → ${rec.punchOutAt ? toTimeInput(rec.punchOutAt) : '--:--'}${
+                            rec.workedMinutes != null ? ` · ${(rec.workedMinutes / 60).toFixed(1)}h worked` : ''
+                          }`
+                        : member?.role || 'Not marked yet'}
                     </Text>
                   </View>
-                  <View style={[styles.statusBadge, { backgroundColor: variant.bg }]}>
-                    <Text style={[styles.statusBadgeText, { color: variant.text }]}>{STATUS_LABEL[rec.status]}</Text>
-                  </View>
-                </View>
-                {(rec.lateMinutes > 0 || rec.overtimeMinutes > 0) && (
+                  {rec && variant && (
+                    <View style={[styles.statusBadge, { backgroundColor: variant.bg }]}>
+                      <Text testID="attendance-status-badge" style={[styles.statusBadgeText, { color: variant.text }]}>
+                        {STATUS_LABEL[rec.status]}
+                      </Text>
+                    </View>
+                  )}
+                </TouchableOpacity>
+
+                {(rec?.lateMinutes || rec?.overtimeMinutes) ? (
                   <Text style={styles.subMeta}>
                     {rec.lateMinutes > 0 ? `${rec.lateMinutes} min late` : ''}
                     {rec.lateMinutes > 0 && rec.overtimeMinutes > 0 ? ' · ' : ''}
                     {rec.overtimeMinutes > 0 ? `${rec.overtimeMinutes} min overtime` : ''}
                   </Text>
+                ) : null}
+
+                {canMark && (
+                  <View style={styles.markRow}>
+                    {MARK_OPTIONS.map((option) => {
+                      const selected = !!rec && option.matches.includes(rec.status);
+                      const tone = STATUS_STYLES[option.matches[0]];
+                      return (
+                        <TouchableOpacity
+                          key={option.key}
+                          testID={`mark-${member!.id}-${option.key}`}
+                          style={[styles.markChip, selected && { backgroundColor: tone.bg, borderColor: tone.text }]}
+                          onPress={() => markOne(member!.id, name, option.key)}
+                          disabled={isMarking}
+                        >
+                          <Icon name={option.icon} size={13} color={selected ? tone.text : COLORS.muted} />
+                          <Text style={[styles.markChipText, selected && { color: tone.text }]}>{option.label}</Text>
+                        </TouchableOpacity>
+                      );
+                    })}
+                    {isMarking && <ActivityIndicator size="small" color={COLORS.button} style={styles.markSpinner} />}
+                  </View>
                 )}
-              </TouchableOpacity>
+              </View>
             );
           })
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={openManualModal}>
+      <TouchableOpacity style={styles.fab} onPress={() => openManualModal()}>
         <Icon name="plus" size={26} color="#FFFFFF" />
       </TouchableOpacity>
 
@@ -371,6 +517,25 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 12 : 12, paddingVertical: isDesktopWeb ? 6 : 6 },
   dateArrow: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
   dateText: { fontSize: isDesktopWeb ? 15 : 12, fontWeight: '700', color: COLORS.heading },
+  summaryRow: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
+    gap: 8, paddingHorizontal: 16, paddingBottom: 8,
+  },
+  summaryText: { fontSize: 11, fontWeight: '600', color: COLORS.muted, flexShrink: 1 },
+  markAllBtn: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 10, paddingVertical: 5,
+    borderRadius: 14, backgroundColor: COLORS.cardAlt,
+  },
+  markAllText: { fontSize: 11, fontWeight: '700', color: COLORS.button },
+  hintText: { fontSize: 11, fontWeight: '600', color: COLORS.accent },
+  markRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 6 : 5, marginTop: isDesktopWeb ? 9 : 9 },
+  markChip: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 3,
+    paddingVertical: isDesktopWeb ? 6 : 7, borderRadius: 8, borderWidth: 1,
+    borderColor: COLORS.divider, backgroundColor: COLORS.background,
+  },
+  markChipText: { fontSize: 11, fontWeight: '700', color: COLORS.muted },
+  markSpinner: { position: 'absolute', right: -2 },
   emptyCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: isDesktopWeb ? 35 : 37.5, gap: isDesktopWeb ? 6 : 6 },
   emptyText: { fontSize: isDesktopWeb ? 13 : 12, color: COLORS.muted },
   card: { backgroundColor: COLORS.cardAlt, borderRadius: 8, padding: isDesktopWeb ? 10 : 10.5, marginBottom: isDesktopWeb ? 9 : 9 },
