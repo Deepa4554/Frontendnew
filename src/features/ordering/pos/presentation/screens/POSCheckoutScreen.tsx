@@ -3268,9 +3268,26 @@ export const POSCheckoutScreen = () => {
         animationType="fade"
         onRequestClose={() => setRateLine(null)}
       >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
+        {/* Laptop/wider: a centered, narrow card (it only holds one field) instead of
+            the full-bleed bottom sheet. */}
+        <View
+          style={
+            isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle
+          }
+        >
+          <View
+            style={
+              isDesktopWeb
+                ? [styles.optionsSheetDesktop, styles.rateSheetDesktop]
+                : styles.modalSheet
+            }
+          >
+            <View
+              style={[
+                styles.modalHeader,
+                isDesktopWeb && styles.optionsHeaderDesktop,
+              ]}
+            >
               <View style={{ flex: 1, minWidth: 0, marginRight: 6 }}>
                 <Text
                   style={[
@@ -3291,7 +3308,10 @@ export const POSCheckoutScreen = () => {
             </View>
             <View style={styles.noteInputWrap}>
               <TextInput
-                style={styles.modifierNoteInput}
+                style={[
+                  styles.modifierNoteInput,
+                  isDesktopWeb && styles.rateInputDesktop,
+                ]}
                 placeholder="0.00"
                 placeholderTextColor={COLORS.placeholder}
                 value={rateInput}
@@ -3303,11 +3323,21 @@ export const POSCheckoutScreen = () => {
               />
             </View>
             <TouchableOpacity
-              style={styles.confirmSplitBtn}
+              style={[
+                styles.confirmSplitBtn,
+                isDesktopWeb && styles.optionsAddBtnDesktop,
+              ]}
               onPress={confirmRateLine}
             >
               <Icon name="check" size={18} color="#FFFFFF" />
-              <Text style={styles.confirmSplitText}>Add to order</Text>
+              <Text
+                style={[
+                  styles.confirmSplitText,
+                  isDesktopWeb && styles.optionsAddTextDesktop,
+                ]}
+              >
+                Add to order
+              </Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -5683,6 +5713,16 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) =>
     // Settle Bill card is a bit larger — it packs the full bill + adjustments + payment.
     payFirstSheetDesktop: {
       maxWidth: 640,
+    },
+    // MRP rate prompt is a single field — a narrower card reads as a prompt, not a panel.
+    rateSheetDesktop: {
+      maxWidth: 420,
+    },
+    // Matched to the desktop card's taller Add button so the field doesn't look cramped.
+    rateInputDesktop: {
+      height: 52,
+      fontSize: 16,
+      paddingHorizontal: 16,
     },
     // A little more breathing room + a divider under the header on the desktop card.
     optionsHeaderDesktop: {
