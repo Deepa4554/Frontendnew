@@ -166,6 +166,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
   // Discount/coupon/gift-card/loyalty/charges all now live inside OrderBillActions
   // itself (self-contained there) — no local state needed for them here anymore.
   const [printingBill, setPrintingBill] = useState(false);
+  // Separate from printingBill — Print Bill and Print KOT are two different printers'
+  // worth of work and can be tapped independently, so one spinner can't cover both.
+  const [printingKot, setPrintingKot] = useState(false);
   // Split Bill. Each share is collected as a real partial payment against this one order
   // (ordersApi.pay with allowPartial — see OrdersController.Pay), which is deliberately NOT
   // the same thing as issuing separate bills: the invoice stays single, it just accumulates
@@ -406,15 +409,14 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
   const orderId = occupiedModal?.orderId ?? null;
 
-  // Auto-prints the kitchen ticket for whatever was just fired (order.currentFireBatch) —
-  // no prices, just what to make. Doesn't block the fire either way, but does surface its
-  // own toast (success or "no printer set up") right after "Sent to the kitchen" so a
-  // missing/unconfigured printer doesn't just look like nothing happened.
-  const autoPrintKot = async (order: ApiOrder) => {
+  // Builds and sends the kitchen ticket for the current (latest) fire batch — no prices,
+  // just what to make. Returns null when that batch has nothing printable (nothing fired
+  // yet, or every line since voided) so each caller decides whether that's silent or a toast.
+  const printCurrentKot = async (order: ApiOrder) => {
     const batchItems = order.items.filter((i) => i.fireBatch === order.currentFireBatch && !i.voided);
-    if (batchItems.length === 0) return;
+    if (batchItems.length === 0) return null;
     const batch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
-    const result = await PrinterService.printKot({
+    return PrinterService.printKot({
       title: order.tableCode ? `Table ${order.tableCode}` : order.title,
       kotNumber: batch?.kotNumber || `#${order.currentFireBatch}`,
       time: new Date(batch?.firedAt ?? order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
@@ -426,7 +428,30 @@ export const TableManagementScreen = ({ navigation }: any) => {
         selectedModifiers: i.selectedModifiers,
       })),
     });
+  };
+
+  // Fires alongside the fire itself. Doesn't block it either way, but does surface its
+  // own toast (success or "no printer set up") right after "Sent to the kitchen" so a
+  // missing/unconfigured printer doesn't just look like nothing happened.
+  const autoPrintKot = async (order: ApiOrder) => {
+    const result = await printCurrentKot(order);
+    if (!result) return;
     dispatch(showToast({ message: result.ok ? 'KOT sent to kitchen printer.' : result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'warning' }));
+  };
+
+  // Manual re-print of the latest KOT, same header pill as Token Orders — for when the
+  // auto-print at fire time failed (printer off/out of paper) or the kitchen needs another
+  // physical copy beyond what's on the KDS screen.
+  const handlePrintKot = async () => {
+    if (!occupiedOrder) return;
+    setPrintingKot(true);
+    const result = await printCurrentKot(occupiedOrder);
+    setPrintingKot(false);
+    if (!result) {
+      dispatch(showToast({ message: 'Nothing fired to the kitchen yet.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    dispatch(showToast({ message: result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'danger' }));
   };
 
   const handleFire = async () => {
@@ -843,7 +868,20 @@ export const TableManagementScreen = ({ navigation }: any) => {
                   <Icon name="arrow-left" size={22} color={COLORS.heading} />
                 </TouchableOpacity>
               )}
-              <Text style={[styles.modalTitle, styles.occupiedModalTitleText, isDesktopWeb && { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1}>{occupiedModal?.code} — {occupiedOrder?.status ?? occupiedModal?.orderStatus}</Text>
+              {/* flex on both layouts now (it used to be desktop-only): the Print KOT pill
+                  sits after the title, so the title has to take up the slack for the pill
+                  to land on the right edge instead of butting up against the heading. */}
+              <Text style={[styles.modalTitle, styles.occupiedModalTitleText, { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1}>{occupiedModal?.code} — {occupiedOrder?.status ?? occupiedModal?.orderStatus}</Text>
+              {occupiedOrder && (
+                <TouchableOpacity style={styles.headerPill} onPress={handlePrintKot} disabled={printingKot}>
+                  {printingKot ? (
+                    <ActivityIndicator size="small" color={COLORS.heading} />
+                  ) : (
+                    <Icon name="receipt" size={14} color={COLORS.heading} />
+                  )}
+                  <Text style={styles.headerPillText}>Print KOT</Text>
+                </TouchableOpacity>
+              )}
               {isDesktopWeb && (
                 <CloseButton onPress={closeOccupiedModal} size={22} style={styles.occupiedModalBackBtn} />
               )}
@@ -1651,6 +1689,17 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   occupiedModalTitleText: {
     marginBottom: 0,
   },
+  // Print KOT lives in the modal header, matching Token Orders' pill of the same name.
+  headerPill: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: isDesktopWeb ? 3 : 2.25,
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 14,
+    paddingHorizontal: isDesktopWeb ? 7 : 6.75,
+    paddingVertical: isDesktopWeb ? 5 : 3.75,
+  },
+  headerPillText: { fontSize: fs(12), fontWeight: '700', color: COLORS.heading },
   modalTitle: {
     fontSize: fs(18),
     fontWeight: '800',
