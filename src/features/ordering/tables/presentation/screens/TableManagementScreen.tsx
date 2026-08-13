@@ -16,7 +16,6 @@ import {
   useOrder,
   usePayOrder,
   useFireOrder,
-  useRemoveOrderItem,
   useCancelOrder,
   useShiftTable,
   useServeItem,
@@ -39,6 +38,8 @@ import { WhatsAppTrackingQr } from '../../../../../shared/components/billing/Wha
 import { PaymentMethod } from '../../../../../shared/components/billing/PaymentMethodPicker';
 import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
 import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
+import { useItemVoidPrompt, VoidReasonPrompt } from '../../../../../shared/components/billing/useItemVoidPrompt';
+import { useItemPriceEditor, ItemRateButton, ItemRatePrompt } from '../../../../../shared/components/billing/useItemPriceEditor';
 import { equalShares, paidShareCount } from '../../../../../core/billing/splitBill';
 
 import { INPUT_BORDER_WIDTH, modalHeadingOverride } from '../../../../../shared/design/commonStyles';
@@ -113,7 +114,6 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const createTable = useCreateTable();
   const payOrder = usePayOrder();
   const fireOrder = useFireOrder();
-  const removeOrderItem = useRemoveOrderItem();
   const cancelOrder = useCancelOrder();
   const serveItem = useServeItem();
   const revokeSession = useRevokeSession();
@@ -130,10 +130,6 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const [mergingFrom, setMergingFrom] = useState<ApiTable | null>(null);
   const pickerActive = shiftingFrom ?? mergingFrom;
 
-  // Prompt for a reason once an item is already Preparing/Ready — matches the server's
-  // "void before cooking (free) vs void with wastage (needs a reason)" rule.
-  const [voidPromptItem, setVoidPromptItem] = useState<{ id: number; name: string } | null>(null);
-  const [voidReasonText, setVoidReasonText] = useState('');
 
   // Zones are derived from whatever tables actually exist on the backend —
   // no hardcoded zone list that could drift from reality.
@@ -184,6 +180,12 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
   // Quantity corrections on every item row below — see useItemQtyEditor for the fired-line rules.
   const qtyEditor = useItemQtyEditor(occupiedOrder?.id ?? null);
+  // Per-line rate overrides, this order only — see useItemPriceEditor. Manager/Owner only, so the
+  // button it renders is simply absent for everyone else.
+  const priceEditor = useItemPriceEditor(occupiedOrder?.id ?? null);
+  // Taking a line off the bill, and the reason prompt that anything already cooked or served
+  // has to go through — see useItemVoidPrompt for the rules, which are the server's.
+  const voidPrompt = useItemVoidPrompt(occupiedOrder?.id ?? null, 'void');
 
   const unfiredCount = occupiedOrder?.items.filter((i) => i.fireBatch === 0).length ?? 0;
   // Item list (open/inKitchen view) only makes sense while there's still kitchen work to
@@ -462,38 +464,6 @@ export const TableManagementScreen = ({ navigation }: any) => {
       await autoPrintKot(firedOrder);
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not fire order'), icon: 'alert-circle-outline', tone: 'danger' }));
-    }
-  };
-
-  const handleRemoveOrderItem = async (item: ApiOrderItem) => {
-    if (orderId == null) return;
-    // Preparing/Ready items are already being cooked — the server requires a reason
-    // (it becomes a no-stock-reversal "void with wastage", not a free removal).
-    if (item.fireBatch > 0 && (item.status === 'PREPARING' || item.status === 'READY')) {
-      setVoidPromptItem({ id: item.id, name: item.name });
-      setVoidReasonText('');
-      return;
-    }
-    try {
-      await removeOrderItem.mutateAsync({ id: orderId, itemId: item.id });
-    } catch (err) {
-      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not remove item'), icon: 'alert-circle-outline', tone: 'danger' }));
-    }
-  };
-
-  const confirmVoidWithReason = async () => {
-    if (orderId == null || !voidPromptItem) return;
-    if (!voidReasonText.trim()) {
-      dispatch(showToast({ message: 'A reason is required to void an item already in preparation.', icon: 'alert-circle-outline', tone: 'warning' }));
-      return;
-    }
-    try {
-      await removeOrderItem.mutateAsync({ id: orderId, itemId: voidPromptItem.id, reason: voidReasonText.trim() });
-      dispatch(showToast({ message: `Voided ${voidPromptItem.name} — no stock reversal (already in prep).`, icon: 'delete-outline', tone: 'warning' }));
-      setVoidPromptItem(null);
-      setVoidReasonText('');
-    } catch (err) {
-      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not void item'), icon: 'alert-circle-outline', tone: 'danger' }));
     }
   };
 
@@ -988,8 +958,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
                       <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.occUnfiredTag}><Text style={styles.occUnfiredTagText}>NEW</Text></View>
                       <Text style={styles.occItemPrice}>₹{(item.price * item.qty).toFixed(2)}</Text>
+                      <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled} />
                       <Tooltip label="Remove item" placement="left">
-                        <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                           <Icon name="close" size={16} color={COLORS.dangerAccent} />
                         </TouchableOpacity>
                       </Tooltip>
@@ -1047,8 +1018,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
                               >
                                 <Text style={[styles.occItemStatusPillText, { color: dotColor }]}>{item.status}</Text>
                               </TouchableOpacity>
+                              <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled || item.voided} />
                               <Tooltip label="Remove item" placement="left">
-                                <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                   <Icon name="close" size={16} color={COLORS.dangerAccent} />
                                 </TouchableOpacity>
                               </Tooltip>
@@ -1086,8 +1058,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
                           <View style={[styles.occItemStatusPill, { backgroundColor: `${COLORS.muted}22` }]}>
                             <Text style={[styles.occItemStatusPillText, { color: COLORS.muted }]}>NEW</Text>
                           </View>
+                          <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled} />
                           <Tooltip label="Remove item" placement="left">
-                            <TouchableOpacity onPress={() => handleRemoveOrderItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                               <Icon name="close" size={16} color={COLORS.dangerAccent} />
                             </TouchableOpacity>
                           </Tooltip>
@@ -1352,34 +1325,13 @@ export const TableManagementScreen = ({ navigation }: any) => {
           whole line. */}
       <QtyReasonPrompt editor={qtyEditor} />
 
-      {/* Reason prompt — item is already Preparing/Ready, so voiding it won't reverse
-          stock (food's genuinely spent); the server requires a reason for the record. */}
-      <Modal visible={!!voidPromptItem} transparent animationType="fade" onRequestClose={() => setVoidPromptItem(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Void {voidPromptItem?.name}?</Text>
-            <Text style={styles.modalLine}>Already in prep — stock won't be put back. This is logged as wastage.</Text>
-            <View style={{ borderRadius: 8, flex: 1 }}>
-              <TextInput
-                style={styles.occFieldInput}
-                placeholder="Reason (required)"
-                placeholderTextColor={COLORS.placeholder}
-                value={voidReasonText}
-                onChangeText={setVoidReasonText}
-                autoFocus
-              />
-            </View>
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setVoidPromptItem(null)}>
-                <Text style={styles.modalCancelText}>Keep Item</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPayBtn} onPress={confirmVoidWithReason} disabled={removeOrderItem.isPending}>
-                {removeOrderItem.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.modalPayText}>Void Item</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Re-rates one line on this order alone — the menu keeps its own price. */}
+      <ItemRatePrompt editor={priceEditor} />
+
+      {/* Reason prompt for anything already cooked or recorded as served — the server requires a
+          reason for both, and for a served line it's also where staff say whether the kitchen
+          ever actually made it (the only thing that puts stock back). */}
+      <VoidReasonPrompt prompt={voidPrompt} />
     </View>
   );
 };

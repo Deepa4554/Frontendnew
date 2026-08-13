@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Linking, Alert, TextInput } from 'react-native';
-import { useDispatch, useSelector } from 'react-redux';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, Modal, ActivityIndicator, Linking, Alert } from 'react-native';
+import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
@@ -14,7 +14,6 @@ import {
   useServeItem,
   usePayOrder,
   useCancelBatch,
-  useRemoveOrderItem,
 } from '../../../../../core/api/hooks/useOrders';
 import { ApiOrder, OrderItem as ApiOrderItem, ordersApi } from '../../../../../core/api/ordersApi';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
@@ -25,11 +24,12 @@ import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
 import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
 import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
+import { useItemVoidPrompt, VoidReasonPrompt } from '../../../../../shared/components/billing/useItemVoidPrompt';
+import { useItemPriceEditor, ItemRateButton, ItemRatePrompt } from '../../../../../shared/components/billing/useItemPriceEditor';
 import { WhatsAppTrackingQr } from '../../../../../shared/components/billing/WhatsAppTrackingQr';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
 import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 
-import { modalHeadingOverride } from '../../../../../shared/design/commonStyles';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 
 const ITEM_STATUS_COLOR: Record<string, 'dangerAccent' | 'warning' | 'success'> = {
@@ -66,17 +66,18 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
   const serveItem = useServeItem();
   const payOrder = usePayOrder();
   const cancelBatch = useCancelBatch();
-  const removeOrderItem = useRemoveOrderItem();
   // Quantity corrections on every line below — see useItemQtyEditor for the fired-line rules.
   const qtyEditor = useItemQtyEditor(order?.id ?? null);
+  // Per-line rate overrides, this order only — see useItemPriceEditor. Manager/Owner only, so the
+  // button it renders is simply absent for everyone else.
+  const priceEditor = useItemPriceEditor(order?.id ?? null);
+  // Taking a line off the bill, and the reason prompt anything already cooked or served goes
+  // through — see useItemVoidPrompt. Same rules as Tables; they're the server's, not a screen's.
+  const voidPrompt = useItemVoidPrompt(order?.id ?? null, 'remove');
   // Separate flags — Print Bill and Print KOT used to share one `printing` boolean, so
   // tapping either button lit up BOTH spinners even though only one print job ran.
   const [printingBill, setPrintingBill] = useState(false);
   const [printingKot, setPrintingKot] = useState(false);
-  // Prompt for a reason once an item is already Preparing/Ready — matches the server's
-  // "void before cooking (free) vs void with wastage (needs a reason)" rule, same as Tables.
-  const [voidPromptItem, setVoidPromptItem] = useState<{ id: number; name: string } | null>(null);
-  const [voidReasonText, setVoidReasonText] = useState('');
 
   const closeModal = () => {
     setSelected(null);
@@ -137,39 +138,6 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
         },
       ],
     );
-  };
-
-  // Removes a single line — same rule as Tables: unfired or still-New reverses stock
-  // and needs no reason; Preparing/Ready needs a reason and is counted as wastage;
-  // already-Served is rejected by the server (surfaced as a toast, button stays visible
-  // for simplicity — same as Tables' occupied-modal item rows).
-  const handleRemoveItem = (item: ApiOrderItem) => {
-    if (!order) return;
-    if (item.fireBatch > 0 && (item.status === 'PREPARING' || item.status === 'READY')) {
-      setVoidPromptItem({ id: item.id, name: item.name });
-      setVoidReasonText('');
-      return;
-    }
-    removeOrderItem.mutate(
-      { id: order.id, itemId: item.id },
-      { onError: (err) => dispatch(showToast({ message: getApiErrorMessage(err, 'Could not remove item'), icon: 'alert-circle-outline', tone: 'danger' })) },
-    );
-  };
-
-  const confirmVoidWithReason = async () => {
-    if (!order || !voidPromptItem) return;
-    if (!voidReasonText.trim()) {
-      dispatch(showToast({ message: 'A reason is required to remove an item already in preparation.', icon: 'alert-circle-outline', tone: 'warning' }));
-      return;
-    }
-    try {
-      await removeOrderItem.mutateAsync({ id: order.id, itemId: voidPromptItem.id, reason: voidReasonText.trim() });
-      dispatch(showToast({ message: `Removed ${voidPromptItem.name} — no stock reversal (already in prep).`, icon: 'delete-outline', tone: 'warning' }));
-      setVoidPromptItem(null);
-      setVoidReasonText('');
-    } catch (err) {
-      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not remove item'), icon: 'alert-circle-outline', tone: 'danger' }));
-    }
   };
 
   const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep') => {
@@ -435,9 +403,10 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                               >
                                 <Text style={[styles.itemStatusPillText, { color: dotColor }]}>{item.status}</Text>
                               </TouchableOpacity>
+                              <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
                               {!order.paid && (
                                 <Tooltip label="Remove item" placement="left">
-                                  <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                  <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                                     <Icon name="close" size={16} color={COLORS.dangerAccent} />
                                   </TouchableOpacity>
                                 </Tooltip>
@@ -459,9 +428,10 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                       />
                       <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
                       <View style={styles.unfiredTag}><Text style={styles.unfiredTagText}>NEW</Text></View>
+                      <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
                       {!order.paid && (
                         <Tooltip label="Remove item" placement="left">
-                          <TouchableOpacity onPress={() => handleRemoveItem(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
                             <Icon name="close" size={16} color={COLORS.dangerAccent} />
                           </TouchableOpacity>
                         </Tooltip>
@@ -510,34 +480,12 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
           whole line. */}
       <QtyReasonPrompt editor={qtyEditor} />
 
-      {/* Reason prompt — item is already Preparing/Ready, so removing it won't reverse
-          stock (food's genuinely spent); the server requires a reason for the record. */}
-      <Modal visible={!!voidPromptItem} transparent animationType="fade" onRequestClose={() => setVoidPromptItem(null)}>
-        <View style={styles.modalOverlay}>
-          <View style={styles.modalSheet}>
-            <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Remove {voidPromptItem?.name}?</Text>
-            <Text style={styles.modalLine}>Already in prep — stock won't be put back. This is logged as wastage.</Text>
-            <View style={{ borderRadius: 8 }}>
-              <TextInput
-                style={styles.reasonInput}
-                placeholder="Reason (required)"
-                placeholderTextColor={COLORS.muted}
-                value={voidReasonText}
-                onChangeText={setVoidReasonText}
-                autoFocus
-              />
-            </View>
-            <View style={styles.modalActions}>
-              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setVoidPromptItem(null)}>
-                <Text style={styles.modalCancelText}>Keep Item</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.modalPayBtn} onPress={confirmVoidWithReason} disabled={removeOrderItem.isPending}>
-                {removeOrderItem.isPending ? <ActivityIndicator color="#FFFFFF" /> : <Text style={styles.modalPayText}>Remove Item</Text>}
-              </TouchableOpacity>
-            </View>
-          </View>
-        </View>
-      </Modal>
+      {/* Re-rates one line on this order alone — the menu keeps its own price. */}
+      <ItemRatePrompt editor={priceEditor} />
+
+      {/* Reason prompt for anything already cooked or recorded as served — and, for a served
+          line, where staff say whether the kitchen ever made it (what puts stock back). */}
+      <VoidReasonPrompt prompt={voidPrompt} />
     </View>
   );
 };

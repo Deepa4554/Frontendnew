@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit, PayOptions } from '../ordersApi';
+import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit, PayOptions, VoidReasonCode } from '../ordersApi';
 import { PagedResult } from '../types';
 import { queryKeys } from './queryKeys';
 
@@ -270,8 +270,8 @@ const commitOrderResult = (qc: ReturnType<typeof useQueryClient>, order: ApiOrde
 export const useUpdateOrderItemQty = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, itemId, qty, reason }: { id: number; itemId: number; qty: number; reason?: string }) =>
-      ordersApi.updateItemQty(id, itemId, qty, reason),
+    mutationFn: ({ id, itemId, qty, reason, reasonCode, unprepared }: { id: number; itemId: number; qty: number; reason?: string; reasonCode?: VoidReasonCode; unprepared?: boolean }) =>
+      ordersApi.updateItemQty(id, itemId, qty, reason, reasonCode, unprepared),
     onMutate: async ({ id, itemId, qty }) => {
       await qc.cancelQueries({ queryKey: queryKeys.order(id) });
       const previousOrder = qc.getQueryData<ApiOrder>(queryKeys.order(id));
@@ -296,10 +296,32 @@ export const useUpdateOrderItemQty = () => {
   });
 };
 
+/** Overrides one line's per-unit rate on this order alone — see ordersApi.updateItemPrice.
+ *
+ *  Not optimistic, unlike the quantity editor above. A rate is typed once and confirmed, not
+ *  tapped repeatedly, so there's no burst of round trips to hide; and the guess it could show
+ *  (`price`) is only the per-unit figure — every total beside it on the bill is the server's to
+ *  compute, and a row briefly reading ₹100 next to a subtotal still built on ₹120 is a worse
+ *  half-second than a spinner. Stock is untouched, so inventory isn't marked stale either. */
+export const useUpdateOrderItemPrice = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, itemId, price, reason }: { id: number; itemId: number; price: number; reason?: string }) =>
+      ordersApi.updateItemPrice(id, itemId, price, reason),
+    onSuccess: (updated) => {
+      patchCachedOrder(qc, updated);
+      // The bill total moved, so the tables grid's amount is stale — same "mark, don't refetch"
+      // treatment the quantity editor gives it.
+      qc.invalidateQueries({ queryKey: queryKeys.tables, refetchType: 'none' });
+    },
+  });
+};
+
 export const useRemoveOrderItem = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ id, itemId, reason }: { id: number; itemId: number; reason?: string }) => ordersApi.removeItem(id, itemId, reason),
+    mutationFn: ({ id, itemId, reason, reasonCode, unprepared }: { id: number; itemId: number; reason?: string; reasonCode?: VoidReasonCode; unprepared?: boolean }) =>
+      ordersApi.removeItem(id, itemId, reason, reasonCode, unprepared),
     onSuccess: (updated) => {
       commitOrderResult(qc, updated);
       // Voiding a still-New/Ready fired line reverses its stock deduction, so inventory really

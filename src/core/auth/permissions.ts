@@ -203,6 +203,15 @@ export function canApplyBillDiscount(role: AppRole | undefined): boolean {
   return isOwnerOrManager(role);
 }
 
+/// Re-rating a single line on one open order ("iss customer ko yeh ₹100 me de do"). Manager-level
+/// for the same reason as the bill discount above — it's the same discretionary markdown, just
+/// aimed at one item instead of the whole bill, and the server gates it identically (see backend
+/// OrdersController.UpdateItemPrice). Editing the MENU price is a different, catalog-wide act and
+/// keeps its own permission.
+export function canOverrideItemPrice(role: AppRole | undefined): boolean {
+  return isOwnerOrManager(role);
+}
+
 export function canAccessSuperAdmin(isPlatformAdmin: boolean | undefined): boolean {
   return isPlatformAdmin === true;
 }

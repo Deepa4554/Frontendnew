@@ -2,6 +2,16 @@ import { apiClient } from '../network/api';
 import { PagedResult } from './types';
 
 export type OrderStatus = 'NEW' | 'READ' | 'PREPARING' | 'READY' | 'SERVED';
+/** Mirrors the server's Domain.VoidReasonCode — why a line came off a bill. Sent by NAME (the
+ * API registers JsonStringEnumConverter, and query-string binding takes names too). The list's
+ * labels and the "kitchen never made it" defaults live with the UI, in
+ * shared/components/billing/voidReasons. */
+export type VoidReasonCode =
+  | 'MisTappedServed'
+  | 'WrongItemPunched'
+  | 'GuestReturned'
+  | 'KitchenError'
+  | 'Other';
 /** Kitchen stages in order — index gives progress; used for column layout and next-stage.
  * REMOVED READ: Workflow simplified to NEW → PREPARING → READY → SERVED (no READ) */
 export const STAGE_FLOW: OrderStatus[] = ['NEW', 'PREPARING', 'READY', 'SERVED'];
@@ -302,13 +312,36 @@ export const ordersApi = {
    * 4?") — needing a `reason` once it goes past the not-yet-cooked units. An increase raises the
    * same line in place, no extra line and no extra KOT; on a line that's still cooking the added
    * units enter at New, and on a fully-served one they join the served units so nothing is sent
-   * back to the kitchen. Staff wanting a genuinely separate round use Add Item instead. */
-  updateItemQty: (id: number, itemId: number, qty: number, reason?: string) =>
-    apiClient.patch<ApiOrder>(`/orders/${id}/items/${itemId}/qty`, { qty, reason }).then((r) => r.data),
-  /** reason is required once the item is Preparing/Ready (server 400s without it) —
-   * optional while still New/Read/unfired. */
-  removeItem: (id: number, itemId: number, reason?: string) =>
-    apiClient.delete<ApiOrder>(`/orders/${id}/items/${itemId}`, { params: { reason } }).then((r) => r.data),
+   * back to the kitchen. Staff wanting a genuinely separate round use Add Item instead.
+   *
+   * `reasonCode` is the picked one of the fixed reasons and `reason` the free-text note beside
+   * it (the note is what's required when the code is Other). `unprepared` asserts those units
+   * were never actually made, which is the only thing that puts their stock back — honoured for
+   * already-SERVED units only. */
+  updateItemQty: (id: number, itemId: number, qty: number, reason?: string, reasonCode?: VoidReasonCode, unprepared?: boolean) =>
+    apiClient.patch<ApiOrder>(`/orders/${id}/items/${itemId}/qty`, { qty, reason, reasonCode, unprepared }).then((r) => r.data),
+  /** Overrides one line's per-unit rate on THIS order only — the menu's own price is untouched,
+   * so no other order (past or future) moves. `price` is the line's FINAL effective rate,
+   * replacing the variant + add-on total that `OrderItem.price` already represents, so what's
+   * typed here is exactly what the bill charges per unit.
+   *
+   * Owner/Manager only at every stage, fired or not (see backend OrdersController.UpdateItemPrice)
+   * — this is money off a bill, not food off a ticket. A REDUCTION requires a `reason` (server
+   * 400s without one) and is audited as a discount; an increase doesn't. */
+  updateItemPrice: (id: number, itemId: number, price: number, reason?: string) =>
+    apiClient.patch<ApiOrder>(`/orders/${id}/items/${itemId}/price`, { price, reason }).then((r) => r.data),
+  /** A reason is required once the item is Preparing/Ready or Served — either a `reasonCode` off
+   * the fixed list, or free-text `reason` when the code is Other (the server 400s with neither).
+   * Nothing is required while still New/Read/unfired.
+   *
+   * Voiding a served line is allowed. By default it's the till correcting a bill, not wastage:
+   * the line comes off, stock stays deducted, audited at High. `unprepared` flips that — it
+   * asserts the kitchen never actually made the food (a mis-tap on the one-tap Serve button),
+   * so the fire-time deduction was for food that doesn't exist and is credited back in full.
+   * Only meaningful on a SERVED line; the server ignores it at every other stage, where the
+   * unit counts already say whether anything was cooked. */
+  removeItem: (id: number, itemId: number, reason?: string, reasonCode?: VoidReasonCode, unprepared?: boolean) =>
+    apiClient.delete<ApiOrder>(`/orders/${id}/items/${itemId}`, { params: { reason, reasonCode, unprepared } }).then((r) => r.data),
   /** Cancels the whole order — voids every not-yet-served line (reversing stock if prep
    * hadn't started). Already-served items are left untouched; use Refund for those. */
   cancel: (id: number, reason?: string) =>

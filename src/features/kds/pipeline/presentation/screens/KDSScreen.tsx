@@ -250,11 +250,24 @@ export const KDSScreen = () => {
   // CRITICAL: item-wise KOT view must use unitCounts, not kotCounts
   const counts = viewMode === 'production' || viewMode === 'item_wise_kot' ? unitCounts : kotCounts;
 
-  // KOT View shows every active ticket together (no stage tabs) — newest first, so a
-  // freshly fired order is immediately visible at the top instead of buried below
-  // whatever's already been sitting in the queue.
-  const allTicketsSorted = useMemo(
-    () => [...tickets].sort((a, b) => new Date(b.batch.firedAt).getTime() - new Date(a.batch.firedAt).getTime()),
+  // KOT View splits into the two things a kitchen tracks separately. activeTickets is the
+  // actual work queue — anything still being cooked (New/Preparing), newest first so a
+  // freshly fired order is immediately visible at the top instead of buried below whatever
+  // has been sitting there. readyTickets is cooking-done work: the food exists, it's on the
+  // pass, and the only thing left is a captain picking it up and marking it Served — which
+  // is service's job, not the chef's. Ready tickets stay ON screen (someone has to notice a
+  // plate going cold and chase a waiter) but OUT of the queue, so they never compete for
+  // attention with dishes that still need cooking.
+  const activeTickets = useMemo(
+    () => tickets.filter((t) => t.batch.status !== 'READY')
+      .sort((a, b) => new Date(b.batch.firedAt).getTime() - new Date(a.batch.firedAt).getTime()),
+    [tickets],
+  );
+  // Oldest first here, the opposite of the queue: the plate that has been waiting on the
+  // pass the longest is the one to hand over next.
+  const readyTickets = useMemo(
+    () => tickets.filter((t) => t.batch.status === 'READY')
+      .sort((a, b) => new Date(a.batch.firedAt).getTime() - new Date(b.batch.firedAt).getTime()),
     [tickets],
   );
 
@@ -382,6 +395,106 @@ export const KDSScreen = () => {
   };
 
   const totalActive = viewMode === 'production' ? unitCounts.NEW + unitCounts.PREPARING + unitCounts.READY : tickets.length;
+
+  // One KOT card, shared by both KOT-View lists (the cooking queue and the ready-for-pickup
+  // shelf below it) so the two sections can never drift apart visually.
+  const renderTicket = (t: KdsTicket) => {
+    const { order, batch, items } = t;
+    const key = `${order.id}-${batch.batchNumber}`;
+    const action = actionLabelFor(batch.status);
+    const pending = pendingKeys.has(`batch-${key}`);
+    const urgent = urgentKeys.has(key);
+    const cardColor = urgent ? COLORS.dangerAccent : STATUS_COLOR[batch.status];
+    const stageSet = new Set<OrderStatus>();
+    items.forEach((it) => STAGE_FLOW.forEach((s) => { if (unitsAtStage(it, s) > 0) stageSet.add(s); }));
+    const mixed = stageSet.size > 1;
+    const stationBreakdown = groupByStationStatus(items);
+    const multiStation = stationBreakdown.length > 1;
+    return (
+      <View key={key} style={[styles.kotCard, { borderColor: cardColor }, isDesktopWeb && styles.ticketCardDesktop]}>
+        <View style={[styles.kotCardHeader, { backgroundColor: `${cardColor}18` }]}>
+          <View style={styles.ticketHeaderLeft}>
+            <Text style={[styles.ticketTitle, { color: cardColor }]} numberOfLines={1} ellipsizeMode="tail">
+              KOT {batch.kotNumber}{order.tableCode ? ` · Table ${order.tableCode}` : ` · ${order.title}`}
+            </Text>
+            {!!(order.servedByName ?? order.createdByName) && (
+              <Text style={styles.ticketWaiter} numberOfLines={1}>Captain: {order.servedByName ?? order.createdByName}</Text>
+            )}
+          </View>
+          <View style={[styles.timerBadge, { backgroundColor: `${cardColor}22` }]}>
+            <Icon name="timer-outline" size={12} color={cardColor} />
+            <ElapsedTimer firedAt={batch.firedAt} color={cardColor} style={styles.timerText} />
+          </View>
+        </View>
+
+        <View style={styles.ticketBody}>
+          {multiStation ? (
+            <View style={styles.stationBreakdownRow}>
+              {stationBreakdown.map(({ station, status }) => (
+                <View key={station} style={[styles.stationStatusChip, { backgroundColor: `${STATUS_COLOR[status]}22` }]}>
+                  <View style={[styles.kotLegendDot, { backgroundColor: STATUS_COLOR[status] }]} />
+                  <Text style={[styles.stationStatusChipText, { color: STATUS_COLOR[status] }]}>{station}: {status}</Text>
+                </View>
+              ))}
+            </View>
+          ) : (
+            mixed && <Text style={styles.progressText}>Mixed status</Text>
+          )}
+
+          <View style={styles.itemsBox}>
+            {items.map((it) => {
+              const itemPending = pendingKeys.has(`item-${it.id}`);
+              const itemColor = STATUS_COLOR[it.status];
+              return (
+                <View key={it.id}>
+                  <View style={styles.itemRow}>
+                    <View style={styles.itemNameRow}>
+                      {!!it.vegNonVegType && <VegNonVegBadge type={it.vegNonVegType} size={11} style={{ marginRight: 4 }} />}
+                      <Text style={styles.itemName} numberOfLines={1} ellipsizeMode="tail">
+                        {it.qty}× {it.name}{it.variantName ? ` (${it.variantName})` : ''}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      style={[styles.itemStatusPill, { backgroundColor: `${itemColor}22` }]}
+                      onPress={() => advanceItemOwnStage(order.id, it.id, it.status)}
+                      disabled={it.status === 'SERVED' || itemPending}
+                      activeOpacity={0.6}
+                    >
+                      {itemPending ? (
+                        <ActivityIndicator size="small" color={itemColor} />
+                      ) : (
+                        <Text style={[styles.itemStatusPillText, { color: itemColor }]}>{it.status}</Text>
+                      )}
+                    </TouchableOpacity>
+                  </View>
+                  {/* Toppings/add-ons chosen for this line, above the free-text
+                      note — the station has to see these to make the right thing. */}
+                  {it.selectedModifiers?.map((m) => (
+                    <Text key={m.modifierOptionId} style={styles.itemModifier}>
+                      + {m.qty > 1 ? `${m.qty}x ` : ''}{m.name}
+                    </Text>
+                  ))}
+                  {!!it.modifier && <Text style={styles.itemModifier}>– {it.modifier}</Text>}
+                </View>
+              );
+            })}
+          </View>
+
+          {!!action && (
+            <TouchableOpacity
+              style={[styles.advanceBtn, { backgroundColor: cardColor }, pending && { opacity: 0.7 }]}
+              onPress={() => advanceWholeBatch(order.id, batch.batchNumber, batch.status)}
+              disabled={pending}
+            >
+              {pending ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
+                <Text style={styles.advanceBtnText}>{action}</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      </View>
+    );
+  };
 
   return (
     <View style={styles.container}>
@@ -565,108 +678,36 @@ export const KDSScreen = () => {
           </View>
         ) : (
           // ---------------- KOT VIEW ----------------
-          <View style={[styles.ticketList, isDesktopWeb && styles.ticketListDesktop]}>
-            {allTicketsSorted.length === 0 && (
-              <View style={styles.emptyBox}><Icon name="check-all" size={32} color={COLORS.muted} /><Text style={styles.emptyText}>No active KOTs right now.</Text></View>
-            )}
-            {allTicketsSorted.map((t) => {
-              const { order, batch, items } = t;
-              const key = `${order.id}-${batch.batchNumber}`;
-              const action = actionLabelFor(batch.status);
-              const pending = pendingKeys.has(`batch-${key}`);
-              const urgent = urgentKeys.has(key);
-              const cardColor = urgent ? COLORS.dangerAccent : STATUS_COLOR[batch.status];
-              const stageSet = new Set<OrderStatus>();
-              items.forEach((it) => STAGE_FLOW.forEach((s) => { if (unitsAtStage(it, s) > 0) stageSet.add(s); }));
-              const mixed = stageSet.size > 1;
-              const stationBreakdown = groupByStationStatus(items);
-              const multiStation = stationBreakdown.length > 1;
-              return (
-                <View key={key} style={[styles.kotCard, { borderColor: cardColor }, isDesktopWeb && styles.ticketCardDesktop]}>
-                  <View style={[styles.kotCardHeader, { backgroundColor: `${cardColor}18` }]}>
-                    <View style={styles.ticketHeaderLeft}>
-                      <Text style={[styles.ticketTitle, { color: cardColor }]} numberOfLines={1} ellipsizeMode="tail">
-                        KOT {batch.kotNumber}{order.tableCode ? ` · Table ${order.tableCode}` : ` · ${order.title}`}
-                      </Text>
-                      {!!(order.servedByName ?? order.createdByName) && (
-                        <Text style={styles.ticketWaiter} numberOfLines={1}>Captain: {order.servedByName ?? order.createdByName}</Text>
-                      )}
-                    </View>
-                    <View style={[styles.timerBadge, { backgroundColor: `${cardColor}22` }]}>
-                      <Icon name="timer-outline" size={12} color={cardColor} />
-                      <ElapsedTimer firedAt={batch.firedAt} color={cardColor} style={styles.timerText} />
-                    </View>
-                  </View>
-
-                  <View style={styles.ticketBody}>
-                    {multiStation ? (
-                      <View style={styles.stationBreakdownRow}>
-                        {stationBreakdown.map(({ station, status }) => (
-                          <View key={station} style={[styles.stationStatusChip, { backgroundColor: `${STATUS_COLOR[status]}22` }]}>
-                            <View style={[styles.kotLegendDot, { backgroundColor: STATUS_COLOR[status] }]} />
-                            <Text style={[styles.stationStatusChipText, { color: STATUS_COLOR[status] }]}>{station}: {status}</Text>
-                          </View>
-                        ))}
-                      </View>
-                    ) : (
-                      mixed && <Text style={styles.progressText}>Mixed status</Text>
-                    )}
-
-                    <View style={styles.itemsBox}>
-                      {items.map((it) => {
-                        const itemPending = pendingKeys.has(`item-${it.id}`);
-                        const itemColor = STATUS_COLOR[it.status];
-                        return (
-                          <View key={it.id}>
-                            <View style={styles.itemRow}>
-                              <View style={styles.itemNameRow}>
-                                {!!it.vegNonVegType && <VegNonVegBadge type={it.vegNonVegType} size={11} style={{ marginRight: 4 }} />}
-                                <Text style={styles.itemName} numberOfLines={1} ellipsizeMode="tail">
-                                  {it.qty}× {it.name}{it.variantName ? ` (${it.variantName})` : ''}
-                                </Text>
-                              </View>
-                              <TouchableOpacity
-                                style={[styles.itemStatusPill, { backgroundColor: `${itemColor}22` }]}
-                                onPress={() => advanceItemOwnStage(order.id, it.id, it.status)}
-                                disabled={it.status === 'SERVED' || itemPending}
-                                activeOpacity={0.6}
-                              >
-                                {itemPending ? (
-                                  <ActivityIndicator size="small" color={itemColor} />
-                                ) : (
-                                  <Text style={[styles.itemStatusPillText, { color: itemColor }]}>{it.status}</Text>
-                                )}
-                              </TouchableOpacity>
-                            </View>
-                            {/* Toppings/add-ons chosen for this line, above the free-text
-                                note — the station has to see these to make the right thing. */}
-                            {it.selectedModifiers?.map((m) => (
-                              <Text key={m.modifierOptionId} style={styles.itemModifier}>
-                                + {m.qty > 1 ? `${m.qty}x ` : ''}{m.name}
-                              </Text>
-                            ))}
-                            {!!it.modifier && <Text style={styles.itemModifier}>– {it.modifier}</Text>}
-                          </View>
-                        );
-                      })}
-                    </View>
-
-                    {!!action && (
-                      <TouchableOpacity
-                        style={[styles.advanceBtn, { backgroundColor: cardColor }, pending && { opacity: 0.7 }]}
-                        onPress={() => advanceWholeBatch(order.id, batch.batchNumber, batch.status)}
-                        disabled={pending}
-                      >
-                        {pending ? <ActivityIndicator size="small" color="#FFFFFF" /> : (
-                          <Text style={styles.advanceBtnText}>{action}</Text>
-                        )}
-                      </TouchableOpacity>
-                    )}
-                  </View>
+          // Two stacked lists: the cooking queue, then the ready-for-pickup shelf.
+          <>
+            <View style={[styles.ticketList, isDesktopWeb && styles.ticketListDesktop]}>
+              {activeTickets.length === 0 && (
+                <View style={styles.emptyBox}>
+                  <Icon name="check-all" size={32} color={COLORS.muted} />
+                  <Text style={styles.emptyText}>
+                    {readyTickets.length > 0 ? 'Nothing left to cook — everything is ready for pickup.' : 'No active KOTs right now.'}
+                  </Text>
                 </View>
-              );
-            })}
-          </View>
+              )}
+              {activeTickets.map(renderTicket)}
+            </View>
+
+            {/* Cooking is finished on these — they are only here so the pass can see what
+                is waiting and chase a captain. Dimmed and pushed below the divider so they
+                read as "not your work anymore" without vanishing off the board. */}
+            {readyTickets.length > 0 && (
+              <>
+                <View style={[styles.pickupHeaderRow, isDesktopWeb && { paddingHorizontal: 18 }]}>
+                  <View style={[styles.kotLegendDot, { backgroundColor: STATUS_COLOR.READY }]} />
+                  <Text style={styles.pickupHeaderText}>Ready for pickup · {readyTickets.length}</Text>
+                  <Text style={styles.pickupHeaderHint} numberOfLines={1}>Waiting for a captain to serve</Text>
+                </View>
+                <View style={[styles.ticketList, isDesktopWeb && styles.ticketListDesktop, styles.pickupList]}>
+                  {readyTickets.map(renderTicket)}
+                </View>
+              </>
+            )}
+          </>
         )}
       </ScrollView>
 
@@ -767,6 +808,11 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   itemStatusPill: { borderRadius: 999, paddingHorizontal: isDesktopWeb ? 10 : 7.5, paddingVertical: isDesktopWeb ? 5 : 3.75, minWidth: 76, alignItems: 'center' },
   itemStatusPillText: { fontSize: 10.5, fontWeight: '800', letterSpacing: 0.3 },
   kotLegendRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 10 : 10.5, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingBottom: isDesktopWeb ? 9 : 9 },
+  // Divider + heading between the cooking queue and the ready-for-pickup shelf below it.
+  pickupHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 6 : 5.25, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 14 : 13.5, paddingBottom: isDesktopWeb ? 9 : 9, marginTop: isDesktopWeb ? 8 : 7.5, borderTopWidth: 1, borderTopColor: COLORS.divider },
+  pickupHeaderText: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '800', color: COLORS.heading, letterSpacing: 0.2 },
+  pickupHeaderHint: { fontSize: 11, fontWeight: '600', color: COLORS.muted, flexShrink: 1 },
+  pickupList: { opacity: 0.9 },
   kotLegendItem: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 5 : 4.5 },
   kotLegendDot: { width: 9, height: 9, borderRadius: 5 },
   kotLegendText: { fontSize: isDesktopWeb ? 12.5 : 12, fontWeight: '700', color: COLORS.muted },

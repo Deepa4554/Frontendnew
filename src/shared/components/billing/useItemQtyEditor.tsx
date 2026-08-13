@@ -1,17 +1,24 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, TouchableOpacity, TextInput, Modal, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
 import { showToast } from '../../../core/store/uiSlice';
 import { useUpdateOrderItemQty } from '../../../core/api/hooks/useOrders';
-import { OrderItem as ApiOrderItem } from '../../../core/api/ordersApi';
+import { OrderItem as ApiOrderItem, VoidReasonCode } from '../../../core/api/ordersApi';
 import { getApiErrorMessage } from '../../../core/network/api';
 import { modalHeadingOverride } from '../../design/commonStyles';
+import { VoidReasonPicker, useVoidReasonState } from './voidReasons';
 
 interface PromptState {
   item: ApiOrderItem;
   nextQty: number;
+}
+
+interface ReasonArgs {
+  reason?: string;
+  reasonCode: VoidReasonCode;
+  unprepared: boolean;
 }
 
 export interface ItemQtyEditor {
@@ -22,8 +29,7 @@ export interface ItemQtyEditor {
   pendingItemId: number | null;
   // --- consumed by QtyReasonPrompt below; not meant for screens to read directly ---
   prompt: PromptState | null;
-  reasonText: string;
-  setReasonText: (text: string) => void;
+  reason: ReturnType<typeof useVoidReasonState>;
   dismissPrompt: () => void;
   confirmPrompt: () => void;
 }
@@ -40,14 +46,17 @@ export const useItemQtyEditor = (orderId: number | null): ItemQtyEditor => {
   const dispatch = useDispatch();
   const updateQty = useUpdateOrderItemQty();
   const [prompt, setPrompt] = useState<PromptState | null>(null);
-  const [reasonText, setReasonText] = useState('');
+  const reason = useVoidReasonState();
   const [pendingItemId, setPendingItemId] = useState<number | null>(null);
 
-  const apply = async (item: ApiOrderItem, nextQty: number, reason?: string) => {
+  const apply = async (item: ApiOrderItem, nextQty: number, args?: ReasonArgs) => {
     if (orderId === null) return;
     setPendingItemId(item.id);
     try {
-      await updateQty.mutateAsync({ id: orderId, itemId: item.id, qty: nextQty, reason });
+      await updateQty.mutateAsync({
+        id: orderId, itemId: item.id, qty: nextQty,
+        reason: args?.reason, reasonCode: args?.reasonCode, unprepared: args?.unprepared,
+      });
       // Raising an already-fired line puts unmade food back on a ticket the kitchen may well have
       // finished — worth saying out loud, since the row itself only shows a bigger number and its
       // status quietly dropping back to NEW is easy to miss. A fully-served line is the other
@@ -60,9 +69,11 @@ export const useItemQtyEditor = (orderId: number | null): ItemQtyEditor => {
           icon: 'silverware-fork-knife',
           tone: 'info',
         }));
-      } else if (reason) {
+      } else if (args) {
         dispatch(showToast({
-          message: `${item.name} reduced to ${nextQty} — no stock reversal, and it's on the record.`,
+          message: args.unprepared
+            ? `${item.name} reduced to ${nextQty} — stock put back, since those units were never made.`
+            : `${item.name} reduced to ${nextQty} — no stock reversal, and it's on the record.`,
           icon: 'minus-circle-outline',
           tone: 'warning',
         }));
@@ -91,8 +102,8 @@ export const useItemQtyEditor = (orderId: number | null): ItemQtyEditor => {
     const freeUnits = item.newQty + item.readQty;
     const needsReason = item.fireBatch > 0 && item.qty - nextQty > freeUnits;
     if (needsReason) {
+      reason.reset();
       setPrompt({ item, nextQty });
-      setReasonText('');
       return;
     }
     void apply(item, nextQty);
@@ -100,26 +111,41 @@ export const useItemQtyEditor = (orderId: number | null): ItemQtyEditor => {
 
   const dismissPrompt = () => {
     setPrompt(null);
-    setReasonText('');
+    reason.reset();
   };
 
   const confirmPrompt = () => {
     if (!prompt) return;
-    if (!reasonText.trim()) {
+    if (!reason.isComplete) {
       dispatch(showToast({
-        message: 'A reason is required to pull back units that are already in preparation.',
+        message: 'Pick a reason, or type one under Other.',
         icon: 'alert-circle-outline',
         tone: 'warning',
       }));
       return;
     }
     const { item, nextQty } = prompt;
-    const reason = reasonText.trim();
+    const args: ReasonArgs = {
+      reason: reason.note.trim() || undefined,
+      reasonCode: reason.reasonCode,
+      // Only meaningful when the cut actually reaches units recorded as served — the server
+      // ignores it otherwise, since the unit counts already answer the question there.
+      unprepared: servedUnitsCut(item, nextQty) > 0 && reason.unprepared,
+    };
     dismissPrompt();
-    void apply(item, nextQty, reason);
+    void apply(item, nextQty, args);
   };
 
-  return { request, pendingItemId, prompt, reasonText, setReasonText, dismissPrompt, confirmPrompt };
+  return { request, pendingItemId, prompt, reason, dismissPrompt, confirmPrompt };
+};
+
+/** How many of the units this cut removes were ones the system had recorded as SERVED. Units come
+ * off the least-progressed stages first (see OrdersController.ReduceFiredLineQty), so served ones
+ * are only reached once everything else on the line has been used up. */
+const servedUnitsCut = (item: ApiOrderItem, nextQty: number): number => {
+  const dropped = item.qty - nextQty;
+  const beforeServed = item.newQty + item.readQty + item.preparingQty + item.readyQty;
+  return Math.max(0, dropped - beforeServed);
 };
 
 /** The wastage-reason prompt for a quantity reduction that reaches into Preparing/Ready units —
@@ -129,7 +155,7 @@ export const QtyReasonPrompt: React.FC<{ editor: ItemQtyEditor }> = ({ editor })
   const COLORS = useThemeColors();
   const { isDesktopWeb } = useResponsive();
   const styles = makeStyles(COLORS, isDesktopWeb);
-  const { prompt, reasonText, setReasonText, dismissPrompt, confirmPrompt, pendingItemId } = editor;
+  const { prompt, reason, dismissPrompt, confirmPrompt, pendingItemId } = editor;
   // Only the units beyond the still-New/Read ones cost the cafe anything — the rest of the cut
   // does put its stock back, and saying otherwise would overstate it. Split again by whether they
   // were merely in the pass or already recorded as served, because those are different admissions:
@@ -152,17 +178,10 @@ export const QtyReasonPrompt: React.FC<{ editor: ItemQtyEditor }> = ({ editor })
           </Text>
           <Text style={styles.modalLine}>
             {fromServed > 0
-              ? `${fromServed} unit${fromServed === 1 ? ' was' : 's were'} already recorded as served. Taking ${fromServed === 1 ? 'it' : 'them'} off the bill doesn't put stock back, and it's logged for review.`
+              ? `${fromServed} unit${fromServed === 1 ? ' was' : 's were'} already recorded as served. Taking ${fromServed === 1 ? 'it' : 'them'} off the bill is logged for review — say below whether the kitchen actually made ${fromServed === 1 ? 'it' : 'them'}.`
               : `${fromPrep} unit${fromPrep === 1 ? '' : 's'} already in prep — that stock won't be put back. This is logged as wastage.`}
           </Text>
-          <TextInput
-            style={styles.reasonInput}
-            placeholder="Reason (required)"
-            placeholderTextColor={COLORS.muted}
-            value={reasonText}
-            onChangeText={setReasonText}
-            autoFocus
-          />
+          <VoidReasonPicker state={reason} askAboutStock={fromServed > 0} />
           <View style={styles.modalActions}>
             <TouchableOpacity style={styles.modalCancelBtn} onPress={dismissPrompt}>
               <Text style={styles.modalCancelText}>Keep Quantity</Text>
@@ -184,7 +203,6 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   modalSheet: { width: '100%', maxWidth: 420, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 17 : 16.5 },
   modalTitle: { fontSize: isDesktopWeb ? 18 : 14, fontWeight: '800', color: COLORS.heading },
   modalLine: { fontSize: isDesktopWeb ? 13 : 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 7 : 6 },
-  reasonInput: { borderWidth: 1, borderColor: COLORS.divider, borderRadius: 8, paddingHorizontal: isDesktopWeb ? 11 : 10.5, paddingVertical: isDesktopWeb ? 10 : 9, fontSize: isDesktopWeb ? 14 : 16, color: COLORS.heading, marginBottom: isDesktopWeb ? 13 : 12 },
   modalActions: { flexDirection: 'row', gap: 6 },
   modalCancelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 10.5, borderRadius: 6, backgroundColor: COLORS.cardAlt },
   modalCancelText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
