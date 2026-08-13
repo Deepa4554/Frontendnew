@@ -113,11 +113,18 @@ export const useItemPriceEditor = (orderId: number | null): ItemPriceEditor => {
   };
 };
 
-/** The per-row "change this line's rate" button, sitting beside the remove (X) on every order
- * row. An icon rather than a tappable price figure because the three screens don't agree on
- * whether a row even HAS a price column — the fired/KOT rows on Tables and Token show a status
- * pill where the unfired rows show money — and an affordance that appears on some rows and not
- * others reads as the feature being unavailable rather than the column being absent.
+/** The per-row "change this line's rate" control, on every order row.
+ *
+ * A bordered chip showing the LIVE RATE with a pencil, not a bare ₹ glyph. Two reasons, both
+ * learned the hard way from the first cut of this:
+ *
+ * 1. A lone icon says nothing about what it does. The rate written on the chip does — a control
+ *    displaying "₹120 ✎" is read as "the rate is 120, tap to change it" without anyone being
+ *    told, and it doubles as the price column these rows otherwise lack.
+ * 2. It sits next to the destructive remove (✕). Two same-sized icons side by side is a mis-tap
+ *    waiting to happen on a busy floor, and the one being mis-tapped voids a line. A wide
+ *    labelled chip is a different shape and a different size from a bare ✕, and the margin below
+ *    keeps a gap between the two so a thumb aimed at one can't land on the other.
  *
  * Renders nothing at all for a role that can't re-rate, so a waiter's row is exactly the row it
  * was before this existed. */
@@ -128,17 +135,24 @@ export const ItemRateButton: React.FC<{
   disabled?: boolean;
 }> = ({ editor, item, disabled }) => {
   const COLORS = useThemeColors();
+  const { isDesktopWeb } = useResponsive();
+  const styles = makeStyles(COLORS, isDesktopWeb);
   if (!editor.canEdit || disabled) return null;
   const pending = editor.pendingItemId === item.id;
   return (
-    <Tooltip label={`Change rate (₹${item.price})`} placement="left">
+    <Tooltip label="Change rate for this order only" placement="left">
       <TouchableOpacity
         onPress={() => editor.request(item)}
         disabled={pending}
-        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-        style={pending ? { opacity: 0.5 } : undefined}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+        style={[styles.rateChip, pending && { opacity: 0.5 }]}
       >
-        <Icon name="currency-inr" size={16} color={COLORS.muted} />
+        {/* "@" is the till's own shorthand for a per-unit rate, and it's what stops this being
+            read as a second line total — on the Tables open-order rows the chip sits right after
+            "₹240.00" for the line, where a bare "₹120" would look like the same figure disagreeing
+            with itself. "@₹120" next to "₹240.00" reads as 2 at 120, which is what it is. */}
+        <Text style={styles.rateChipText}>@₹{item.price}</Text>
+        <Icon name="pencil-outline" size={isDesktopWeb ? 10 : 11} color={COLORS.accent} />
       </TouchableOpacity>
     </Tooltip>
   );
@@ -219,6 +233,21 @@ export const ItemRatePrompt: React.FC<{ editor: ItemPriceEditor }> = ({ editor }
 };
 
 const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
+  // marginRight, not the row's own gap: it opens a deliberate extra gap between this chip and
+  // the destructive remove (✕) that follows it, so the two controls can't be confused by a thumb.
+  rateChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    borderRadius: 999,
+    backgroundColor: COLORS.cardAlt,
+    paddingHorizontal: isDesktopWeb ? 6 : 7,
+    paddingVertical: isDesktopWeb ? 1.5 : 3,
+    marginRight: isDesktopWeb ? 4 : 6,
+  },
+  rateChipText: { fontSize: isDesktopWeb ? 10.5 : 11, fontWeight: '800', color: COLORS.accent },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 20 : 18 },
   modalSheet: { width: '100%', maxWidth: 420, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 17 : 16.5 },
   modalTitle: { fontSize: isDesktopWeb ? 18 : 14, fontWeight: '800', color: COLORS.heading },
