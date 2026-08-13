@@ -180,7 +180,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   // 16px, not 12 — iOS/Android mobile browsers auto-zoom the whole page on focus of any
   // input whose font-size is under 16px. Every other search box in the app is already at
   // 16 (see e.g. MenuScreen/InventoryScreen's searchInput); this one was the outlier.
-  inputWrap: { flex: 1, borderRadius: 8 },
+  inputWrap: { flex: 1, minWidth: 0, borderRadius: 8 },
   input: { width: '100%', fontSize: 16, color: COLORS.heading },
   cancelText: { fontSize: 12, fontWeight: '600', color: COLORS.accent, marginLeft: isDesktopWeb ? 4 : 3 },
   status: { fontSize: 12, color: COLORS.muted, paddingVertical: isDesktopWeb ? 16 : 12, textAlign: 'center' },

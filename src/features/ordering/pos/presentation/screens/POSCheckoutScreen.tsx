@@ -4947,6 +4947,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) =>
     },
     menuSearchInput: {
       flex: 1,
+      minWidth: 0,
       fontSize: 16,
       color: COLORS.heading,
       padding: 0,

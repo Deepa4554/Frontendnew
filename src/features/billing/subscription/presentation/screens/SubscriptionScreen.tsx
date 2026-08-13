@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -7,6 +7,7 @@ import LinearGradient from 'react-native-linear-gradient';
 import { useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { useSubscription } from '../../../../../core/api/hooks/useSubscription';
+import { useSubscriptionCheckout } from '../../../../../core/api/hooks/useSubscriptionCheckout';
 import { SubscriptionTier } from '../../../../../core/api/subscriptionApi';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { SkeletonStatRow, SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
@@ -82,6 +83,14 @@ const TIER_LABEL: Record<SubscriptionTier, string> = {
 // different large sentinel.
 const UNLIMITED_THRESHOLD = 1_000_000_000;
 
+/** "Contact to Upgrade" is still the truth wherever Razorpay checkout can't run — the native
+ * builds and any login that isn't the Owner (see useSubscriptionCheckout.isCheckoutSupported). */
+const planBtnLabel = (active: boolean, canCheckout: boolean, busy: boolean): string => {
+  if (busy) return 'Opening payment…';
+  if (!canCheckout) return active ? 'Current Plan' : 'Contact to Upgrade';
+  return active ? 'Renew Plan' : 'Upgrade Now';
+};
+
 export const SubscriptionScreen = () => {
   const { isDesktopWeb, isWideLayout } = useResponsive();
   const COLORS = useThemeColors();
@@ -90,14 +99,26 @@ export const SubscriptionScreen = () => {
   const navigation = useNavigation<any>();
   const insets = useSafeAreaInsets();
   const { data: subscription, isLoading, isError, refetch } = useSubscription();
+  const { startCheckout, pendingPlan, isCheckoutSupported } = useSubscriptionCheckout();
   const [billingCycle, setBillingCycle] = React.useState<BillingCycle>('MONTHLY');
 
-  // Plan changes aren't self-service: there's no payment gateway wired up yet, so
-  // letting an Owner flip their own plan would let them grant themselves a free
-  // upgrade/renewal. Upgrading/renewing goes through your PrabandhOS provider, who
-  // applies it after payment is confirmed.
-  const handleSelectPlan = (plan: SubscriptionTier) => {
-    if (!subscription || plan === subscription.plan) return;
+  // Basic/Plus are bought here with Razorpay (web + Owner only — see useSubscriptionCheckout);
+  // everything else still goes through your PrabandhOS provider by hand. Enterprise is quoted
+  // rather than priced, and the native app has no web checkout to open, so both keep the
+  // message this screen has always shown.
+  const handleSelectPlan = (plan: SubscriptionTier, themeColor?: string) => {
+    if (!subscription) return;
+
+    // Re-buying the plan you're already on is deliberately allowed — it's the renew path, and
+    // the backend extends from the existing expiry rather than resetting it, so paying early
+    // never costs the owner days they already have.
+    if (isCheckoutSupported && plan !== 'ENTERPRISE') {
+      // Fire-and-forget by design: startCheckout handles every outcome itself (toast on
+      // failure, silence on dismiss) and never rejects, so there is nothing to await here.
+      startCheckout({ plan, cycle: billingCycle, themeColor });
+      return;
+    }
+
     dispatch(showToast({
       message: 'Contact your PrabandhOS provider to upgrade or renew — they’ll apply it once payment is confirmed.',
       icon: 'information-outline',
@@ -223,6 +244,7 @@ export const SubscriptionScreen = () => {
         <View style={styles.planGrid}>
           {GRID_PLANS.map((plan) => {
             const active = subscription.plan === plan.key;
+            const busy = pendingPlan === plan.key;
             const price = (billingCycle === 'YEARLY' && plan.yearlyPrice) ? plan.yearlyPrice : plan.monthlyPrice;
             const originalPrice = billingCycle === 'YEARLY' ? plan.yearlyOriginalPrice : plan.monthlyOriginalPrice;
             return (
@@ -251,12 +273,19 @@ export const SubscriptionScreen = () => {
                     </View>
                   ))}
                   <TouchableOpacity
-                    style={[styles.planBtn, { backgroundColor: plan.gradient[1] }]}
-                    disabled={active}
-                    onPress={() => handleSelectPlan(plan.key)}
+                    style={[styles.planBtn, { backgroundColor: plan.gradient[1] }, busy && styles.planBtnBusy]}
+                    // The current plan's button stays live where there's a checkout to open
+                    // (renewing is how an expired cafe gets back in) and reverts to the old
+                    // dead "Current Plan" label everywhere paying isn't possible anyway.
+                    disabled={(active && !isCheckoutSupported) || pendingPlan !== null}
+                    onPress={() => handleSelectPlan(plan.key, plan.gradient[1])}
                   >
-                    <Icon name={active ? 'crown' : 'lightning-bolt'} size={13} color="#FFFFFF" />
-                    <Text style={styles.planBtnText}>{active ? 'Current Plan' : 'Contact to Upgrade'}</Text>
+                    {busy ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Icon name={active ? 'crown' : 'lightning-bolt'} size={13} color="#FFFFFF" />
+                    )}
+                    <Text style={styles.planBtnText}>{planBtnLabel(active, isCheckoutSupported, busy)}</Text>
                   </TouchableOpacity>
                 </View>
               </View>
@@ -429,6 +458,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     borderRadius: 7,
     paddingVertical: 9,
   },
+  planBtnBusy: { opacity: 0.75 },
   planBtnText: { fontSize: 11.5, fontWeight: '700', color: '#FFFFFF' },
 
   enterpriseCard: {

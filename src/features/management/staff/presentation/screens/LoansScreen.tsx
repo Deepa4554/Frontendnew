@@ -31,7 +31,7 @@ const LOAN_TYPES: { key: CreateLoanType; label: string }[] = [
   { key: 'Loan', label: 'Loan' },
 ];
 
-export const LoansScreen = () => {
+export const LoansScreen = ({ navigation }: any) => {
   const { isDesktopWeb } = useResponsive();
   const COLORS = useThemeColors();
   const styles = makeStyles(COLORS, isDesktopWeb);
@@ -103,6 +103,9 @@ export const LoansScreen = () => {
       <DesktopPageHeader icon="hand-coin-outline" title="Loans & Advances" />
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Icon name="arrow-left" size={20} color={COLORS.heading} />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Loans &amp; Advances</Text>
         </View>
       )}

@@ -1,0 +1,987 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8" />
+<title>PrabandhOS — Poori Guide (Hinglish)</title>
+<style>
+  /* Chrome's --print-to-pdf does honour this rule — the rendered MediaBox comes back as A4
+     (595x842pt) rather than its own Letter default, which is proof the @page block is being
+     read rather than ignored. */
+  @page { size: A4; margin: 16mm 14mm 18mm 14mm; }
+
+  * { box-sizing: border-box; }
+  html { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body {
+    font-family: "Segoe UI", "Nirmala UI", Arial, sans-serif;
+    color: #2B1810;
+    font-size: 11.5pt;
+    line-height: 1.62;
+    margin: 0;
+  }
+
+  h1, h2, h3, h4 { margin: 0; font-weight: 700; color: #2B1810; }
+
+  /* ---------- Cover ---------- */
+  .cover {
+    /* Page box is 297mm less the 16mm/18mm @page margins = 263mm of usable height; staying
+       under that keeps the cover on one page instead of spilling a near-empty second one. */
+    height: 252mm;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    text-align: center;
+    background: #FBF4EF;
+    border: 2px solid #C5652E;
+    border-radius: 10px;
+    padding: 20mm 14mm;
+    page-break-after: always;
+  }
+  .cover .logo {
+    font-size: 34pt; font-weight: 800; letter-spacing: -1px; color: #C5652E;
+  }
+  .cover .tag { font-size: 12pt; color: #8A7364; margin-top: 4px; letter-spacing: 2px; text-transform: uppercase; }
+  .cover h1 { font-size: 26pt; margin-top: 26mm; line-height: 1.3; }
+  .cover .sub { font-size: 13pt; color: #8A7364; margin-top: 10px; }
+  .cover .rule { width: 60mm; height: 3px; background: #C5652E; margin: 12mm auto; border-radius: 2px; }
+  .cover .who {
+    margin-top: 4mm; font-size: 11pt; color: #5A473C; background: #fff;
+    border: 1px solid #EDE2D8; border-radius: 8px; padding: 8mm 10mm; text-align: left;
+  }
+  .cover .who b { color: #C5652E; }
+
+  /* ---------- Structure ---------- */
+  .part { page-break-before: always; }
+  h2.part-title {
+    font-size: 17pt;
+    color: #C5652E;
+    border-bottom: 2.5px solid #C5652E;
+    padding-bottom: 5px;
+    margin-bottom: 14px;
+  }
+  h2.part-title .num {
+    display: inline-block; background: #C5652E; color: #fff;
+    width: 26px; height: 26px; line-height: 26px; text-align: center;
+    border-radius: 6px; font-size: 12pt; margin-right: 9px; vertical-align: 2px;
+  }
+  h3 { font-size: 13pt; margin: 18px 0 7px; color: #2B1810; }
+  h3::before { content: "▸ "; color: #C5652E; }
+  h4 { font-size: 11.5pt; margin: 13px 0 5px; color: #5A473C; }
+
+  p { margin: 0 0 9px; }
+  ul, ol { margin: 0 0 10px; padding-left: 20px; }
+  li { margin-bottom: 5px; }
+
+  .lead { color: #5A473C; font-size: 11pt; margin-bottom: 14px; }
+
+  /* ---------- UI element chips ---------- */
+  .btn {
+    display: inline-block; background: #C5652E; color: #fff;
+    padding: 1px 8px; border-radius: 4px; font-size: 10pt; font-weight: 600;
+    white-space: nowrap;
+  }
+  .field {
+    display: inline-block; background: #F4EAE2; color: #2B1810;
+    border: 1px solid #E0CFC1; padding: 0 6px; border-radius: 4px;
+    font-size: 10pt; font-family: Consolas, monospace; white-space: nowrap;
+  }
+  .path { color: #C5652E; font-weight: 600; white-space: nowrap; }
+
+  /* ---------- Steps ---------- */
+  ol.steps { counter-reset: s; list-style: none; padding-left: 0; }
+  ol.steps > li {
+    counter-increment: s; position: relative;
+    padding: 0 0 9px 30px; margin: 0;
+  }
+  ol.steps > li::before {
+    content: counter(s);
+    position: absolute; left: 0; top: 2px;
+    width: 21px; height: 21px; line-height: 21px; text-align: center;
+    background: #2B1810; color: #fff; border-radius: 50%;
+    font-size: 9.5pt; font-weight: 700;
+  }
+
+  /* ---------- Boxes ---------- */
+  .box { border-radius: 8px; padding: 11px 14px; margin: 12px 0; page-break-inside: avoid; }
+  .box p:last-child, .box ul:last-child, .box ol:last-child { margin-bottom: 0; }
+  .box .bt { font-weight: 700; display: block; margin-bottom: 4px; font-size: 11pt; }
+
+  .tip     { background: #F1F7F1; border-left: 5px solid #3E8E4E; }
+  .tip .bt { color: #2E6E3B; }
+  .warn    { background: #FFF6EC; border-left: 5px solid #E08A2B; }
+  .warn .bt{ color: #B96A10; }
+  .danger  { background: #FDF0EC; border-left: 5px solid #C5652E; }
+  .danger .bt { color: #A94A18; }
+  .note    { background: #FBF4EF; border-left: 5px solid #8A7364; }
+  .note .bt{ color: #5A473C; }
+
+  /* ---------- Table ---------- */
+  table { width: 100%; border-collapse: collapse; margin: 11px 0; font-size: 10.5pt; page-break-inside: avoid; }
+  th {
+    background: #2B1810; color: #fff; text-align: left; padding: 7px 9px;
+    font-weight: 600; font-size: 10pt;
+  }
+  td { padding: 7px 9px; border-bottom: 1px solid #EDE2D8; vertical-align: top; }
+  tr:nth-child(even) td { background: #FBF4EF; }
+
+  /* ---------- Index ---------- */
+  .toc { page-break-after: always; }
+  .toc ol { list-style: none; padding-left: 0; counter-reset: t; }
+  .toc li {
+    counter-increment: t; padding: 7px 0; border-bottom: 1px dashed #EDE2D8;
+    font-size: 11.5pt;
+  }
+  .toc li::before {
+    content: counter(t) ".";
+    color: #C5652E; font-weight: 700; display: inline-block; width: 26px;
+  }
+  .toc li span { color: #8A7364; font-size: 10pt; display: block; margin-left: 26px; }
+
+  /* ---------- Screen mock ---------- */
+  .mock {
+    border: 1.5px solid #E0CFC1; border-radius: 8px; background: #fff;
+    padding: 10px 12px; margin: 11px 0; font-size: 10pt; page-break-inside: avoid;
+  }
+  .mock .mh {
+    font-weight: 700; color: #C5652E; font-size: 10pt; text-transform: uppercase;
+    letter-spacing: 0.6px; border-bottom: 1px solid #EDE2D8; padding-bottom: 5px; margin-bottom: 7px;
+  }
+  .mock .row { display: flex; justify-content: space-between; padding: 3px 0; border-bottom: 1px dotted #EDE2D8; }
+  .mock .row:last-child { border-bottom: 0; }
+  .mock .row .r { color: #8A7364; }
+
+  .kv { display: flex; gap: 10px; margin-bottom: 6px; }
+  .kv .k { min-width: 120px; font-weight: 600; color: #5A473C; }
+
+  /* ---------- Support ---------- */
+  .support {
+    background: #2B1810; color: #FBF4EF; border-radius: 10px;
+    padding: 16px 20px; margin-top: 14px;
+  }
+  .support h3 { color: #FFD9C2; margin-top: 0; }
+  .support h3::before { content: ""; }
+  .support a, .support .ph { color: #FFB98A; font-weight: 600; }
+  .support .slot {
+    display: inline-block; border-bottom: 1.5px dashed #FFB98A; min-width: 55mm;
+    color: #FFB98A;
+  }
+
+  .end { text-align: center; color: #8A7364; font-size: 10pt; margin-top: 20px; }
+  .nobreak { page-break-inside: avoid; }
+</style>
+</head>
+<body>
+
+<!-- ================= COVER ================= -->
+<div class="cover">
+  <div class="logo">PrabandhOS</div>
+  <div class="tag">Cafe &amp; Restaurant POS</div>
+
+  <h1>Poori Setup &amp; Chalane Ki Guide</h1>
+  <div class="sub">Login se lekar bill banane tak — bilkul aasan Hinglish me</div>
+
+  <div class="rule"></div>
+
+  <div class="who">
+    <p><b>Ye guide kiske liye hai?</b><br>
+    Har us cafe owner, manager ya staff ke liye jo PrabandhOS pehli baar chala raha hai.
+    Koi technical knowledge ki zaroorat nahi — bas step-by-step follow karte jaiye.</p>
+    <p style="margin-bottom:0"><b>Isme kya milega?</b><br>
+    Account banana → Login → Cafe setup → Menu banana (photo se bhi) →
+    Order lena (POS) → KOT kitchen bhejna → Token orders → Bill settle karna → Billing page →
+    Common problems ka solution.</p>
+  </div>
+</div>
+
+<!-- ================= INDEX ================= -->
+<div class="toc">
+  <h2 class="part-title">Index — Kya-Kya Hai Is Guide Me</h2>
+  <ol>
+    <li>Shuru Karne Se Pehle <span>Kya-kya chahiye, app kaise kholein</span></li>
+    <li>Naya Account Banana (Create Your Cafe) <span>Form bharna + OTP verify karna</span></li>
+    <li>Login Karna <span>Roz kaise andar aayenge, password bhool jaayein to kya karein</span></li>
+    <li>Pehli Baar Ka Setup — Onboarding Ke 4 Steps <span>Cafe naam, logo, style, menu, team</span></li>
+    <li>Menu Banana — Saare 4 Tarike <span>Starter menu, CSV, Photo, Manually</span></li>
+    <li>⚠ Photo Se Menu Upload — Zaroori Cross-Check <span>Sabse important chapter — dhyan se padhein</span></li>
+    <li>Menu Item Edit Karna (Pencil Button) <span>Galat naam/price theek karna, item hatana</span></li>
+    <li>Order Lena — POS Screen <span>Dine In, Token, Takeaway, Delivery, Cash Sale</span></li>
+    <li>KOT — Kitchen Ko Order Bhejna <span>KOT &amp; Print, KDS screen, stations</span></li>
+    <li>Token Orders (Counter/QSR Style) <span>Token number, Add Item, Print KOT</span></li>
+    <li>Bill Banana &amp; Settle Karna <span>Cash / UPI / Card, split payment, discount, print</span></li>
+    <li>Billing Page — Purane Bills Dekhna <span>Transactions, receipt, WhatsApp par bhejna</span></li>
+    <li>Common Problems Aur Unka Solution <span>Error aaye to sabse pehle yahan dekhein</span></li>
+    <li>Madad Chahiye? Hamari Team Se Baat Karein <span>Contact details</span></li>
+  </ol>
+</div>
+
+<!-- ================= PART 1 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">1</span>Shuru Karne Se Pehle</h2>
+  <p class="lead">2 minute ka kaam hai. Bas ye cheezein saamne rakh lijiye.</p>
+
+  <h3>Aapko kya chahiye</h3>
+  <ul>
+    <li><b>Internet connection</b> — WiFi ya mobile data, chalu hona chahiye.</li>
+    <li><b>Ek email ID</b> — jo aap regularly kholte hain (OTP isi par aayega).</li>
+    <li><b>Ek mobile number</b> — 10 digit ka, bina +91 ke.</li>
+    <li><b>Laptop/PC ya tablet</b> — Chrome ya Edge browser me app best chalta hai.
+        Mobile phone par bhi chalega, lekin bade screen par kaam aasan rehta hai.</li>
+    <li><b>Apne cafe ka menu</b> — printed card, photo, ya Excel/CSV file — jo bhi ho.</li>
+    <li><b>Cafe ka logo</b> (optional) — bill par chhapega.</li>
+  </ul>
+
+  <h3>App kaise kholein</h3>
+  <ol class="steps">
+    <li>Apne laptop/mobile me <b>Chrome</b> ya <b>Edge</b> browser kholein.</li>
+    <li>Address bar me PrabandhOS ka link type karein — ye link hamari team ne aapko
+        WhatsApp ya email par bheja hoga.
+        <br><span style="color:#8A7364;font-size:10pt">(Link na mila ho to
+        <b>7689813155</b> par WhatsApp kar dijiye, turant bhej denge.)</span></li>
+    <li>Enter dabaiye. Kuch second me <b>PrabandhOS</b> ka login page khul jaayega.</li>
+  </ol>
+
+  <div class="tip">
+    <span class="bt">💡 Pro Tip — Link ko bookmark kar lijiye</span>
+    Page khulne ke baad keyboard par <b>Ctrl + D</b> dabaiye. Ab har baar link type
+    nahi karna padega. Mobile par: browser menu → "Add to Home screen" — app jaisa icon
+    ban jaayega.
+  </div>
+
+  <div class="note">
+    <span class="bt">📌 Yaad rakhein</span>
+    Pehli baar page thoda dheere khul sakta hai (5–20 second). Ye normal hai — server
+    "jaag" raha hota hai. Doosri baar se fast chalega. Bar-bar refresh mat kijiye.
+  </div>
+</div>
+
+<!-- ================= PART 2 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">2</span>Naya Account Banana — "Create Your Cafe"</h2>
+  <p class="lead">Ye sirf <b>ek hi baar</b> karna hai — jab aap bilkul naye hain. Agar account
+     pehle se bana hai to seedhe <b>Part 3 (Login)</b> par jaaiye.</p>
+
+  <h3>Step-by-step</h3>
+  <ol class="steps">
+    <li>Login page ke <b>sabse neeche</b> dekhein — likha hoga
+        "New cafe? <b>Create your account</b>". Us par click karein.</li>
+    <li><b>Create Your Cafe</b> form khul jaayega. Ab ye 5 cheezein bharni hain:</li>
+  </ol>
+
+  <div class="mock">
+    <div class="mh">Create Your Cafe</div>
+    <div class="kv"><span class="k">Cafe Name</span><span>Aapke cafe ka naam — jaise <i>Aroma Loft</i>. Yahi bill par chhapega.</span></div>
+    <div class="kv"><span class="k">Your Name</span><span>Aapka apna naam — jaise <i>Priya Sharma</i>.</span></div>
+    <div class="kv"><span class="k">Email</span><span>Aapki email ID — <i>you@example.com</i>. <b>OTP isi par aayega.</b></span></div>
+    <div class="kv"><span class="k">Mobile Number</span><span>10 digit ka number, bina +91 aur bina space.</span></div>
+    <div class="kv"><span class="k">Password</span><span>Kam se kam <b>6 characters</b>. Aisa rakhein jo yaad rahe.</span></div>
+  </div>
+
+  <ol class="steps" start="3">
+    <li style="counter-increment:s 3"><span class="btn">Send Verification Code</span> button dabaiye.</li>
+    <li>Apna <b>email inbox</b> kholein. 6 digit ka code aaya hoga (jaise <span class="field">123456</span>).
+        Inbox me na mile to <b>Spam / Promotions</b> folder zaroor check karein.</li>
+    <li>Wo 6 digit ka code app me <b>Verification Code</b> wale box me daaliye.</li>
+    <li>Ab <span class="btn">Create Cafe</span> dabaiye. Bas! Aapka cafe ban gaya.</li>
+  </ol>
+
+  <div class="warn">
+    <span class="bt">⚠ Dhyan Dein — Password kahin likh lijiye</span>
+    Jo password aapne banaya hai, use kahin safe jagah note kar lijiye. Ye password
+    aur email hi aapki <b>Owner</b> wali chaabi hai — isse hi aap roz login karenge.
+  </div>
+
+  <h3>Yahan aksar kya galat hota hai</h3>
+  <table>
+    <tr><th style="width:38%">Problem</th><th>Kya karein</th></tr>
+    <tr><td>OTP email nahi aaya</td><td>2 minute rukiye. Spam folder dekhein. Phir bhi na aaye to email spelling check karein aur <b>Send Verification Code</b> dobara dabaiye.</td></tr>
+    <tr><td>"Invalid code" aa raha hai</td><td>Code purana ho gaya hoga. Naya code mangwaiye aur <b>sabse latest</b> email wala code hi daaliye.</td></tr>
+    <tr><td>Email pehle se registered hai</td><td>Iska matlab account already bana hua hai. Login page par jaakar <b>Forgot Access?</b> se password reset kar lijiye.</td></tr>
+    <tr><td>Mobile number accept nahi ho raha</td><td>Sirf 10 digit daaliye — <b>+91, 0, space ya dash mat lagaiye</b>.</td></tr>
+  </table>
+</div>
+
+<!-- ================= PART 3 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">3</span>Login Karna</h2>
+  <p class="lead">Ye aap roz karenge — 10 second ka kaam.</p>
+
+  <div class="mock">
+    <div class="mh">Welcome Back</div>
+    <div style="color:#8A7364;font-size:10pt;margin-bottom:8px">Securely access your branch dashboard</div>
+    <div class="kv"><span class="k">Work Email</span><span>Wahi email jo account banate waqt daali thi</span></div>
+    <div class="kv"><span class="k">Security Key</span><span>Aapka password (yahi "Security Key" hai — koi alag cheez nahi)</span></div>
+  </div>
+
+  <ol class="steps">
+    <li><b>Work Email</b> box me apni email daaliye.</li>
+    <li><b>Security Key</b> box me apna password daaliye.
+        Password sahi type hua ya nahi dekhna ho to box ke andar <b>aankh wale icon</b> par click karein.</li>
+    <li>Login button dabaiye. Aap seedhe apne <b>Dashboard / POS</b> par pahunch jaayenge.</li>
+  </ol>
+
+  <h3>Password bhool gaye?</h3>
+  <ol class="steps">
+    <li>Login page par "Security Key" ke bagal me <b>Forgot Access?</b> likha hai — us par click karein.</li>
+    <li>Apni email daaliye aur code mangwaiye.</li>
+    <li>Email par aaya code daal kar naya password set kar lijiye.</li>
+  </ol>
+
+  <div class="tip">
+    <span class="bt">💡 Staff ke liye</span>
+    Aapke waiter/cashier/kitchen staff ka login <b>alag</b> hota hai. Unka email/phone
+    aur password aap khud banate hain — Part 4 ke Step 4 (Build your crew) me, ya baad me
+    <span class="path">More → Team Portal → Staff Access</span> se. Owner apna password
+    kabhi kisi ko na de.
+  </div>
+
+  <div class="note">
+    <span class="bt">📌 Role ke hisaab se screen alag dikhti hai</span>
+    Owner/Manager ko sab kuch dikhta hai. Waiter ko sirf POS/Orders, aur kitchen staff ko
+    sirf KDS. Isliye agar kisi staff ko koi button nahi dikh raha, to wo "error" nahi hai —
+    unke role me wo permission nahi hai. Aap <span class="path">More → Team Portal → Staff Access</span>
+    se badal sakte hain.
+  </div>
+</div>
+
+<!-- ================= PART 4 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">4</span>Pehli Baar Ka Setup — Onboarding Ke 4 Steps</h2>
+  <p class="lead">Account banne ke baad app khud aapko 4 chhote steps se guzarega. Har step ke
+     neeche <b>Continue</b> button hota hai, aur upar <b>Back</b> — kabhi bhi peeche jaa sakte hain.</p>
+
+  <h3>Step 1 — "Welcome Home." (Cafe ka naam &amp; logo)</h3>
+  <ul>
+    <li><b>What's the name of your cafe?</b> — cafe ka naam likhiye (jaise <i>The Golden Bean</i>).</li>
+    <li><b>Upload your logo</b> — box par click karke apne logo ki image chun lijiye.
+        Logo na ho to skip kar dijiye, baad me
+        <span class="path">More → Cafe Settings</span> se daal sakte hain.</li>
+  </ul>
+
+  <h3>Step 2 — "What's your style?" (Cafe ka type &amp; serving)</h3>
+  <ul>
+    <li>Apne cafe ka type chuniye — Cafe, Restaurant, QSR, Bakery, jo bhi aap ho.</li>
+    <li><b>How do you serve customers?</b> — yahan wo sab chuniye jo aap actually karte hain:
+        Dine In, Takeaway, Delivery, Token/Counter.
+        <br><b>Ye important hai</b> — jo yahan choose karenge, wahi options aapko POS screen
+        par dikhenge. Baad me badalna ho to
+        <span class="path">More → Cafe Settings → Order Types</span> se ho jaayega.</li>
+  </ul>
+
+  <h3>Step 3 — "Build Your Menu"</h3>
+  <p>Yahan 4 options milte hain. Poora detail agle Part 5 me hai — abhi bas itna samajh lijiye
+     ki koi bhi chun lein, menu baad me kabhi bhi badla ja sakta hai.</p>
+
+  <h3>Step 4 — "Build your crew" (Team add karna)</h3>
+  <p>Aapka apna account upar <span class="btn">ADMIN</span> badge ke saath dikhega. Ab staff jodiye:</p>
+  <ol class="steps">
+    <li><b>Email or Phone</b> — staff ka email ya mobile (jaise <i>barista@cafe.com</i>).</li>
+    <li><b>Role</b> — dropdown se chuniye: Manager, Cashier, Waiter, Chef, wagairah.</li>
+    <li><b>App Login Password</b> — unka password banaiye (kam se kam 6 characters).
+        Ye password unhe bata dijiye.</li>
+    <li><b>Screen Access</b> —
+        <b>Automatic</b> chun lijiye (role ke hisaab se screens apne aap set ho jaayengi).
+        <b>Custom</b> tabhi chuniye jab aap khud ek-ek screen tick karna chahte hain.</li>
+    <li><span class="btn">Add Team Member</span> dabaiye. Aise hi baaki staff bhi jod lijiye.</li>
+  </ol>
+
+  <div class="tip">
+    <span class="bt">💡 Jaldi me hain?</span>
+    Staff abhi skip kar dijiye — <b>Continue</b> dabaiye. Baad me kabhi bhi
+    <span class="path">More → Team Portal → Staff Access</span> se add kar sakte hain.
+    Setup rukna nahi chahiye.
+  </div>
+
+  <p>Chaaron step ke baad app aapko seedhe <b>Menu</b> screen par le aayega — taaki aap
+     apna menu dekh/theek kar sakein.</p>
+</div>
+
+<!-- ================= PART 5 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">5</span>Menu Banana — Saare 4 Tarike</h2>
+  <p class="lead">Menu POS ka dil hai. Jab tak menu me items nahi honge, order nahi ban paayega.
+     Chaar tarike hain — apne hisaab se koi bhi chuniye.</p>
+
+  <table>
+    <tr><th style="width:26%">Tarika</th><th style="width:37%">Kab use karein</th><th>Kitna time</th></tr>
+    <tr><td><b>Use a starter menu</b></td><td>Aapko bas jaldi shuru karna hai, items baad me theek karenge</td><td>10 second</td></tr>
+    <tr><td><b>Import from CSV</b></td><td>Aapka menu already Excel/Google Sheet me hai</td><td>2 minute</td></tr>
+    <tr><td><b>Import from a photo</b></td><td>Sirf printed menu card hai, typing nahi karni</td><td>1 minute + checking</td></tr>
+    <tr><td><b>Start from scratch</b></td><td>Items kam hain, aap khud type karna chahte hain</td><td>Item ke hisaab se</td></tr>
+  </table>
+
+  <h3>Tarika 1 — Use a starter menu</h3>
+  <p>Ek ready-made cafe menu turant chadh jaata hai — Espresso, Cappuccino, Latte, Cold Brew,
+     Croissant, Muffin, Sandwich jaise <b>11 aam items</b>, categories aur price ke saath.</p>
+  <ol class="steps">
+    <li>"Use a starter menu" card par click karein (border orange ho jaayega = select ho gaya).</li>
+    <li><span class="btn">Continue</span> dabaiye. Items add ho jaayenge.</li>
+    <li>Baad me Menu screen par jaakar apne hisaab se naam/price badal lijiye, jo nahi chahiye
+        wo delete kar dijiye.</li>
+  </ol>
+
+  <h3>Tarika 2 — Import from CSV (Excel se)</h3>
+  <p>Agar aapka menu Excel ya Google Sheets me hai, to use CSV bana kar seedha upload kar dijiye.</p>
+
+  <h4>File me columns kya hone chahiye</h4>
+  <table>
+    <tr><th style="width:22%">Column</th><th style="width:16%">Zaroori?</th><th>Example</th></tr>
+    <tr><td><b>name</b></td><td>Haan</td><td>Cappuccino</td></tr>
+    <tr><td><b>price</b></td><td>Haan</td><td>130</td></tr>
+    <tr><td>category</td><td>Nahi</td><td>Espresso</td></tr>
+    <tr><td>subtitle</td><td>Nahi</td><td>Espresso, steamed milk &amp; foam</td></tr>
+    <tr><td>description</td><td>Nahi</td><td>Classic Italian favourite</td></tr>
+    <tr><td>veg</td><td>Nahi</td><td>Veg / NonVeg / Jain / Eggetarian</td></tr>
+  </table>
+
+  <ol class="steps">
+    <li>Excel me file kholein → <b>File → Save As → CSV (Comma delimited)</b>.</li>
+    <li>App me "Import from CSV" card par click karein.</li>
+    <li><span class="btn">Choose CSV file</span> dabaiye aur apni file chun lijiye.</li>
+    <li>Neeche <b>preview</b> aayega — kitne items ready hain wo dikhega. Kisi row par click
+        karke naam/price theek kar sakte hain, ya <b>✕</b> se hata sakte hain.</li>
+    <li><span class="btn">Continue</span> dabaiye.</li>
+  </ol>
+
+  <div class="warn">
+    <span class="bt">⚠ CSV ki 2 sabse aam galtiyan</span>
+    <ul>
+      <li><b>Price me ₹ ya text</b> — sirf number likhiye. <span class="field">₹130</span> ❌ &nbsp; <span class="field">130</span> ✔</li>
+      <li><b>Khaali naam ya 0 price</b> — aisi rows apne aap skip ho jaati hain. Isliye upload ke
+          baad app batata hai "Skipped X rows" — ghabraiye mat, bas un rows ko theek karke
+          dobara upload kar dijiye ya haath se add kar lijiye.</li>
+    </ul>
+  </div>
+
+  <h3>Tarika 3 — Import from a photo</h3>
+  <p>Apne printed menu ki photo daaliye, app khud items, category aur price padh kar bhar deta hai.
+     <b>Ye sabse tez tarika hai, lekin isme cross-check karna zaroori hai</b> — poora
+     detail agle Part 6 me hai. Wo part zaroor padhiye.</p>
+
+  <h3>Tarika 4 — Start from scratch (khud add karna)</h3>
+  <ol class="steps">
+    <li>Menu screen par upar-daayein <b>+</b> button dabaiye — <b>Add Menu Item</b> form khulega.</li>
+    <li><b>Name</b> — item ka naam (jaise <i>Caramel Macchiato</i>).</li>
+    <li><b>Photo (optional)</b> — "Tap to add a photo" par click karke item ki tasveer lagaiye.</li>
+    <li><b>Category</b> — Espresso, Food, Pastries… (nayi category bhi bana sakte hain).</li>
+    <li><b>Price</b> — sirf number (jaise <i>130</i>).</li>
+    <li><b>Subtitle / Description</b> — optional, guest ko dikhta hai.</li>
+    <li><b>Kitchen Station</b> — ye item kis station par banega (Coffee Bar, Kitchen…).
+        Isse hi KOT sahi station par jaata hai.</li>
+    <li>Zaroorat ho to <b>Add Variant</b> (Half/Full, Small/Large) aur
+        <b>Add Option / Topping Group</b> (Extra Cheese, Spice Level) bhi jod dijiye.</li>
+    <li>Save dabaiye. Item menu me aa gaya.</li>
+  </ol>
+</div>
+
+<!-- ================= PART 6 — THE BIG ONE ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">6</span>⚠ Photo Se Menu Upload — Zaroori Cross-Check</h2>
+
+  <div class="danger">
+    <span class="bt">🔴 Sabse Important Baat — Ise Skip Mat Kijiye</span>
+    <p>Photo se menu upload karna bahut aasan hai, <b>lekin ye 100% sahi nahi hota</b>.
+    Photo padhne wali technology (OCR/AI) kabhi-kabhi <b>galti karti hai</b> —
+    naam adhoora padh leti hai, price ulta-seedha kar deti hai, ya do items ko mila deti hai.</p>
+    <p style="margin-bottom:0"><b>Isliye upload ke baad har item ko apni aankh se check karna
+    zaroori hai.</b> Galat price ka matlab hai galat bill — aur galat bill ka matlab hai
+    customer ke saamne sharmindagi aur paise ka nuksaan. 2 minute ka checking aapko
+    baad ki badi headache se bacha lega.</p>
+  </div>
+
+  <h3>Photo se upload kaise karein</h3>
+  <ol class="steps">
+    <li>Onboarding me <b>"Import from a photo"</b> card par click karein.
+        <br>Ya baad me: <span class="path">More → Menu</span> kholein aur upar wale banner
+        <b>"Import your menu from a photo"</b> par click karein.</li>
+    <li><span class="btn">Choose photo</span> dabaiye.</li>
+    <li>Apne menu card ki photo chun lijiye (ya mobile par camera se turant kheench lijiye).</li>
+    <li>Thoda intezaar kijiye — ghoomta hua circle dikhega. App photo padh raha hai.
+        <b>Is beech page band mat kijiye.</b></li>
+    <li>Neeche list aa jaayegi:
+        <span class="field">12 ITEMS READY · DOUBLE-CHECK THESE</span>
+        — ye "DOUBLE-CHECK THESE" likha hona hi ishara hai ki ab aapko check karna hai.</li>
+  </ol>
+
+  <h3>Achhi photo kaise lein (isse galtiyan aadhi ho jaati hain)</h3>
+  <table>
+    <tr><th style="width:50%">✔ Ye kijiye</th><th>✘ Ye mat kijiye</th></tr>
+    <tr>
+      <td>Achhi roshni me photo lijiye — din ki roshni sabse behtar</td>
+      <td>Andhere me ya sirf mobile flash se</td>
+    </tr>
+    <tr>
+      <td>Menu ko seedha, samne se kheenchiye (90°)</td>
+      <td>Tirchha ya bahut angle se</td>
+    </tr>
+    <tr>
+      <td>Menu ko samtal (flat) rakhiye — mod na ho</td>
+      <td>Mudda hua, jhurriyon wala menu card</td>
+    </tr>
+    <tr>
+      <td>Ek baar me <b>ek page</b> — 8–10 items tak</td>
+      <td>Poora 4-page menu ek hi photo me</td>
+    </tr>
+    <tr>
+      <td>Photo saaf/sharp ho, text padha jaa sake</td>
+      <td>Hilti hui (blurry) photo</td>
+    </tr>
+    <tr>
+      <td>Simple, saaf font wala menu</td>
+      <td>Bahut fancy handwriting/design wala font</td>
+    </tr>
+    <tr>
+      <td>Chamak (glare) na ho — laminated menu thoda tilt karke</td>
+      <td>Seedhi light ki reflection menu par</td>
+    </tr>
+  </table>
+
+  <div class="tip">
+    <span class="bt">💡 Bade menu ke liye best tarika</span>
+    Ek saath poora menu daalne ki jagah, <b>ek-ek category ki alag photo</b> lijiye —
+    pehle "Coffee" wala section, phir "Snacks", phir "Desserts". Har baar upload karke
+    check kar lijiye. Isme accuracy bahut zyada hoti hai aur check karna bhi aasan.
+  </div>
+
+  <h3 style="page-break-before:always">Ab cross-check kijiye — 3 cheezein har item me dekhni hain</h3>
+  <table>
+    <tr><th style="width:22%">Kya check karein</th><th>Kaise pakdein</th></tr>
+    <tr>
+      <td><b>1. Naam sahi hai?</b></td>
+      <td>Adhoore ya ajeeb naam dhoondhiye — "Cappucino" ki jagah "Cappucin", "Cold Coffee" ki
+          jagah "old Coffee". Aise naam POS par staff ko confuse karenge.</td>
+    </tr>
+    <tr>
+      <td><b>2. Price sahi hai?</b></td>
+      <td><b>Sabse zaroori.</b> ₹130 kabhi ₹30 ya ₹1300 ban jaata hai (₹ ka nishaan ya
+          decimal galat padh jaata hai). Har price menu card se milaiye.</td>
+    </tr>
+    <tr>
+      <td><b>3. Koi item chhoot to nahi gaya / do baar to nahi aa gaya?</b></td>
+      <td>Upar list me <b>"X ITEMS READY"</b> likha hai. Wo number apne menu card ke items
+          se milaiye. Kam ho to koi item chhoot gaya, zyada ho to koi item repeat ho gaya
+          ya heading galti se item ban gayi.</td>
+    </tr>
+  </table>
+
+  <div class="mock">
+    <div class="mh">12 items ready · double-check these</div>
+    <div class="row"><span>Cappuccino</span><span class="r">₹130.00 &nbsp; ✕</span></div>
+    <div class="row"><span>Cafe Latte</span><span class="r">₹140.00 &nbsp; ✕</span></div>
+    <div class="row"><span>Cold Brew</span><span class="r">₹15.00 &nbsp; ← ⚠ galat! ₹150 hona chahiye</span></div>
+    <div class="row" style="color:#8A7364">+ 9 more &nbsp;&nbsp;(is par click karke poori list dekhein)</div>
+  </div>
+
+  <h3>Galti mile to turant theek kar lijiye (upload se pehle)</h3>
+  <ol class="steps">
+    <li>Agar 3 se zyada items hain to <b>"+ X more"</b> par click karke <b>poori list</b>
+        khol lijiye. Sirf pehle 3 dekh kar aage mat badhiye.</li>
+    <li>Jis item me galti hai, <b>us row par click kijiye</b> — chhota
+        <b>Edit Item</b> box khulega jisme <b>Name</b> aur <b>Price</b> hoga.</li>
+    <li>Sahi naam/price type kijiye aur <span class="btn">Save</span> dabaiye.</li>
+    <li>Jo item galti se aa gaya hai (jaise "Our Specials" jaisi heading), uske
+        daayein <b>✕</b> par click karke hata dijiye.</li>
+    <li>Sab theek lagne par hi <span class="btn">Continue</span> dabaiye.</li>
+  </ol>
+
+  <div class="warn">
+    <span class="bt">⚠ Upload ke baad bhi ek baar Menu screen par nazar daaliye</span>
+    Items add hone ke baad app aapko <b>Menu</b> screen par le jaata hai aur message dikhata hai —
+    <i>"Added 12 items from the photo. (Scanned on-device — double-check these.)"</i>
+    <br>Yahan poori list ache se dikhti hai. Ek final nazar zaroor daal lijiye.
+  </div>
+
+  <h3>Agar photo se kuch bhi nahi aaya</h3>
+  <p>Aisa message aa sakta hai:
+     <i>"Couldn't find any menu items in that photo. Try a clearer, well-lit shot."</i>
+     Iska matlab hai app photo me se text padh hi nahi paaya. Ye kijiye:</p>
+  <ol class="steps">
+    <li>Achhi roshni me, seedha, saaf photo dobara kheenchiye (upar wali table dekhein).</li>
+    <li>Poore menu ki jagah <b>sirf ek section</b> ki photo lijiye.</li>
+    <li>Phir bhi na chale, to <b>CSV wala tarika</b> use kijiye — wo hamesha 100% sahi hota hai.</li>
+    <li>Items kam hain to seedhe haath se add kar lijiye — 10 item me sirf 5 minute lagenge.</li>
+  </ol>
+
+  <div class="danger">
+    <span class="bt">🔴 Golden Rule</span>
+    <b>Photo se aaya hua menu kabhi bhi bina check kiye customer ko bill mat kijiye.</b>
+    Pehla order lene se pehle 2 minute nikaal kar poora menu ek baar dekh lijiye.
+    Ye 2 minute aapko mahine bhar ki galtiyon se bacha lenge.
+  </div>
+</div>
+
+<!-- ================= PART 7 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">7</span>Menu Item Edit Karna — Pencil Button</h2>
+  <p class="lead">Galti baad me pakdi? Koi baat nahi. Menu kabhi bhi, kitni baar bhi badla ja sakta hai.
+     Ye sabse zyada kaam aane wala chapter hai — <b>photo upload ki galtiyan yahin se theek hoti hain</b>.</p>
+
+  <h3>Kisi bhi item ko edit kaise karein</h3>
+  <ol class="steps">
+    <li>Neeche <b>More</b> tab par jaaiye.</li>
+    <li><b>Operations</b> section me <b>Menu</b> par click karein.</li>
+    <li>Item dhoondhiye — upar <span class="field">Search menu items...</span> box me naam
+        type kar dijiye, turant mil jaayega.</li>
+    <li>Us item ke card par <b>pencil (✏) wala button</b> dikhega — <b>us par click kijiye</b>.</li>
+    <li>Edit form khul jaayega. Ab jo badalna ho badal dijiye:
+      <ul>
+        <li><b>Name</b> — galat naam theek kijiye</li>
+        <li><b>Price</b> — galat price theek kijiye <b>(sabse zaroori)</b></li>
+        <li><b>Category</b> — galat category me chala gaya ho to badal dijiye</li>
+        <li><b>Photo</b> — item ki tasveer lagaiye/badliye</li>
+        <li><b>Subtitle / Description</b> — guest ko dikhne wala text</li>
+        <li><b>Kitchen Station</b> — KOT kis station par jaayega</li>
+        <li><b>Product Type / Veg-NonVeg</b> — Veg, Non-Veg, Jain, Eggetarian</li>
+        <li><b>Variants</b> — Half/Full, Small/Large aur unke alag price</li>
+        <li><b>Options / Topping Groups</b> — Extra Cheese (+₹20), Spice Level, wagairah</li>
+      </ul>
+    </li>
+    <li><b>Save</b> dabaiye. Badlav turant lag jaata hai — POS par bhi aur guest ke QR menu par bhi.</li>
+  </ol>
+
+  <div class="tip">
+    <span class="bt">💡 Roz ka kaam — item khatam ho gaya to?</span>
+    Item delete mat kijiye! Use <b>Unavailable</b> mark kar dijiye. POS par wo
+    <span class="btn">UNAVAILABLE</span> dikhega aur order nahi liya jaa sakega.
+    Stock aane par wapas available kar dijiye — saara data (variants, recipe, price) bacha rahega.
+  </div>
+
+  <div class="note">
+    <span class="bt">📌 Ek saath bahut saare items theek karne hain?</span>
+    Agar photo upload me bahut zyada galtiyan aa gayi hain, to ek-ek karke theek karne se
+    behtar hai: purane items hata dijiye aur <b>CSV wala tarika</b> use kijiye. Excel me
+    ek baar sahi list bana lijiye — aage kabhi kaam aayegi.
+  </div>
+</div>
+
+<!-- ================= PART 8 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">8</span>Order Lena — POS Screen</h2>
+  <p class="lead">Ab asli kaam. Ye screen aapke staff sabse zyada use karenge —
+     neeche <b>POS</b> tab par milegi.</p>
+
+  <h3>Pehle order ka type chuniye</h3>
+  <p>Screen me upar chhoti-chhoti pill/button dikhengi. Order shuru karne se pehle sahi wala chuniye:</p>
+  <table>
+    <tr><th style="width:24%">Type</th><th>Kab use karein</th></tr>
+    <tr><td><b>Dine In</b></td><td>Customer table par baith kar kha raha hai. Table number choose karna padega.</td></tr>
+    <tr><td><b>Token</b></td><td>Counter par order + token number (QSR style). Order seedha kitchen chala jaata hai.</td></tr>
+    <tr><td><b>Takeaway</b></td><td>Parcel le jaana hai. Guest ka naam/number le sakte hain.</td></tr>
+    <tr><td><b>Delivery</b></td><td>Ghar bhejna hai. Naam, mobile aur address bharna hota hai.</td></tr>
+    <tr><td><b>Cash Sale</b></td><td>Sirf paisa lena hai — koi kitchen ticket nahi, kisi dashboard par nahi dikhega. (Jaise chips ka packet bech diya.)</td></tr>
+  </table>
+  <p style="color:#8A7364;font-size:10.5pt">Note: yahan wahi options dikhenge jo aapne
+     Onboarding Step 2 me chune the.</p>
+
+  <h3>Cart me items daaliye</h3>
+  <ol class="steps">
+    <li>Upar <span class="field">Search items…</span> box me naam type kijiye — ya
+        category tabs se browse kijiye.</li>
+    <li>Sirf veg ya sirf non-veg dikhana ho to <b>Veg</b> / <b>Non-Veg</b> filter dabaiye.</li>
+    <li>Item par <span class="btn">ADD</span> dabaiye — item cart me chala jaayega.</li>
+    <li>Agar item me variants/options hain (Half/Full, Extra Cheese) to ek box khulega —
+        chun kar Add kar dijiye.</li>
+    <li>Quantity badalni ho to cart me item ke <b>+ / −</b> use kijiye.</li>
+    <li>Kuch special kehna ho (jaise "kam meetha", "no onion") to note wale box me likh dijiye —
+        ya list me se ready-made note tap kar dijiye. <b>Ye note KOT par kitchen ko chhap kar jaata hai.</b></li>
+  </ol>
+
+  <h3>Ab teen raaste hain</h3>
+  <table>
+    <tr><th style="width:26%">Button</th><th>Kya hota hai</th><th style="width:26%">Kab dabayein</th></tr>
+    <tr>
+      <td><span class="btn">KOT &amp; Print</span></td>
+      <td>Order kitchen chala jaata hai aur kitchen ticket print ho jaata hai. Paisa baad me lenge.</td>
+      <td>Normal Dine In — pehle khana, baad me bill</td>
+    </tr>
+    <tr>
+      <td><span class="btn">Pay First</span></td>
+      <td>Pehle paisa lena — Settle Bill wala box khulta hai. Chahein to sath me KOT bhi print ho jaayega.</td>
+      <td>Counter/Takeaway — pehle paisa, phir khana</td>
+    </tr>
+    <tr>
+      <td><span class="btn">Save Draft</span></td>
+      <td>Cart save ho jaata hai, kitchen nahi jaata. Baad me <b>Saved Drafts</b> se wapas khol lijiye.</td>
+      <td>Customer soch raha hai / beech me koi aur aa gaya</td>
+    </tr>
+  </table>
+
+  <div class="tip">
+    <span class="bt">💡 "Who's serving this order?"</span>
+    Kabhi-kabhi ek box poochhta hai ki ye order kaunsa waiter le raha hai. Sahi naam chun
+    lijiye — isse Reports me pata chalta hai kis waiter ne kitni sale ki.
+  </div>
+
+  <div class="warn">
+    <span class="bt">⚠ "No tables set up yet"</span>
+    Dine In choose karne par agar ye message aaye, to aapne abhi tak tables nahi banaye.
+    <span class="path">More → Tables</span> par jaakar apne cafe ke tables add kar lijiye
+    (T1, T2, T3…). Sirf Owner/Manager hi table add kar sakte hain.
+  </div>
+</div>
+
+<!-- ================= PART 9 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">9</span>KOT — Kitchen Ko Order Bhejna</h2>
+
+  <h3>KOT hai kya?</h3>
+  <p><b>KOT = Kitchen Order Ticket.</b> Wo parchi jo kitchen ko batati hai ki kya banana hai,
+     kitna banana hai, aur kis table/token ke liye. Bill customer ke liye hota hai —
+     <b>KOT kitchen ke liye</b>. Dono alag cheezein hain.</p>
+
+  <h3>KOT bhejna</h3>
+  <ol class="steps">
+    <li>Cart taiyaar hone ke baad <span class="btn">KOT &amp; Print</span> dabaiye.</li>
+    <li>Dine In hai to table chuniye; Takeaway/Delivery hai to guest details bhar dijiye.</li>
+    <li>Order kitchen chala jaayega aur printer se ticket nikal aayega
+        (printer set na ho to bhi order KDS screen par pahunch jaata hai).</li>
+    <li>Usi order me baad me aur item add karna ho? Table/Token dashboard se order kholiye,
+        item add kijiye aur dobara KOT bhej dijiye — sirf <b>naye items</b> ka ticket jaayega.</li>
+  </ol>
+
+  <h3>KDS — Kitchen Ki Screen</h3>
+  <p>Kitchen me tablet/screen ho to <b>KDS</b> tab kholiye. Parchi ki zaroorat hi nahi rahegi.
+     Teen view milte hain:</p>
+  <table>
+    <tr><th style="width:24%">View</th><th>Kya dikhata hai</th></tr>
+    <tr><td><b>KOT View</b></td><td>Har order ki poori parchi — table/token ke saath. Normal kitchen ke liye best.</td></tr>
+    <tr><td><b>Items</b></td><td>Item-wise list — "3 Cappuccino, 2 Latte" — ek jaisa kaam ek saath nipat jaata hai.</td></tr>
+    <tr><td><b>Production</b></td><td>Bulk banane ke liye — quantity ke hisaab se, purana order pehle (FIFO).</td></tr>
+  </table>
+  <p>Upar <b>All Stations</b> se apni station chun lijiye (Coffee Bar, Kitchen, Tandoor…) —
+     tab sirf usi station ka kaam dikhega. Kaam poora hone par item/KOT ko ready mark kar dijiye.</p>
+
+  <div class="note">
+    <span class="bt">📌 Station kahan set hote hain</span>
+    Har menu item ka station uske edit form me hota hai (<b>Kitchen Station</b>).
+    Naye station banane ke liye <span class="path">More → Cafe Settings → Stations</span>.
+    Printer settings ke liye <span class="path">More → Cafe Settings → Printers</span>.
+  </div>
+</div>
+
+<!-- ================= PART 10 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">10</span>Token Orders (Counter / QSR Style)</h2>
+  <p class="lead">Jahan customer counter par order karta hai, token number leta hai, aur naam
+     pukarne par le jaata hai — wahan ye screen use hoti hai.</p>
+
+  <h3>Token order banana</h3>
+  <ol class="steps">
+    <li>POS par order type me <b>Token</b> chuniye.</li>
+    <li>Items add kijiye.</li>
+    <li>Order fire kar dijiye. App turant <b>token number</b> de dega —
+        jaise <i>"Token #14 — sent to the kitchen."</i></li>
+    <li>Token slip print ho jaayegi, customer ko de dijiye.</li>
+  </ol>
+
+  <div class="warn">
+    <span class="bt">⚠ Token order rukta nahi hai</span>
+    Token orders <b>turant</b> kitchen chale jaate hain — inhe "hold" nahi kiya ja sakta.
+    Agar customer abhi confirm nahi hai, to <b>Save Draft</b> use kijiye.
+  </div>
+
+  <h3>Token Dashboard</h3>
+  <p><span class="path">More → Token Orders</span> — yahan aaj ke saare token orders ek saath dikhte hain.</p>
+  <ul>
+    <li><b>Add Item</b> — chalu token order me kuch aur jodna ho.</li>
+    <li><b>Print KOT</b> — parchi dobara chhapni ho.</li>
+    <li><b>Cancel KOT</b> — galti se gaya order kitchen se wapas lena ho.</li>
+    <li><span class="btn">NEW</span> tag — jo items abhi tak kitchen nahi gaye.</li>
+    <li><b>+</b> (FAB) — seedha naya token order shuru karne ke liye.</li>
+  </ul>
+</div>
+
+<!-- ================= PART 11 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">11</span>Bill Banana &amp; Settle Karna</h2>
+  <p class="lead">Customer ne kha liya, ab paisa lena hai. Ise "Settle Bill" kehte hain.</p>
+
+  <h3>Bill kaise settle karein</h3>
+  <ol class="steps">
+    <li>Order kholiye — <span class="path">Tables</span> se, <span class="path">Orders</span> tab se,
+        ya <span class="path">Token Orders</span> se.</li>
+    <li><b>Settle Bill</b> dabaiye. Poora hisaab dikhega.</li>
+    <li>Customer ko pehle bill dikhana ho to <span class="btn">Print Bill</span> dabaiye
+        (ye "guest bill" hai — paisa lene se pehle wali copy).</li>
+    <li><b>Payment Method</b> chuniye: <b>Cash</b>, <b>UPI</b>, ya <b>Card</b>.</li>
+    <li>Settle dabaiye. Bas — order complete, paisa record ho gaya.</li>
+  </ol>
+
+  <h3>Bill me kya-kya dikhta hai</h3>
+  <div class="mock">
+    <div class="mh">Settle Bill</div>
+    <div class="row"><span>Subtotal</span><span class="r">₹520.00</span></div>
+    <div class="row"><span>Bill Discount</span><span class="r">− ₹20.00</span></div>
+    <div class="row"><span>Tax (GST)</span><span class="r">₹25.00</span></div>
+    <div class="row"><span>Service Charge</span><span class="r">₹26.00</span></div>
+    <div class="row"><span>Packing Charge</span><span class="r">₹10.00</span></div>
+    <div class="row"><span>Delivery Charge</span><span class="r">₹30.00</span></div>
+    <div class="row"><span>Tip</span><span class="r">₹0.00</span></div>
+    <div class="row"><span>Round Off</span><span class="r">− ₹1.00</span></div>
+    <div class="row" style="font-weight:700;border-top:1.5px solid #2B1810;margin-top:4px;padding-top:6px"><span>TOTAL</span><span>₹590.00</span></div>
+  </div>
+
+  <p>In sab par click karke aap <b>Discount</b>, <b>Service Charge</b>, <b>Packing</b>,
+     <b>Delivery</b>, <b>Tip</b> aur <b>Round Off</b> add ya hata sakte hain. Coupon,
+     Gift Card aur Loyalty Points bhi chalu order par lagte hain.</p>
+
+  <h3>Split payment — aadha cash, aadha UPI</h3>
+  <ol class="steps">
+    <li>Payment Method me <b>ek se zyada</b> method select kar lijiye — jaise UPI aur Cash dono.</li>
+    <li>Ek method me amount type kijiye (jaise UPI me 300).</li>
+    <li>Bacha hua amount doosre method me apne aap aa jaayega.</li>
+    <li>Cash zyada mila ho to neeche <b>"Return ₹___"</b> apne aap dikh jaayega —
+        chhutta ginne ki zaroorat nahi.</li>
+    <li>Sab match hone par Settle dabaiye.</li>
+  </ol>
+
+  <h3>Pay First (pehle paisa)</h3>
+  <p>POS par <span class="btn">Pay First</span> dabane par wahi Settle Bill wala box seedha
+     khul jaata hai — order banne se pehle hi. Isme ek extra tick-box hota hai:
+     <b>"Print KOT when settling"</b>. Ise tick rakhiye taaki paisa lete hi kitchen ko
+     order chala jaaye. (Cash Sale me ye nahi aata — wo kitchen jaata hi nahi.)</p>
+
+  <div class="tip">
+    <span class="bt">💡 Bill WhatsApp par bhejiye</span>
+    Settle hone ke baad receipt par <span class="btn">Send via WhatsApp</span> button aata hai.
+    Customer ka number daal kar bhej dijiye — paper bachega aur customer ka record
+    CRM me bhi aa jaayega.
+  </div>
+</div>
+
+<!-- ================= PART 12 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">12</span>Billing Page — Purane Bills Dekhna</h2>
+  <p class="lead">Aaj kitna business hua, kis bill me kya tha — sab yahan.</p>
+
+  <h3>Kaise kholein</h3>
+  <p><span class="path">More → Operations → Billing</span></p>
+
+  <h3>Kya milega</h3>
+  <ul>
+    <li><b>TRANSACTIONS</b> — upar summary: aaj kitne bill bane, kitna paisa aaya.</li>
+    <li><b>Recent Transactions</b> — saare bills ki list, sabse naya sabse upar.</li>
+    <li>Kisi bhi bill par click kijiye — poori receipt khul jaayegi:
+        items, Waiter ka naam, Subtotal, Bill Discount, Tax, Service/Packing/Delivery Charge,
+        Tip, Round Off, TOTAL aur <b>Paid Via</b> (kis method se paisa aaya).</li>
+    <li><span class="btn">Send via WhatsApp</span> — receipt customer ko dobara bhejni ho.</li>
+  </ul>
+
+  <div class="note">
+    <span class="bt">📌 "No transactions yet"</span>
+    Iska matlab sirf itna hai ki abhi tak koi order settle nahi hua. POS se ek order
+    bana kar settle kar dijiye — turant yahan dikhne lagega. Ye koi error nahi hai.
+  </div>
+
+  <div class="tip">
+    <span class="bt">💡 Aur gehri report chahiye?</span>
+    <span class="path">More → Reports</span> me Sales, Revenue, Profit, Tax/GST, Expense
+    aur Order Detail — sab alag-alag report milti hain. Din/hafta/mahine ke hisaab se
+    filter bhi kar sakte hain.
+  </div>
+</div>
+
+<!-- ================= PART 13 ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">13</span>Common Problems Aur Unka Solution</h2>
+  <p class="lead">Kuch atak jaaye to pehle yahan dekhiye — 90% cheezein yahin theek ho jaati hain.</p>
+
+  <h3>Login &amp; Account</h3>
+  <table>
+    <tr><th style="width:38%">Problem</th><th>Solution</th></tr>
+    <tr><td>Login nahi ho raha</td><td>Email ki spelling check kijiye. Password me Caps Lock to on nahi? Aankh wale icon se password dekh lijiye.</td></tr>
+    <tr><td>Password bhool gaye</td><td>Login page → <b>Forgot Access?</b> → email par code → naya password.</td></tr>
+    <tr><td>OTP email nahi aa raha</td><td>Spam/Promotions folder dekhein. 2 min ruk kar dobara bhejiye.</td></tr>
+    <tr><td>Staff login nahi kar pa raha</td><td>Unka password aapne banaya tha — <span class="path">More → Team Portal → Staff Access</span> se reset kar dijiye.</td></tr>
+  </table>
+
+  <h3>Menu &amp; Photo Upload</h3>
+  <table>
+    <tr><th style="width:38%">Problem</th><th>Solution</th></tr>
+    <tr><td>"Couldn't find any menu items in that photo"</td><td>Achhi roshni me saaf, seedhi photo dobara lijiye. Ek page ki jagah ek section ki photo lijiye. Phir bhi na ho to CSV use kijiye.</td></tr>
+    <tr><td>Photo se galat price aa gaya</td><td><span class="path">More → Menu</span> → item search → <b>pencil (✏)</b> → price theek → Save. (Part 7 dekhein.)</td></tr>
+    <tr><td>Kuch items chhoot gaye</td><td>Bache hue items haath se add kar lijiye (Part 5, Tarika 4), ya doosre section ki photo dobara upload kijiye.</td></tr>
+    <tr><td>Ek hi item do baar aa gaya</td><td>Menu screen par extra wale ko pencil se kholkar delete kar dijiye.</td></tr>
+    <tr><td>"Could not read that photo"</td><td>Internet check kijiye. File JPG/PNG honi chahiye. Bahut badi file ho to chhoti photo lijiye.</td></tr>
+    <tr><td>CSV import me rows skip ho gayin</td><td>Un rows me naam khaali hai ya price 0/text hai. Excel me theek karke dobara upload kijiye.</td></tr>
+  </table>
+
+  <h3>Order, KOT &amp; Bill</h3>
+  <table>
+    <tr><th style="width:38%">Problem</th><th>Solution</th></tr>
+    <tr><td>POS par item hi nahi dikh raha</td><td>Menu me item hai? Search box khaali kijiye, Veg/Non-Veg filter hata dijiye, aur dekhein wo <b>UNAVAILABLE</b> to nahi hai.</td></tr>
+    <tr><td>"No tables set up yet"</td><td><span class="path">More → Tables</span> se apne tables add kar lijiye.</td></tr>
+    <tr><td>KOT print nahi hua</td><td>Printer on aur connected hai? <span class="path">More → Cafe Settings → Printers</span> check kijiye. Order phir bhi KDS par pahunch chuka hai.</td></tr>
+    <tr><td>Kitchen ko order dikh nahi raha</td><td>KDS par sahi <b>station</b> chuna hai? "All Stations" karke dekhiye. Item ka station uske edit form me set hota hai.</td></tr>
+    <tr><td>Galti se KOT bhej diya</td><td>Token Dashboard/Tables se order kholkar <b>Cancel KOT</b> kar dijiye aur kitchen ko bata dijiye.</td></tr>
+    <tr><td>Settle button dab nahi raha</td><td>Payment amount total se match nahi kar raha. Amount theek kijiye ya method dobara chuniye.</td></tr>
+    <tr><td>Bill Billing page par nahi dikh raha</td><td>Wo order <b>Cash Sale</b> to nahi tha? Ya abhi settle hi nahi hua? Settle hone ke baad hi bill list me aata hai.</td></tr>
+  </table>
+
+  <h3>App / Screen</h3>
+  <table>
+    <tr><th style="width:38%">Problem</th><th>Solution</th></tr>
+    <tr><td>Screen atak gayi / khaali dikh rahi hai</td><td>Page refresh kijiye — <b>Ctrl + R</b> (mobile par neeche kheench kar).</td></tr>
+    <tr><td>App bahut slow hai</td><td>Internet check kijiye. Browser ke extra tabs band kar dijiye. Bahut purana browser ho to update kar lijiye.</td></tr>
+    <tr><td>Kuch button dikh hi nahi raha</td><td>Aapke role me wo permission nahi hogi. Owner/Manager se <span class="path">Staff Access</span> me permission dilwa lijiye.</td></tr>
+    <tr><td>Data purana dikh raha hai</td><td>Ek baar refresh kar lijiye. Do device par kaam ho raha ho to dono ko refresh kijiye.</td></tr>
+  </table>
+
+  <div class="tip">
+    <span class="bt">💡 Sabse pehla ilaaj</span>
+    Kuch bhi ajeeb lage to <b>ek baar page refresh</b> kijiye (Ctrl + R). Aadhi se zyada
+    dikkatein bas isi se theek ho jaati hain.
+  </div>
+</div>
+
+<!-- ================= PART 14 — SUPPORT ================= -->
+<div class="part">
+  <h2 class="part-title"><span class="num">14</span>Madad Chahiye? Hamari Team Se Baat Karein</h2>
+
+  <div class="danger">
+    <span class="bt">🤝 Agar aapko kahin bhi dikkat aa rahi hai</span>
+    <p style="margin-bottom:0">Kuch samajh na aaye, koi error baar-baar aaye, ya menu/photo
+    upload me phans jaayein — <b>pareshan bilkul mat hoiye aur khud experiment karke
+    data mat bigaadiye.</b> Seedha hamari team ko batayiye. Hum aapke saath hain aur
+    aapko step-by-step guide karenge — chahe wo naya cafe set up karna ho,
+    menu theek karwana ho, ya staff ko training deni ho.</p>
+  </div>
+
+  <div class="support">
+    <h3>Hamse Sampark Karein</h3>
+    <p><b>📞 Phone / WhatsApp:</b> <span class="ph">7689813155</span></p>
+    <p><b>✉ Email:</b> <span class="ph">prabandhos@gmail.com</span></p>
+    <p style="margin-bottom:0"><b>💬 App ke andar se:</b>
+       <span style="color:#FFB98A;font-weight:600">More → Help Center → Support Ticket</span>
+       — yahan se seedha ticket bana kar bhej sakte hain, hum reply karenge.</p>
+  </div>
+
+  <h3>Call/message karne se pehle ye 3 cheezein taiyaar rakhiye</h3>
+  <p>Isse aapki problem 5 minute me solve ho jaayegi:</p>
+  <ol class="steps">
+    <li><b>Aapke cafe ka naam</b> aur wo email jisse aap login karte hain.</li>
+    <li><b>Screenshot</b> — jo error aa raha hai uski photo/screenshot bhej dijiye.
+        (Windows par <b>Windows key + Shift + S</b>; mobile par normal screenshot.)</li>
+    <li><b>Aap kya kar rahe the</b> — jaise "menu ki photo upload kar raha tha aur ye error aaya".</li>
+  </ol>
+
+  <div class="tip">
+    <span class="bt">💡 Naya cafe shuru kar rahe hain?</span>
+    Poora setup hum aapke saath baith kar bhi kara sakte hain — cafe banane se lekar
+    menu chadhane aur staff ko training dene tak. Bas ek call/message kar dijiye,
+    hum set up karke denge.
+  </div>
+
+  <div class="note" style="margin-top:20px">
+    <span class="bt">📌 Aakhri baat — sabse zaroori 3 cheezein yaad rakhiye</span>
+    <ol style="margin-bottom:0">
+      <li>Photo se menu upload karne ke baad <b>har item ka naam aur price zaroor check kijiye</b>.</li>
+      <li>Koi bhi galti baad me <span class="path">More → Menu → pencil (✏) button</span> se
+          theek ho sakti hai — ghabraiye mat.</li>
+      <li>Kahin bhi atak jaayein to <b>hamari team ko turant contact kijiye</b>.</li>
+    </ol>
+  </div>
+
+  <p class="end">— PrabandhOS Team —<br>Aapka cafe, aapke haath me. ☕</p>
+</div>
+
+</body>
+</html>

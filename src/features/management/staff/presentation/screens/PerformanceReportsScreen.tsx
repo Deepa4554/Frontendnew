@@ -32,7 +32,7 @@ const periodBounds = (period: Period): { start?: string; end?: string } => {
   return { start: start.toISOString(), end };
 };
 
-export const PerformanceReportsScreen = () => {
+export const PerformanceReportsScreen = ({ navigation }: any) => {
   const { isDesktopWeb } = useResponsive();
   const COLORS = useThemeColors();
   const styles = makeStyles(COLORS, isDesktopWeb);
@@ -64,7 +64,9 @@ export const PerformanceReportsScreen = () => {
       <DesktopPageHeader icon="chart-line" title="Performance Reports" />
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <Icon name="chart-line" size={22} color={COLORS.heading} />
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Icon name="arrow-left" size={20} color={COLORS.heading} />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Performance Reports</Text>
           <View style={{ flex: 1 }} />
         </View>

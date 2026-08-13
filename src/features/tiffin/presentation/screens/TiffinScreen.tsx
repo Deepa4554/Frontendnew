@@ -355,7 +355,7 @@ const RosterTab: React.FC<TabProps> = ({ COLORS, styles }) => {
                   at the same height as the arrows/pills beside it instead of looming over them. */}
               <View style={styles.statChipsRow}>
                 <View style={[styles.statChip, styles.statChipAccent]}>
-                  <Icon name="food-variant" size={13} color="#FFFFFF" />
+                  <Icon name="food-variant" size={13} color={COLORS.muted} />
                   <Text style={styles.statChipTextLight} numberOfLines={1}>
                     <Text style={styles.statChipBoldLight}>{s?.totalPlates ?? 0}</Text> plates
                     {'  ·  '}{s?.totalDelivering ?? 0} {(s?.totalDelivering ?? 0) === 1 ? 'delivery' : 'deliveries'}
@@ -445,7 +445,7 @@ const SubscriberCard = React.memo(({ sub, styles, COLORS, onEdit }: {
             <Text style={styles.customerName} numberOfLines={1}>{sub.name}</Text>
             <Text style={styles.customerMeta} numberOfLines={1}>
               {sub.planName} · {MEAL_LABEL[sub.mealType]} · {money0(sub.rate)}/plate · ×{sub.defaultQty}
-              {!sub.isActive ? ' · paused' : ''}
+              {!sub.isActive ? ' · inactive' : ''}
             </Text>
           </View>
           <View style={[styles.typeTag, isOccasional ? styles.typeTagOcc : styles.typeTagDaily]}>
@@ -453,17 +453,17 @@ const SubscriberCard = React.memo(({ sub, styles, COLORS, onEdit }: {
               {isOccasional ? 'Occasional' : 'Daily'}
             </Text>
           </View>
+          {sub.paymentMode === 'Prepaid' && (
+            <View style={styles.walletBadge}>
+              <Icon name="wallet-outline" size={11} color={(sub.walletBalance ?? 0) < 0 ? COLORS.danger : COLORS.success} />
+              <Text style={[styles.walletBadgeText, { color: (sub.walletBalance ?? 0) < 0 ? COLORS.danger : COLORS.success }]}>
+                {money0(sub.walletBalance ?? 0)}
+              </Text>
+            </View>
+          )}
         </View>
         <Text style={styles.addressMeta} numberOfLines={1}>{sub.phone ?? 'No number'}</Text>
       </View>
-      {sub.paymentMode === 'Prepaid' && (
-        <View style={styles.walletBadge}>
-          <Icon name="wallet-outline" size={11} color={(sub.walletBalance ?? 0) < 0 ? COLORS.danger : COLORS.success} />
-          <Text style={[styles.walletBadgeText, { color: (sub.walletBalance ?? 0) < 0 ? COLORS.danger : COLORS.success }]}>
-            {money0(sub.walletBalance ?? 0)}
-          </Text>
-        </View>
-      )}
       <Icon name="chevron-right" size={18} color={COLORS.muted} />
     </TouchableOpacity>
   );
@@ -473,10 +473,10 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
   const dispatch = useDispatch();
   const [search, setSearch] = useState('');
   const [includeInactive, setIncludeInactive] = useState(false);
-  const { data, isLoading, isError, refetch } = useTiffinSubscribers({
-    search: search.trim() || undefined,
-    includeInactive,
-  });
+  // No `search` param here on purpose — keeping it out of the query means typing filters the
+  // already-fetched list client-side instead of re-querying (and re-showing a loading skeleton)
+  // on every keystroke.
+  const { data, isLoading, isError, refetch } = useTiffinSubscribers({ includeInactive });
   const createSub = useCreateTiffinSubscriber();
   const updateSub = useUpdateTiffinSubscriber();
 
@@ -516,20 +516,25 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
       dispatch(showToast({ message: 'Enter a valid per-plate rate.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
-    const qty = parseInt(form.defaultQty, 10);
+    const qtyInput = parseInt(form.defaultQty, 10);
+    // Daily's default is what goes out every day, so it can't be 0 — Occasional delivers nothing
+    // by default regardless, so 0 there just means "no standing qty until someone marks a day".
+    const qty = form.type === 'Occasional'
+      ? (isNaN(qtyInput) || qtyInput < 0 ? 0 : qtyInput)
+      : (qtyInput > 0 ? qtyInput : 1);
     try {
       if (form.id === null) {
         await createSub.mutateAsync({
           name: form.name.trim(), phone: form.phone.trim() || null, type: form.type,
           planName: form.planName.trim() || 'Tiffin', mealType: form.mealType, rate,
-          defaultQty: qty > 0 ? qty : 1, deliveryAddress: form.deliveryAddress.trim() || null,
+          defaultQty: qty, deliveryAddress: form.deliveryAddress.trim() || null,
           notes: form.notes.trim() || null, paymentMode: form.paymentMode,
         });
         dispatch(showToast({ message: `${form.name.trim()} added to the tiffin plan.`, icon: 'check-circle', tone: 'success' }));
       } else {
         await updateSub.mutateAsync({
           id: form.id, type: form.type, planName: form.planName.trim() || 'Tiffin',
-          mealType: form.mealType, rate, defaultQty: qty > 0 ? qty : 1,
+          mealType: form.mealType, rate, defaultQty: qty,
           deliveryAddress: form.deliveryAddress.trim() || null, isActive: form.isActive,
           notes: form.notes.trim() || null, paymentMode: form.paymentMode,
         });
@@ -542,6 +547,10 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
   };
 
   const subs = data ?? [];
+  const term = search.trim().toLowerCase();
+  const filtered = term
+    ? subs.filter((s) => s.name.toLowerCase().includes(term) || (s.phone ?? '').includes(term))
+    : subs;
   const saving = createSub.isPending || updateSub.isPending;
   // The form only carries editable plan fields — walletBalance is read fresh from the list/query
   // cache instead of being copied into SubForm, so it never goes stale while the sheet is open
@@ -572,7 +581,7 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
             onPress={() => setIncludeInactive((on) => !on)}
           >
             <Icon name={includeInactive ? 'checkbox-marked' : 'checkbox-blank-outline'} size={15} color={includeInactive ? '#FFFFFF' : COLORS.muted} />
-            <Text style={[styles.togglePillText, includeInactive && styles.togglePillTextActive]}>Paused</Text>
+            <Text style={[styles.togglePillText, includeInactive && styles.togglePillTextActive]}>Inactive</Text>
           </TouchableOpacity>
         </View>
 
@@ -586,12 +595,12 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
         ) : (
           <>
             {isLoading && <SkeletonList rows={6} />}
-            {!isLoading && subs.length === 0 && (
+            {!isLoading && filtered.length === 0 && (
               <Text style={styles.emptyText}>
                 {search.trim() ? 'No subscriber matches that name or number.' : 'No one on the tiffin plan yet. Add your first regular above.'}
               </Text>
             )}
-            {subs.map((sub) => (
+            {filtered.map((sub) => (
               <SubscriberCard key={sub.id} sub={sub} styles={styles} COLORS={COLORS} onEdit={openEdit} />
             ))}
           </>
@@ -608,11 +617,16 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
               <CloseButton onPress={() => setForm(null)} size={18} />
             </View>
 
-            <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
+            {/* Indicator left ON (unlike the list ScrollViews above) — this sheet's content can
+                run past its capped height, and with no visible scrollbar there was nothing to
+                tell the user the Active switch etc. below the fold even existed. */}
+            <ScrollView contentContainerStyle={{ gap: 8, paddingBottom: 4 }}>
               {form?.id === null ? (
                 <>
+                  <Text style={styles.fieldLabel}>NAME <Text style={styles.requiredStar}>*</Text></Text>
                   <TextInput style={[styles.formInput, webNoOutline]} placeholder="Customer name" placeholderTextColor={COLORS.placeholder} value={form?.name} onChangeText={(t) => set('name', t)} />
-                  <TextInput style={[styles.formInput, webNoOutline]} placeholder="10-digit mobile number (required)" placeholderTextColor={COLORS.placeholder} value={form?.phone} onChangeText={(t) => set('phone', t.replace(/[^0-9]/g, ''))} keyboardType="phone-pad" maxLength={10} />
+                  <Text style={styles.fieldLabel}>MOBILE NUMBER <Text style={styles.requiredStar}>*</Text></Text>
+                  <TextInput style={[styles.formInput, webNoOutline]} placeholder="10-digit mobile number" placeholderTextColor={COLORS.placeholder} value={form?.phone} onChangeText={(t) => set('phone', t.replace(/[^0-9]/g, ''))} keyboardType="phone-pad" maxLength={10} />
                 </>
               ) : (
                 <View style={styles.readonlyName}>
@@ -624,7 +638,19 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
               <Text style={styles.fieldLabel}>PLAN TYPE</Text>
               <View style={styles.methodRow}>
                 {TYPES.map((t) => (
-                  <TouchableOpacity key={t} style={[styles.methodPill, form?.type === t && styles.methodPillActive, webNoOutline]} onPress={() => set('type', t)}>
+                  <TouchableOpacity
+                    key={t}
+                    style={[styles.methodPill, form?.type === t && styles.methodPillActive, webNoOutline]}
+                    onPress={() => setForm((f) => {
+                      if (!f) return f;
+                      // Occasional delivers nothing by default (see roster logic), so a "Qty/day"
+                      // of 1 is misleading there — flip the untouched default with the type, but
+                      // leave it alone if the user already typed their own number.
+                      const untouched = f.defaultQty === (f.type === 'Occasional' ? '0' : '1');
+                      const defaultQty = untouched ? (t === 'Occasional' ? '0' : '1') : f.defaultQty;
+                      return { ...f, type: t, defaultQty };
+                    })}
+                  >
                     <Text style={[styles.methodPillText, form?.type === t && styles.methodPillTextActive]}>{t}</Text>
                   </TouchableOpacity>
                 ))}
@@ -673,6 +699,7 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
 
               <TextInput style={[styles.formInput, webNoOutline]} placeholder="Plan name (e.g. Veg Thali)" placeholderTextColor={COLORS.placeholder} value={form?.planName} onChangeText={(t) => set('planName', t)} />
 
+              <Text style={styles.fieldLabel}>RATE PER PLATE (₹) <Text style={styles.requiredStar}>*</Text></Text>
               <View style={styles.settleAmountRow}>
                 <TextInput style={[styles.formInput, { flex: 2 }, webNoOutline]} placeholder="Rate per plate (₹)" placeholderTextColor={COLORS.placeholder} value={form?.rate} onChangeText={(t) => set('rate', t.replace(/[^0-9.]/g, ''))} keyboardType="decimal-pad" />
                 <TextInput style={[styles.formInput, { flex: 1 }, webNoOutline]} placeholder="Qty/day" placeholderTextColor={COLORS.placeholder} value={form?.defaultQty} onChangeText={(t) => set('defaultQty', t.replace(/[^0-9]/g, ''))} keyboardType="number-pad" />
@@ -685,7 +712,7 @@ const SubscribersTab: React.FC<TabProps> = ({ COLORS, styles, isDesktopWeb }) =>
                 <View style={styles.activeRow}>
                   <View style={{ flex: 1 }}>
                     <Text style={styles.activeLabel}>Active</Text>
-                    <Text style={styles.helperText}>Paused subscribers drop off the daily roster.</Text>
+                    <Text style={styles.helperText}>Inactive subscribers drop off the daily roster.</Text>
                   </View>
                   <Switch value={form?.isActive} onValueChange={(v) => set('isActive', v)} trackColor={{ false: COLORS.inputBorder, true: COLORS.accent }} thumbColor="#FFFFFF" />
                 </View>
@@ -906,7 +933,7 @@ const BillingTab: React.FC<{ COLORS: ReturnType<typeof useThemeColors>; styles: 
           {isError && !data ? null : (
             <View style={styles.statChipsRow}>
               <View style={[styles.statChip, styles.statChipAccent]}>
-                <Icon name="cash-multiple" size={13} color="#FFFFFF" />
+                <Icon name="cash-multiple" size={13} color={COLORS.muted} />
                 <Text style={styles.statChipTextLight} numberOfLines={1}>
                   <Text style={styles.statChipBoldLight}>{money0(summary?.outstanding ?? 0)}</Text> due
                   {'  ·  '}collected {money0(summary?.collected ?? 0)}
@@ -1226,10 +1253,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     flexDirection: 'row', alignItems: 'center', gap: 6,
     borderRadius: 8, paddingHorizontal: isDesktopWeb ? 12 : 10, height: isDesktopWeb ? 32 : 32,
   },
-  statChipAccent: { backgroundColor: COLORS.button },
+  // Both chips share the exact same look now — a dark chip next to a light one read as
+  // "active vs inactive" even though both are just plain info readouts, not a status pair.
+  statChipAccent: { backgroundColor: COLORS.cardAlt, borderWidth: 1, borderColor: COLORS.inputBorder },
   statChipLight: { backgroundColor: COLORS.cardAlt, borderWidth: 1, borderColor: COLORS.inputBorder },
-  statChipTextLight: { fontSize: isDesktopWeb ? 12.5 : 11.5, color: 'rgba(255,255,255,0.85)', fontWeight: '600' },
-  statChipBoldLight: { fontWeight: '800', color: '#FFFFFF' },
+  statChipTextLight: { fontSize: isDesktopWeb ? 12.5 : 11.5, color: COLORS.heading, fontWeight: '600' },
+  statChipBoldLight: { fontWeight: '800', color: COLORS.heading },
   statChipTextDark: { fontSize: isDesktopWeb ? 12.5 : 11.5, color: COLORS.heading, fontWeight: '600' },
   statChipBoldDark: { fontWeight: '800', color: COLORS.heading },
 
@@ -1239,8 +1268,10 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   summaryValue: { fontSize: isDesktopWeb ? 20 : 15, fontWeight: 'bold', color: COLORS.heading },
   summarySmall: { fontSize: 11, color: COLORS.muted, marginTop: 3 },
   breakdownText: { fontSize: 12.5, fontWeight: '700', color: COLORS.heading, marginTop: 2 },
-  vegDot: { color: COLORS.success },
-  nonVegDot: { color: COLORS.danger },
+  // Softer, evenly-weighted tones (not COLORS.success/danger) — these dots are just a veg/non-veg
+  // category marker, not a status signal, so neither should read as "good" vs "error".
+  vegDot: { color: '#7FAE8C' },
+  nonVegDot: { color: '#C98A83' },
   accentCard: { backgroundColor: COLORS.button },
   accentLabel: { fontSize: 10, fontWeight: '700', color: 'rgba(255,255,255,0.75)', letterSpacing: 0.5, marginBottom: 4.5 },
   accentValue: { fontSize: isDesktopWeb ? 22 : 18, fontWeight: 'bold', color: '#FFFFFF' },
@@ -1327,6 +1358,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   readonlyNameSub: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
 
   fieldLabel: { fontSize: 10, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5, marginTop: 2 },
+  requiredStar: { color: COLORS.danger },
   helperText: { fontSize: 11, color: COLORS.muted, lineHeight: 15 },
 
   balanceStrip: { flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: COLORS.cardAlt, borderRadius: 8, padding: 11 },

@@ -75,6 +75,9 @@ export const PayrollRunsScreen = ({ navigation }: any) => {
       <DesktopPageHeader icon="cash-multiple" title="Payroll" />
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Icon name="arrow-left" size={20} color={COLORS.heading} />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Payroll</Text>
         </View>
       )}

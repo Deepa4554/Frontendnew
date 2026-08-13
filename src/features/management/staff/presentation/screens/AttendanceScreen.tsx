@@ -59,7 +59,7 @@ const MARK_LABEL: Record<MarkAttendanceStatus, string> = {
  * rather than a plain filter. */
 const isOnRoster = (s: ApiStaff) => s.status !== 'TERMINATED';
 
-export const AttendanceScreen = () => {
+export const AttendanceScreen = ({ navigation }: any) => {
   const { isDesktopWeb } = useResponsive();
   const COLORS = useThemeColors();
   const styles = makeStyles(COLORS, isDesktopWeb);
@@ -244,6 +244,9 @@ export const AttendanceScreen = () => {
       <DesktopPageHeader icon="clock-check-outline" title="Attendance" />
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+          <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+            <Icon name="arrow-left" size={20} color={COLORS.heading} />
+          </TouchableOpacity>
           <Text style={styles.headerTitle}>Attendance</Text>
         </View>
       )}
