@@ -243,11 +243,15 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     borderColor: COLORS.divider,
     borderRadius: 999,
     backgroundColor: COLORS.cardAlt,
-    paddingHorizontal: isDesktopWeb ? 6 : 7,
+    paddingHorizontal: isDesktopWeb ? 6 : 5,
     paddingVertical: isDesktopWeb ? 1.5 : 3,
-    marginRight: isDesktopWeb ? 4 : 6,
+    marginRight: isDesktopWeb ? 4 : 5,
+    // The row's other controls (qty stepper, status pill, remove) are all fixed-width, so every
+    // pixel this chip takes comes straight out of the item name beside it — which is the one
+    // thing on the row that has to stay readable. Kept as tight as a legible rate allows.
+    flexShrink: 0,
   },
-  rateChipText: { fontSize: isDesktopWeb ? 10.5 : 11, fontWeight: '800', color: COLORS.accent },
+  rateChipText: { fontSize: isDesktopWeb ? 10.5 : 10, fontWeight: '800', color: COLORS.accent },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 20 : 18 },
   modalSheet: { width: '100%', maxWidth: 420, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 17 : 16.5 },
   modalTitle: { fontSize: isDesktopWeb ? 18 : 14, fontWeight: '800', color: COLORS.heading },

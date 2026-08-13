@@ -416,7 +416,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                                 pending={qtyEditor.pendingItemId === item.id}
                                 onChange={(next) => qtyEditor.request(item, next)}
                               />
-                              <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                              <Text style={styles.itemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                               <TouchableOpacity
                                 disabled={!servable || serveItem.isPending}
                                 onPress={() => handleTapServe(item)}
@@ -447,7 +447,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                         pending={qtyEditor.pendingItemId === item.id}
                         onChange={(next) => qtyEditor.request(item, next)}
                       />
-                      <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.itemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                       <View style={styles.unfiredTag}><Text style={styles.unfiredTagText}>NEW</Text></View>
                       <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
                       {!order.paid && (
@@ -591,7 +591,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isTablet: boolean
   unfiredTag: { alignSelf: 'flex-start', backgroundColor: COLORS.warningBg, borderRadius: 999, paddingHorizontal: 8, paddingVertical: 2, marginLeft: 'auto' },
   unfiredTagText: { fontSize: 10, fontWeight: '800', color: COLORS.warning },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
-  itemName: { flex: 1, minWidth: 0, fontSize: 13, color: COLORS.heading },
+  itemName: { flex: 1, minWidth: 0, fontSize: 12, color: COLORS.heading },
   itemStatusPill: { paddingHorizontal: 10, paddingVertical: 5, borderRadius: 999 },
   itemStatusPillText: { fontSize: 11, fontWeight: '800' },
   markAllBtn: {

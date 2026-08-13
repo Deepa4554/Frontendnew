@@ -955,7 +955,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                         pending={qtyEditor.pendingItemId === item.id}
                         onChange={(next) => qtyEditor.request(item, next)}
                       />
-                      <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.occItemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                       <View style={styles.occUnfiredTag}><Text style={styles.occUnfiredTagText}>NEW</Text></View>
                       <Text style={styles.occItemPrice}>₹{(item.price * item.qty).toFixed(2)}</Text>
                       <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled} />
@@ -1008,7 +1008,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                                 pending={qtyEditor.pendingItemId === item.id}
                                 onChange={(next) => qtyEditor.request(item, next)}
                               />
-                              <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
+                              <Text style={styles.occItemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                               {/* The status label IS the tap target — one tap jumps straight to
                                   Served, no confirmation, no stage-by-stage stepping. */}
                               <TouchableOpacity
@@ -1051,7 +1051,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                             pending={qtyEditor.pendingItemId === item.id}
                             onChange={(next) => qtyEditor.request(item, next)}
                           />
-                          <Text style={styles.occItemName} numberOfLines={1}>{item.name}</Text>
+                          <Text style={styles.occItemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                           {/* Same slot the fired rows put their status pill in, so the columns
                               line up. Not a TouchableOpacity: there's no kitchen stage to
                               advance until this round is actually fired. */}
@@ -1776,7 +1776,10 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     borderBottomWidth: 1,
     borderBottomColor: COLORS.divider,
   },
-  occItemName: { fontSize: fs(isDesktopWeb ? 12.5 : 14), color: COLORS.heading, flex: 1, minWidth: 0 },
+  // 14 on mobile was the largest name font of the three order screens, on the most crowded row
+  // of the three (this one carries a line total the others don't). Still routed through fs(), so
+  // a cafe running a larger font scale gets its names scaled up from here as before.
+  occItemName: { fontSize: fs(isDesktopWeb ? 12.5 : 12), color: COLORS.heading, flex: 1, minWidth: 0 },
   occItemStatusDot: { width: isDesktopWeb ? 7 : 8, height: isDesktopWeb ? 7 : 8, borderRadius: 4 },
   occItemStatusPill: { borderRadius: 6, paddingHorizontal: isDesktopWeb ? 4.5 : 5.25, paddingVertical: isDesktopWeb ? 1 : 1.5 },
   occItemStatusPillText: { fontSize: fs(isDesktopWeb ? 8.5 : 9.5), fontWeight: '800', letterSpacing: 0.3 },

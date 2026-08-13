@@ -393,7 +393,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                                 pending={qtyEditor.pendingItemId === item.id}
                                 onChange={(next) => qtyEditor.request(item, next)}
                               />
-                              <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                              <Text style={styles.itemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                               {/* The status label IS the tap target — one tap jumps straight to
                                   Served, no confirmation, no stage-by-stage stepping. */}
                               <TouchableOpacity
@@ -426,7 +426,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                         pending={qtyEditor.pendingItemId === item.id}
                         onChange={(next) => qtyEditor.request(item, next)}
                       />
-                      <Text style={styles.itemName} numberOfLines={1}>{item.name}</Text>
+                      <Text style={styles.itemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                       <View style={styles.unfiredTag}><Text style={styles.unfiredTagText}>NEW</Text></View>
                       <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
                       {!order.paid && (
@@ -556,7 +556,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   unfiredTag: { alignSelf: 'flex-start', backgroundColor: COLORS.warningBg, borderRadius: 999, paddingHorizontal: isDesktopWeb ? 5 : 6, paddingVertical: isDesktopWeb ? 1 : 1.5, marginLeft: 'auto' },
   unfiredTagText: { fontSize: isDesktopWeb ? 8.5 : 10, fontWeight: '800', color: COLORS.warning },
   itemRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 8 : 7.5, paddingVertical: isDesktopWeb ? 1.5 : 6, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
-  itemName: { flex: 1, minWidth: 0, fontSize: isDesktopWeb ? 12 : 12, color: COLORS.heading },
+  itemName: { flex: 1, minWidth: 0, fontSize: isDesktopWeb ? 12 : 11.5, color: COLORS.heading },
   itemStatusPill: { paddingHorizontal: isDesktopWeb ? 4.5 : 7.5, paddingVertical: isDesktopWeb ? 1 : 3.75, borderRadius: 999 },
   itemStatusPillText: { fontSize: isDesktopWeb ? 8.5 : 11, fontWeight: '800' },
   modalActions: { flexDirection: 'row', gap: 6, marginTop: 6 },

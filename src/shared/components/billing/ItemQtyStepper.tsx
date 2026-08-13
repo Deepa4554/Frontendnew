@@ -98,9 +98,9 @@ export const ItemQtyStepper: React.FC<Props> = ({ qty, onChange, disabled, pendi
         style={styles.stepBtn}
         onPress={() => step(-1)}
         disabled={localQty <= min}
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
       >
-        <Icon name="minus" size={14} color={localQty <= min ? COLORS.divider : COLORS.heading} />
+        <Icon name="minus" size={12} color={localQty <= min ? COLORS.divider : COLORS.heading} />
       </TouchableOpacity>
 
       {editing ? (
@@ -131,9 +131,9 @@ export const ItemQtyStepper: React.FC<Props> = ({ qty, onChange, disabled, pendi
       <TouchableOpacity
         style={styles.stepBtn}
         onPress={() => step(1)}
-        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        hitSlop={{ top: 8, bottom: 8, left: 10, right: 10 }}
       >
-        <Icon name="plus" size={14} color={COLORS.heading} />
+        <Icon name="plus" size={12} color={COLORS.heading} />
       </TouchableOpacity>
     </View>
   );
@@ -152,17 +152,26 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     backgroundColor: COLORS.cardAlt,
   },
   stepperPending: { opacity: 0.5 },
-  stepBtn: { width: isDesktopWeb ? 26 : 24, height: isDesktopWeb ? 26 : 24, alignItems: 'center', justifyContent: 'center' },
-  qtyValueBox: { minWidth: 26, height: isDesktopWeb ? 26 : 24, alignItems: 'center', justifyContent: 'center' },
-  qtyValueText: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '800', color: COLORS.heading },
+  // Deliberately smaller than a comfortable 44pt touch target: this control shares a cramped
+  // row with the item name, and every pixel it gives up goes to the one thing on the row that
+  // has to stay readable. The hitSlop on each button below is what keeps them tappable — the
+  // reachable area is unchanged, only the drawn box shrank.
+  // Narrower than tall on purpose: width is the scarce dimension on these rows (it's what the
+  // item name competes for), height costs nothing — so the buttons lose width and keep their
+  // height, which is also what keeps them comfortable to hit with a thumb.
+  stepBtn: { width: isDesktopWeb ? 18 : 17, height: isDesktopWeb ? 22 : 21, alignItems: 'center', justifyContent: 'center' },
+  qtyValueBox: { minWidth: 18, height: isDesktopWeb ? 22 : 21, alignItems: 'center', justifyContent: 'center' },
+  qtyValueText: { fontSize: isDesktopWeb ? 12 : 11, fontWeight: '800', color: COLORS.heading },
   // fontSize 16 on mobile: anything smaller makes iOS Safari zoom the whole page in on focus.
+  // It's the one number here that did NOT shrink with the rest of the control — a slightly
+  // oversized field while typing costs far less than the whole page zooming.
   qtyInput: {
-    fontSize: isDesktopWeb ? 13 : 16,
+    fontSize: isDesktopWeb ? 12 : 16,
     fontWeight: '800',
     color: COLORS.heading,
     textAlign: 'center',
     paddingVertical: 0,
     paddingHorizontal: 2,
-    minWidth: 34,
+    minWidth: 26,
   },
 });
