@@ -35,10 +35,10 @@ export const CategoryFilterModal: React.FC<CategoryFilterModalProps> = ({
   const styles = makeStyles(COLORS, isDesktopWeb);
 
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
+    <Modal visible={visible} transparent animationType={isDesktopWeb ? 'fade' : 'slide'} onRequestClose={onClose}>
       <TouchableOpacity style={styles.backdrop} activeOpacity={1} onPress={onClose}>
         <TouchableOpacity activeOpacity={1} style={styles.sheet} onPress={(e) => e.stopPropagation()}>
-          <View style={styles.dragHandle} />
+          {!isDesktopWeb && <View style={styles.dragHandle} />}
           <View style={styles.header}>
             <Text style={styles.title}>{title}</Text>
             <CloseButton onPress={onClose} style={styles.closeBtn} size={18} color={COLORS.heading} />
@@ -119,12 +119,17 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   backdrop: {
     flex: 1,
     backgroundColor: 'rgba(20,12,6,0.45)',
-    justifyContent: 'flex-end',
+    justifyContent: isDesktopWeb ? 'center' : 'flex-end',
+    alignItems: isDesktopWeb ? 'center' : undefined,
+    padding: isDesktopWeb ? 20 : 0,
   },
   sheet: {
     backgroundColor: COLORS.card,
+    borderRadius: isDesktopWeb ? 16 : undefined,
     borderTopLeftRadius: 12,
     borderTopRightRadius: 12,
+    width: isDesktopWeb ? '100%' : undefined,
+    maxWidth: isDesktopWeb ? 420 : undefined,
     maxHeight: '72%',
     paddingBottom: isDesktopWeb ? 16 : 12,
     overflow: 'hidden',

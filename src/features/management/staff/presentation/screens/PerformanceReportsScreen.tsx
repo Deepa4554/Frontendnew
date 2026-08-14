@@ -59,33 +59,51 @@ export const PerformanceReportsScreen = ({ navigation }: any) => {
     { label: 'Avg Attendance', value: avgAttendance != null ? `${avgAttendance.toFixed(0)}%` : '—' },
   ];
 
+  const periodTabs = (
+    <View style={styles.periodRow}>
+      {PERIODS.map((p) => {
+        const active = p === period;
+        return (
+          <TouchableOpacity
+            key={p}
+            style={[styles.periodPill, active && styles.periodPillActive]}
+            onPress={() => setPeriod(p)}
+          >
+            <Text style={[styles.periodText, active && styles.periodTextActive]}>{p}</Text>
+          </TouchableOpacity>
+        );
+      })}
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      <DesktopPageHeader icon="chart-line" title="Performance Reports" />
+      <DesktopPageHeader icon="chart-line" title="Performance Reports" center={periodTabs} />
       {!isDesktopWeb && (
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Icon name="arrow-left" size={20} color={COLORS.heading} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Performance Reports</Text>
-          <View style={{ flex: 1 }} />
-        </View>
-      )}
-
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodRow}>
-        {PERIODS.map((p) => {
-          const active = p === period;
-          return (
-            <TouchableOpacity
-              key={p}
-              style={[styles.periodPill, active && styles.periodPillActive]}
-              onPress={() => setPeriod(p)}
-            >
-              <Text style={[styles.periodText, active && styles.periodTextActive]}>{p}</Text>
+        <>
+          <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+            <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Icon name="arrow-left" size={20} color={COLORS.heading} />
             </TouchableOpacity>
-          );
-        })}
-      </ScrollView>
+            <Text style={styles.headerTitle}>Performance Reports</Text>
+            <View style={{ flex: 1 }} />
+          </View>
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.periodRow}>
+            {PERIODS.map((p) => {
+              const active = p === period;
+              return (
+                <TouchableOpacity
+                  key={p}
+                  style={[styles.periodPill, active && styles.periodPillActive]}
+                  onPress={() => setPeriod(p)}
+                >
+                  <Text style={[styles.periodText, active && styles.periodTextActive]}>{p}</Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </>
+      )}
 
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
         {isError && rows.length === 0 ? (
@@ -161,20 +179,20 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 12 : 12, paddingTop: isDesktopWeb ? 9 : 9, paddingBottom: isDesktopWeb ? 9 : 9, gap: isDesktopWeb ? 6 : 6 },
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.heading },
   avatar: { width: 32, height: 32, borderRadius: 16 },
-  periodRow: { paddingHorizontal: isDesktopWeb ? 12 : 12, gap: isDesktopWeb ? 7 : 7.5, marginBottom: isDesktopWeb ? 9 : 9 },
-  periodPill: { paddingHorizontal: isDesktopWeb ? 12 : 12, paddingVertical: isDesktopWeb ? 7 : 6.75, borderRadius: 18, backgroundColor: COLORS.cardAlt },
+  periodRow: { flexDirection: 'row', paddingHorizontal: isDesktopWeb ? 0 : 12, gap: isDesktopWeb ? 5 : 7.5, marginBottom: isDesktopWeb ? 0 : 9 },
+  periodPill: { paddingHorizontal: isDesktopWeb ? 10 : 12, paddingVertical: isDesktopWeb ? 5 : 6.75, borderRadius: 18, backgroundColor: COLORS.cardAlt },
   periodPillActive: { backgroundColor: COLORS.button },
-  periodText: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '600', color: COLORS.muted },
+  periodText: { fontSize: isDesktopWeb ? 12 : 12, fontWeight: '600', color: COLORS.muted },
   periodTextActive: { color: '#FFFFFF' },
-  emptyCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: isDesktopWeb ? 42 : 45, gap: isDesktopWeb ? 6 : 6, paddingHorizontal: isDesktopWeb ? 22 : 22.5 },
+  emptyCard: { alignItems: 'center', justifyContent: 'center', paddingVertical: isDesktopWeb ? 30 : 45, gap: isDesktopWeb ? 6 : 6, paddingHorizontal: isDesktopWeb ? 22 : 22.5 },
   emptyText: { fontSize: isDesktopWeb ? 14 : 12, fontWeight: '600', color: COLORS.heading, textAlign: 'center' },
   emptyHint: { fontSize: 12, color: COLORS.muted, textAlign: 'center' },
-  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: isDesktopWeb ? 12 : 12, gap: isDesktopWeb ? 9 : 9, marginBottom: isDesktopWeb ? 12 : 12 },
-  kpiCard: { width: '47.5%', flexGrow: 1, backgroundColor: COLORS.cardAlt, borderRadius: 8, padding: isDesktopWeb ? 12 : 12 },
-  kpiLabel: { fontSize: isDesktopWeb ? 13 : 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 4 : 4.5 },
-  kpiValue: { fontSize: isDesktopWeb ? 22 : 12, fontWeight: 'bold', color: COLORS.heading },
-  card: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 12 : 12, borderRadius: 8, padding: isDesktopWeb ? 13 : 13.5, marginBottom: isDesktopWeb ? 12 : 12 },
-  cardTitle: { fontSize: isDesktopWeb ? 19 : 14, fontWeight: 'bold', color: COLORS.heading },
+  kpiGrid: { flexDirection: 'row', flexWrap: 'wrap', paddingHorizontal: isDesktopWeb ? 12 : 12, gap: isDesktopWeb ? 8 : 9, marginBottom: isDesktopWeb ? 8 : 12, marginTop: isDesktopWeb ? 8 : 0 },
+  kpiCard: { width: '47.5%', flexGrow: 1, backgroundColor: COLORS.cardAlt, borderRadius: 8, padding: isDesktopWeb ? 10 : 12 },
+  kpiLabel: { fontSize: isDesktopWeb ? 12 : 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 3 : 4.5 },
+  kpiValue: { fontSize: isDesktopWeb ? 18 : 12, fontWeight: 'bold', color: COLORS.heading },
+  card: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 12 : 12, borderRadius: 8, padding: isDesktopWeb ? 12 : 13.5, marginBottom: isDesktopWeb ? 12 : 12 },
+  cardTitle: { fontSize: isDesktopWeb ? 15 : 14, fontWeight: 'bold', color: COLORS.heading },
   leaderHead: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktopWeb ? 10 : 10.5 },
   topPerformers: { fontSize: 11, fontWeight: '700', color: COLORS.accent, letterSpacing: 0.5 },
   leaderRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 9 : 9, paddingVertical: isDesktopWeb ? 6 : 6 },

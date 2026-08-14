@@ -239,27 +239,32 @@ export const AttendanceScreen = ({ navigation }: any) => {
     }
   };
 
+  const dateNav = (
+    <View style={styles.dateRow}>
+      <TouchableOpacity style={styles.dateArrow} onPress={() => shiftDate(-1)}>
+        <Icon name="chevron-left" size={isDesktopWeb ? 16 : 22} color={COLORS.heading} />
+      </TouchableOpacity>
+      <Text style={styles.dateText}>{date}</Text>
+      <TouchableOpacity style={styles.dateArrow} onPress={() => shiftDate(1)}>
+        <Icon name="chevron-right" size={isDesktopWeb ? 16 : 22} color={COLORS.heading} />
+      </TouchableOpacity>
+    </View>
+  );
+
   return (
     <View style={styles.container}>
-      <DesktopPageHeader icon="clock-check-outline" title="Attendance" />
+      <DesktopPageHeader icon="clock-check-outline" title="Attendance" center={dateNav} />
       {!isDesktopWeb && (
-        <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
-          <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
-            <Icon name="arrow-left" size={20} color={COLORS.heading} />
-          </TouchableOpacity>
-          <Text style={styles.headerTitle}>Attendance</Text>
-        </View>
+        <>
+          <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+            <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+              <Icon name="arrow-left" size={20} color={COLORS.heading} />
+            </TouchableOpacity>
+            <Text style={styles.headerTitle}>Attendance</Text>
+          </View>
+          {dateNav}
+        </>
       )}
-
-      <View style={styles.dateRow}>
-        <TouchableOpacity style={styles.dateArrow} onPress={() => shiftDate(-1)}>
-          <Icon name="chevron-left" size={22} color={COLORS.heading} />
-        </TouchableOpacity>
-        <Text style={styles.dateText}>{date}</Text>
-        <TouchableOpacity style={styles.dateArrow} onPress={() => shiftDate(1)}>
-          <Icon name="chevron-right" size={22} color={COLORS.heading} />
-        </TouchableOpacity>
-      </View>
 
       {!isLoading && !staffLoading && rows.length > 0 && (
         <View style={styles.summaryRow}>
@@ -517,12 +522,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   container: { flex: 1, backgroundColor: COLORS.background },
   header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 7 : 7.5, paddingHorizontal: isDesktopWeb ? 12 : 12, paddingBottom: isDesktopWeb ? 6 : 6 },
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.heading },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 12 : 12, paddingVertical: isDesktopWeb ? 6 : 6 },
-  dateArrow: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
-  dateText: { fontSize: isDesktopWeb ? 15 : 12, fontWeight: '700', color: COLORS.heading },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 6 : 12, paddingVertical: isDesktopWeb ? 0 : 6 },
+  dateArrow: { width: isDesktopWeb ? 22 : 32, height: isDesktopWeb ? 22 : 32, alignItems: 'center', justifyContent: 'center' },
+  dateText: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '700', color: COLORS.heading },
   summaryRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
-    gap: 8, paddingHorizontal: 16, paddingBottom: 8,
+    gap: 8, paddingHorizontal: 16, paddingTop: isDesktopWeb ? 10 : 0, paddingBottom: 8,
   },
   summaryText: { fontSize: 11, fontWeight: '600', color: COLORS.muted, flexShrink: 1 },
   markAllBtn: {

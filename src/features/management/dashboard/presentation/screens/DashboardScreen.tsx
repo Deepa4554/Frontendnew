@@ -140,13 +140,33 @@ const WeeklySparkline = ({ weekly, max, color, styles }: {
   );
 };
 
+/**
+ * Real desktop-width browsers get the whole dashboard laid out to exactly fill
+ * the viewport (stat row + two flex rows below it share the remaining height,
+ * see `desktopBody`/`midRow`/`bottomRow` in makeStyles) — no ScrollView, so
+ * nothing scrolls. Mobile and tablet-width browsers keep the original
+ * scrolling stack, since their content doesn't fit above the fold.
+ */
+const Body = ({ isDesktop, style, children }: { isDesktop: boolean; style?: any; children: React.ReactNode }) =>
+  isDesktop ? (
+    <View style={style}>{children}</View>
+  ) : (
+    <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+      {children}
+    </ScrollView>
+  );
+
 export const DashboardScreen = () => {
   const dispatch = useDispatch();
   const navigation = useNavigation<any>();
   const COLORS = useThemeColors();
   const { isDesktopWeb, isTablet } = useResponsive();
+  // A tablet-width browser still gets the isDesktopWeb "Warm Precision" visual
+  // layer but keeps the scrolling mobile-style stack — only a real desktop-width
+  // browser gets the fixed, non-scrolling, fill-the-viewport grid below.
+  const isDesktop = isDesktopWeb && !isTablet;
   const insets = useSafeAreaInsets();
-  const styles = makeStyles(COLORS, isDesktopWeb);
+  const styles = makeStyles(COLORS, isDesktopWeb, isDesktop);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
   const [preset, setPreset] = useState<RangePreset>('today');
   const [customFrom, setCustomFrom] = useState('');
@@ -269,17 +289,35 @@ export const DashboardScreen = () => {
         icon="view-dashboard"
         title="Dashboard"
         right={(
-          <DateRangeFilter
-            preset={preset}
-            customFrom={customFrom}
-            customTo={customTo}
-            onChange={(p, f, t) => { setPreset(p); setCustomFrom(f); setCustomTo(t); }}
-          />
+          <>
+            <DateRangeFilter
+              preset={preset}
+              customFrom={customFrom}
+              customTo={customTo}
+              onChange={(p, f, t) => { setPreset(p); setCustomFrom(f); setCustomTo(t); }}
+            />
+            <TouchableOpacity style={styles.headerExportBtn} onPress={handleExportPdf} disabled={exporting !== null}>
+              {exporting === 'pdf' ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Icon name="file-pdf-box" size={16} color="#FFFFFF" />
+              )}
+              <Text style={styles.headerExportText}>PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={[styles.headerExportBtn, styles.headerExportExcelBtn]} onPress={handleExportExcel} disabled={exporting !== null}>
+              {exporting === 'excel' ? (
+                <ActivityIndicator size="small" color={COLORS.heading} />
+              ) : (
+                <Icon name="grid" size={16} color={COLORS.heading} />
+              )}
+              <Text style={[styles.headerExportText, styles.headerExportExcelText]}>Excel</Text>
+            </TouchableOpacity>
+          </>
         )}
       />
 
-      <ScreenContainer maxWidth={isDesktopWeb ? 1280 : 900} style={{ flex: 1, width: '100%', alignSelf: 'center' }}>
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
+      <ScreenContainer maxWidth={isDesktopWeb ? 1280 : 900} style={{ flex: 1, width: '100%', alignSelf: 'center', minHeight: 0 }}>
+      <Body isDesktop={isDesktop} style={isDesktop ? styles.desktopBody : undefined}>
         {!isDesktopWeb && (
           <View style={{ paddingHorizontal: 6, marginBottom: 6 }}>
             <DateRangeFilter
@@ -296,7 +334,7 @@ export const DashboardScreen = () => {
             and the label text collapsed to a sliver narrow enough to wrap character-by-character
             ("REVE"/"NUE"). Tablet falls back to the same swipeable single-card carousel mobile
             already uses instead of forcing three cards into a too-narrow row. */}
-        {isDesktopWeb && !isTablet ? (
+        {isDesktop ? (
           <View style={styles.statsRow}>
             <View style={[styles.revenueCard, styles.statCardFlex]}>
               <View style={styles.revenueCardHeaderRow}>
@@ -374,56 +412,63 @@ export const DashboardScreen = () => {
           />
         )}
 
-        <View style={styles.chartCard}>
-          <View style={styles.chartHeaderRow}>
-            <Text style={styles.chartTitle}>DAILY PERFORMANCE</Text>
-            <Text style={styles.periodPillText}>{rangeLabel}</Text>
+        <View style={styles.midRow}>
+          <View style={[styles.chartCard, styles.midRowCard]}>
+            <View style={styles.chartHeaderRow}>
+              <Text style={styles.chartTitle}>DAILY PERFORMANCE</Text>
+              <Text style={styles.periodPillText}>{rangeLabel}</Text>
+            </View>
+
+            <ScrollView
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              style={styles.barChartScroll}
+              contentContainerStyle={styles.barChartRow}
+            >
+              {data.weekly.map((d, i) => {
+                const isPeak = d.day === peakDay.day && d.revenue > 0;
+                const pct = maxWeekly > 0 ? (d.revenue / maxWeekly) * 100 : 0;
+                return (
+                  <View key={`${d.day}-${i}`} style={styles.barColumn}>
+                    {isPeak && <Text style={styles.peakLabel}>Peak</Text>}
+                    <View style={styles.barTrack}>
+                      <View
+                        style={[
+                          styles.barFill,
+                          { height: `${pct}%`, minHeight: 4, backgroundColor: isPeak ? COLORS.heading : COLORS.inputBorder },
+                        ]}
+                      />
+                    </View>
+                    <Text style={styles.barDayLabel}>{d.day}</Text>
+                  </View>
+                );
+              })}
+            </ScrollView>
           </View>
 
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.barChartRow}>
-            {data.weekly.map((d, i) => {
-              const isPeak = d.day === peakDay.day && d.revenue > 0;
-              const pct = maxWeekly > 0 ? (d.revenue / maxWeekly) * 100 : 0;
-              return (
-                <View key={`${d.day}-${i}`} style={styles.barColumn}>
-                  {isPeak && <Text style={styles.peakLabel}>Peak</Text>}
-                  <View style={styles.barTrack}>
+          <View style={[styles.chartCard, styles.midRowCard]}>
+            <View style={styles.sectionTitleRow}>
+              <View style={styles.sectionIconCircle}>
+                <Icon name="clock-time-four-outline" size={16} color={COLORS.accent} />
+              </View>
+              <Text style={styles.chartTitle}>PEAK HOURS DENSITY</Text>
+            </View>
+            <View style={styles.peakHoursList}>
+              {data.peakHours.map((h) => (
+                <View key={h.time} style={styles.peakRow}>
+                  <Text style={styles.peakTime}>{h.time}</Text>
+                  <View style={styles.peakTrack}>
                     <View
                       style={[
-                        styles.barFill,
-                        { height: `${pct}%`, minHeight: 4, backgroundColor: isPeak ? COLORS.heading : COLORS.inputBorder },
+                        styles.peakFill,
+                        { width: `${h.pctOfPeak}%`, backgroundColor: h.pctOfPeak >= 90 ? COLORS.heading : COLORS.aiCardBg },
                       ]}
                     />
                   </View>
-                  <Text style={styles.barDayLabel}>{d.day}</Text>
+                  <Text style={styles.peakPct}>{h.orderCount}</Text>
                 </View>
-              );
-            })}
-          </ScrollView>
-        </View>
-
-        <View style={styles.chartCard}>
-          <View style={styles.sectionTitleRow}>
-            <View style={styles.sectionIconCircle}>
-              <Icon name="clock-time-four-outline" size={16} color={COLORS.accent} />
+              ))}
             </View>
-            <Text style={styles.chartTitle}>PEAK HOURS DENSITY</Text>
-          </View>
-          <View style={{ marginTop: 7, gap: 7 }}>
-            {data.peakHours.map((h) => (
-              <View key={h.time} style={styles.peakRow}>
-                <Text style={styles.peakTime}>{h.time}</Text>
-                <View style={styles.peakTrack}>
-                  <View
-                    style={[
-                      styles.peakFill,
-                      { width: `${h.pctOfPeak}%`, backgroundColor: h.pctOfPeak >= 90 ? COLORS.heading : COLORS.aiCardBg },
-                    ]}
-                  />
-                </View>
-                <Text style={styles.peakPct}>{h.orderCount}</Text>
-              </View>
-            ))}
           </View>
         </View>
 
@@ -494,34 +539,46 @@ export const DashboardScreen = () => {
           </View>
         </View>
 
-        <View style={styles.exportRow}>
-          <TouchableOpacity style={styles.exportPdfBtn} onPress={handleExportPdf} disabled={exporting !== null}>
-            {exporting === 'pdf' ? (
-              <ActivityIndicator size="small" color="#FFFFFF" />
-            ) : (
-              <Icon name="file-pdf-box" size={16} color="#FFFFFF" />
-            )}
-            <Text style={styles.exportPdfText}>Export PDF</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.exportExcelBtn} onPress={handleExportExcel} disabled={exporting !== null}>
-            {exporting === 'excel' ? (
-              <ActivityIndicator size="small" color={COLORS.heading} />
-            ) : (
-              <Icon name="grid" size={16} color={COLORS.heading} />
-            )}
-            <Text style={styles.exportExcelText}>Export Excel</Text>
-          </TouchableOpacity>
-        </View>
-      </ScrollView>
+        {/* Desktop/tablet-web get the export buttons in the header instead (next to the
+            date range filter) — only plain mobile still needs them down here. */}
+        {!isDesktopWeb && (
+          <View style={styles.exportRow}>
+            <TouchableOpacity style={styles.exportPdfBtn} onPress={handleExportPdf} disabled={exporting !== null}>
+              {exporting === 'pdf' ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Icon name="file-pdf-box" size={16} color="#FFFFFF" />
+              )}
+              <Text style={styles.exportPdfText}>Export PDF</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.exportExcelBtn} onPress={handleExportExcel} disabled={exporting !== null}>
+              {exporting === 'excel' ? (
+                <ActivityIndicator size="small" color={COLORS.heading} />
+              ) : (
+                <Icon name="grid" size={16} color={COLORS.heading} />
+              )}
+              <Text style={styles.exportExcelText}>Export Excel</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+      </Body>
       </ScreenContainer>
     </View>
   );
 };
 
-const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
+const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean, isDesktop: boolean) => StyleSheet.create({
   container: {
     flex: 1,
     backgroundColor: COLORS.background,
+  },
+  // Real desktop-width browsers only: the whole dashboard fills the viewport
+  // height exactly (no ScrollView — see the `Body` component), so it splits
+  // that height between a fixed-size stat row and two flexible rows below.
+  desktopBody: {
+    flex: 1,
+    minHeight: 0,
+    paddingBottom: 10,
   },
   modalOverlay: {
     flex: 1,
@@ -856,6 +913,24 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     padding: isDesktopWeb ? 9 : 6.75,
     marginBottom: isDesktopWeb ? 8 : 6,
   },
+  // Wraps Daily Performance + Peak Hours Density side by side. On desktop it's
+  // one of two flex:1 rows sharing the leftover viewport height with bottomRow
+  // below; elsewhere it just stacks the two cards like before.
+  midRow: {
+    flexDirection: isDesktop ? 'row' : 'column',
+    alignItems: 'stretch',
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
+    gap: isDesktopWeb ? 8 : 6,
+    marginBottom: isDesktopWeb ? 8 : 6,
+    flex: isDesktop ? 1 : undefined,
+    minHeight: isDesktop ? 0 : undefined,
+  },
+  midRowCard: {
+    flex: isDesktop ? 1 : undefined,
+    marginHorizontal: 0,
+    marginBottom: isDesktop ? 0 : (isDesktopWeb ? 8 : 6),
+    minHeight: isDesktop ? 0 : undefined,
+  },
   chartHeaderRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -925,10 +1000,17 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     fontWeight: '600',
     color: COLORS.heading,
   },
+  // On desktop this is the ScrollView's own `style` (not contentContainerStyle),
+  // so it can flex:1 to claim the chart card's full remaining height.
+  barChartScroll: {
+    flex: isDesktop ? 1 : undefined,
+    minHeight: isDesktop ? 0 : undefined,
+  },
   barChartRow: {
     flexDirection: 'row',
-    alignItems: 'flex-end',
-    height: 140,
+    alignItems: isDesktop ? 'stretch' : 'flex-end',
+    height: isDesktop ? undefined : 140,
+    flexGrow: isDesktop ? 1 : undefined,
     marginTop: isDesktopWeb ? 10 : 7.5,
     gap: isDesktopWeb ? 8 : 6,
     paddingHorizontal: isDesktopWeb ? 1 : 0.75,
@@ -947,7 +1029,8 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   barTrack: {
     width: 20,
-    height: 90,
+    height: isDesktop ? undefined : 90,
+    flex: isDesktop ? 1 : undefined,
     justifyContent: 'flex-end',
   },
   barFill: {
@@ -961,6 +1044,11 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     color: COLORS.muted,
     marginTop: isDesktopWeb ? 4 : 3,
   },
+  // On desktop the 5 rows spread out with space-between to fill the card's
+  // full flex:1 height instead of clumping at a fixed 7px gap.
+  peakHoursList: isDesktop
+    ? { marginTop: 7, flex: 1, minHeight: 0, justifyContent: 'space-between' }
+    : { marginTop: 7, gap: 7 },
   peakRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1007,11 +1095,14 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     paddingHorizontal: isDesktopWeb ? 8 : 6,
     gap: isDesktopWeb ? 8 : 6,
     marginBottom: isDesktopWeb ? 8 : 6,
+    flex: isDesktop ? 1 : undefined,
+    minHeight: isDesktop ? 0 : undefined,
   },
   bottomRowCard: {
     flex: isDesktopWeb ? 1 : undefined,
     marginHorizontal: 0,
     marginBottom: isDesktopWeb ? 0 : 6,
+    minHeight: isDesktop ? 0 : undefined,
   },
   cardLinkRow: {
     flexDirection: 'row',
@@ -1021,7 +1112,10 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     backgroundColor: COLORS.background,
     borderRadius: 6,
     paddingVertical: isDesktopWeb ? 7 : 5.25,
-    marginTop: isDesktopWeb ? 9 : 7,
+    // Pinned to the bottom edge of its flex:1 card on desktop so the button
+    // sits flush at the card's foot regardless of how much extra height the
+    // no-scroll layout hands the card, instead of hugging the short list above it.
+    marginTop: isDesktop ? 'auto' : (isDesktopWeb ? 9 : 7),
   },
   cardLinkText: {
     fontSize: 12,
@@ -1032,7 +1126,10 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     flexDirection: 'row',
     flexWrap: 'wrap',
     justifyContent: 'space-between',
+    alignContent: isDesktop ? 'center' : 'flex-start',
     marginTop: isDesktopWeb ? 9 : 7,
+    flex: isDesktop ? 1 : undefined,
+    minHeight: isDesktop ? 0 : undefined,
   },
   quickActionBtn: {
     width: '48%',
@@ -1051,7 +1148,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   exportRow: {
     flexDirection: 'row',
-    paddingHorizontal: 6,
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
     gap: 4.5,
   },
   exportPdfBtn: {
@@ -1084,6 +1181,32 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   exportExcelText: {
     fontSize: 12,
     fontWeight: '700',
+    color: COLORS.heading,
+  },
+  // Compact twins of exportPdfBtn/exportExcelBtn for the desktop/tablet-web header's
+  // right slot, where there's no room for the full-width buttons below. Keeps the
+  // icon + label + colored-pill look of the originals so they still read as buttons
+  // instead of fading into the header as bare icons.
+  headerExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 36,
+    borderRadius: 8,
+    backgroundColor: COLORS.button,
+  },
+  headerExportExcelBtn: {
+    backgroundColor: COLORS.cardAlt,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+  },
+  headerExportText: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#FFFFFF',
+  },
+  headerExportExcelText: {
     color: COLORS.heading,
   },
 });

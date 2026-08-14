@@ -12,6 +12,7 @@ import { TeamOverviewScreen } from '../screens/TeamOverviewScreen';
 import { StaffProfileScreen } from '../screens/StaffProfileScreen';
 import { TeamScheduleScreen } from '../screens/TeamScheduleScreen';
 import { EditShiftScreen } from '../screens/EditShiftScreen';
+import { ShiftTypesScreen } from '../screens/ShiftTypesScreen';
 import { PerformanceReportsScreen } from '../screens/PerformanceReportsScreen';
 import { PayrollRunsScreen } from '../screens/PayrollRunsScreen';
 import { PayrollRunDetailScreen } from '../screens/PayrollRunDetailScreen';
@@ -44,6 +45,7 @@ const ScheduleStack = () => (
   <Stack.Navigator screenOptions={{ headerShown: false }}>
     <Stack.Screen name="TeamSchedule" component={TeamScheduleScreen} />
     <Stack.Screen name="EditShift" component={EditShiftScreen} />
+    <Stack.Screen name="ShiftTypes" component={ShiftTypesScreen} />
   </Stack.Navigator>
 );
 

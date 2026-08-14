@@ -93,6 +93,7 @@ export const linking: LinkingOptions<any> = {
                 screens: {
                   TeamSchedule: 'team/schedule',
                   EditShift: 'team/schedule/edit',
+                  ShiftTypes: 'team/schedule/shift-types',
                 },
               },
               Attendance: 'team/attendance',

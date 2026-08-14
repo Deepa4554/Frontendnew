@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { staffApi, CreateStaffRequest, UpdateStaffRequest, StaffStatus, CreateLeaveRequest, CreateMyLeaveRequest, LeaveRequestStatus, UpdateStaffScreenAccessRequest, UpdateStaffKitchenAssignmentRequest, LoginRole } from '../staffApi';
+import { staffApi, CreateStaffRequest, UpdateStaffRequest, StaffStatus, CreateLeaveRequest, CreateMyLeaveRequest, LeaveRequestStatus, UpdateStaffScreenAccessRequest, UpdateStaffKitchenAssignmentRequest, LoginRole, CreateShiftTypeRequest } from '../staffApi';
 import { queryKeys } from './queryKeys';
 
 export const useStaff = (branchId?: number) => useQuery({ queryKey: queryKeys.staff(branchId), queryFn: () => staffApi.list(branchId) });
@@ -66,8 +66,9 @@ export const useAllShifts = (date: string) =>
 export const useCreateShift = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ staffId, startsAt, endsAt, notes }: { staffId: number; startsAt: string; endsAt: string; notes?: string }) =>
-      staffApi.createShift(staffId, startsAt, endsAt, notes),
+    mutationFn: ({ staffId, startsAt, endsAt, notes, repeatUntil, repeatWeekly }: {
+      staffId: number; startsAt: string; endsAt: string; notes?: string; repeatUntil?: string; repeatWeekly?: boolean;
+    }) => staffApi.createShift(staffId, startsAt, endsAt, notes, repeatUntil, repeatWeekly),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
   });
 };
@@ -76,6 +77,35 @@ export const useDeleteShift = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (shiftId: number) => staffApi.removeShift(shiftId),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+  });
+};
+
+export const useShiftTypes = () => useQuery({ queryKey: queryKeys.shiftTypes, queryFn: staffApi.listShiftTypes });
+
+export const useCreateShiftType = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (req: CreateShiftTypeRequest) => staffApi.createShiftType(req),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shiftTypes }),
+  });
+};
+
+export const useDeleteShiftType = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => staffApi.deleteShiftType(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.shiftTypes }),
+  });
+};
+
+/** One-tap toggle for assigning a staff member to a ShiftType on a given date —
+ * powers the Team Schedule day view's per-staff chips. */
+export const useQuickAssignShift = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ staffId, date, shiftTypeId }: { staffId: number; date: string; shiftTypeId: number }) =>
+      staffApi.quickAssignShift(staffId, date, shiftTypeId),
     onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
   });
 };

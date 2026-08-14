@@ -108,11 +108,30 @@ export interface Shift {
   startsAt: string;
   endsAt: string;
   notes: string | null;
+  /** Set when this shift came from a ShiftType one-tap quick-assign rather than the
+   * custom Add Shift form. */
+  shiftTypeId: number | null;
 }
 
 export interface ShiftWithStaff extends Shift {
   staffName: string;
   staffRole: string;
+}
+
+/** A reusable, cafe-wide named shift pattern (e.g. "Morning" 09:00-13:00) — created
+ * once, then used to one-tap assign staff to a day instead of filling the Add Shift
+ * form each time. startTime/endTime are "HH:mm:ss" (a bare time-of-day, no date). */
+export interface ShiftType {
+  id: number;
+  name: string;
+  startTime: string;
+  endTime: string;
+}
+
+export interface CreateShiftTypeRequest {
+  name: string;
+  startTime: string;
+  endTime: string;
 }
 
 /** Computed live from real Orders (Order.CreatedByUserId) and Shifts — not a manually
@@ -228,9 +247,20 @@ export const staffApi = {
     apiClient.post<ApiStaff>(`/staff/${id}/grant-access`, req).then((r) => r.data),
   listShifts: (staffId: number) => apiClient.get<Shift[]>(`/staff/${staffId}/shifts`).then((r) => r.data),
   listAllShifts: (date: string) => apiClient.get<ShiftWithStaff[]>('/staff/shifts', { params: { date } }).then((r) => r.data),
-  createShift: (staffId: number, startsAt: string, endsAt: string, notes?: string) =>
-    apiClient.post<Shift>('/staff/shifts', { staffId, startsAt, endsAt, notes }).then((r) => r.data),
+  /** repeatUntil (an ISO date, inclusive) creates one shift per day — or weekly, same
+   * weekday, when repeatWeekly — from startsAt through that date, all with the same
+   * time-of-day/duration. Omit it for a single shift, as before. */
+  createShift: (staffId: number, startsAt: string, endsAt: string, notes?: string, repeatUntil?: string, repeatWeekly?: boolean) =>
+    apiClient.post<Shift[]>('/staff/shifts', { staffId, startsAt, endsAt, notes, repeatUntil, repeatWeekly }).then((r) => r.data),
   removeShift: (shiftId: number) => apiClient.delete<void>(`/staff/shifts/${shiftId}`).then((r) => r.data),
+  listShiftTypes: () => apiClient.get<ShiftType[]>('/staff/shift-types').then((r) => r.data),
+  createShiftType: (req: CreateShiftTypeRequest) => apiClient.post<ShiftType>('/staff/shift-types', req).then((r) => r.data),
+  deleteShiftType: (id: number) => apiClient.delete<void>(`/staff/shift-types/${id}`).then((r) => r.data),
+  /** Toggle: if this staff member already has a shift from this ShiftType on this
+   * date, the backend removes it and returns null; otherwise it creates one and
+   * returns it. */
+  quickAssignShift: (staffId: number, date: string, shiftTypeId: number) =>
+    apiClient.post<Shift | null>('/staff/shifts/quick-assign', { staffId, date, shiftTypeId }).then((r) => r.data),
   performance: (staffId: number) => apiClient.get<StaffPerformanceSummary>(`/staff/${staffId}/performance`).then((r) => r.data),
   /** Omit both bounds for all-time. periodStart/periodEnd are UTC ISO instants. */
   listAllPerformance: (periodStart?: string, periodEnd?: string) =>

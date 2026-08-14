@@ -53,6 +53,7 @@ export const queryKeys = {
   staff: (branchId?: number) => ['staff', branchId] as const,
   shifts: (staffId: number) => ['staff', staffId, 'shifts'] as const,
   allShifts: (date: string) => ['staff', 'shifts', date] as const,
+  shiftTypes: ['staff', 'shift-types'] as const,
   performance: (staffId: number) => ['staff', staffId, 'performance'] as const,
   allPerformance: ['staff', 'performance'] as const,
   attendance: (params?: unknown) => ['attendance', params] as const,

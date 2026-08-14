@@ -60,6 +60,7 @@ export const SCREEN_SEARCH_INDEX: ScreenSearchEntry[] = [
   // Team Portal
   { id: 'teamportal', label: 'Team Portal', keywords: ['team overview', 'staff'], icon: 'account-group', permissionRouteKey: 'TeamPortal', navigate: navNestedTab('TeamPortal', 'Overview', 'TeamOverview') },
   { id: 'teamschedule', label: 'Team Schedule', keywords: ['shifts'], icon: 'calendar-outline', permissionRouteKey: 'TeamPortal', navigate: navNestedTab('TeamPortal', 'Schedule', 'TeamSchedule') },
+  { id: 'shifttypes', label: 'Shift Types', keywords: ['morning', 'evening', 'shift patterns'], icon: 'clock-outline', permissionRouteKey: 'TeamPortal', navigate: navNestedTab('TeamPortal', 'Schedule', 'ShiftTypes') },
   { id: 'attendance', label: 'Attendance', icon: 'clock-check-outline', permissionRouteKey: 'Attendance', navigate: navTab('TeamPortal', 'Attendance') },
   { id: 'leave', label: 'Leave Requests', icon: 'calendar-remove-outline', permissionRouteKey: 'Leave', navigate: navTab('TeamPortal', 'Leave') },
   { id: 'performance', label: 'Performance Reports', icon: 'chart-line', permissionRouteKey: 'TeamPortal', navigate: navTab('TeamPortal', 'Performance') },

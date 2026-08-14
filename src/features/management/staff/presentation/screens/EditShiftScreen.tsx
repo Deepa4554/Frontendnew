@@ -47,6 +47,9 @@ export const EditShiftScreen = ({ navigation, route }: any) => {
   const [startTime, setStartTime] = useState('09:00');
   const [endTime, setEndTime] = useState('17:00');
   const [notes, setNotes] = useState('');
+  const [repeat, setRepeat] = useState<'none' | 'daily' | 'weekly'>('none');
+  const [repeatUntil, setRepeatUntil] = useState(defaultDate);
+  const [repeatUntilPickerVisible, setRepeatUntilPickerVisible] = useState(false);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
 
@@ -67,6 +70,10 @@ export const EditShiftScreen = ({ navigation, route }: any) => {
       dispatch(showToast({ message: 'Shift end must be after start.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
+    if (repeat !== 'none' && repeatUntil < date) {
+      dispatch(showToast({ message: 'Repeat until date must be on or after the shift date.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
     setSaving(true);
     try {
       await createShift.mutateAsync({
@@ -74,6 +81,8 @@ export const EditShiftScreen = ({ navigation, route }: any) => {
         startsAt: startsAt.toISOString(),
         endsAt: endsAt.toISOString(),
         notes: notes.trim() || undefined,
+        repeatUntil: repeat !== 'none' ? new Date(`${repeatUntil}T00:00:00`).toISOString() : undefined,
+        repeatWeekly: repeat === 'weekly',
       });
       navigation?.goBack?.();
     } catch (err) {
@@ -244,6 +253,35 @@ export const EditShiftScreen = ({ navigation, route }: any) => {
 
         <View style={styles.card}>
           <View style={styles.cardLabelRow}>
+            <Icon name="repeat" size={16} color={COLORS.accent} />
+            <Text style={styles.cardLabel}>REPEAT</Text>
+          </View>
+          <View style={styles.repeatRow}>
+            {([['none', 'Does not repeat'], ['daily', 'Daily'], ['weekly', 'Weekly']] as const).map(([opt, label]) => (
+              <TouchableOpacity
+                key={opt}
+                style={[styles.repeatChip, repeat === opt && styles.repeatChipActive]}
+                onPress={() => setRepeat(opt)}
+              >
+                <Text style={[styles.repeatChipText, repeat === opt && styles.repeatChipTextActive]}>{label}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+          {repeat !== 'none' && (
+            <>
+              <Text style={[styles.fieldLabel, { marginTop: isDesktopWeb ? 10.5 : 14 }]}>Until</Text>
+              <TouchableOpacity style={[styles.textInput, { justifyContent: 'center' }]} onPress={() => setRepeatUntilPickerVisible(true)}>
+                <Text style={{ fontSize: 16, color: COLORS.heading, paddingTop: 4 }}>{repeatUntil}</Text>
+              </TouchableOpacity>
+              <Text style={styles.repeatHint}>
+                Creates a separate shift every {repeat === 'weekly' ? 'week' : 'day'} from {date} through {repeatUntil}.
+              </Text>
+            </>
+          )}
+        </View>
+
+        <View style={styles.card}>
+          <View style={styles.cardLabelRow}>
             <Icon name="text" size={16} color={COLORS.accent} />
             <Text style={styles.cardLabel}>NOTES (OPTIONAL)</Text>
           </View>
@@ -314,7 +352,19 @@ export const EditShiftScreen = ({ navigation, route }: any) => {
         onCancel={() => setDatePickerVisible(false)}
         onConfirm={(selectedDate) => {
           setDate(selectedDate);
+          setRepeatUntil((prev) => (prev < selectedDate ? selectedDate : prev));
           setDatePickerVisible(false);
+        }}
+      />
+
+      <DatePickerModal
+        visible={repeatUntilPickerVisible}
+        value={repeatUntil}
+        title="Repeat Until"
+        onCancel={() => setRepeatUntilPickerVisible(false)}
+        onConfirm={(selectedDate) => {
+          setRepeatUntil(selectedDate);
+          setRepeatUntilPickerVisible(false);
         }}
       />
     </View>
@@ -367,6 +417,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   durationRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 7 : 10 },
   durationCol: { flex: 1 },
   notesText: { fontSize: 15, color: COLORS.heading, lineHeight: 22 },
+  repeatRow: { flexDirection: 'row', flexWrap: 'wrap', gap: isDesktopWeb ? 7 : 8 },
+  repeatChip: { backgroundColor: COLORS.inputTint, borderRadius: 20, paddingVertical: isDesktopWeb ? 7 : 9, paddingHorizontal: isDesktopWeb ? 13 : 16 },
+  repeatChipActive: { backgroundColor: COLORS.button },
+  repeatChipText: { fontSize: 13, fontWeight: '600', color: COLORS.heading },
+  repeatChipTextActive: { color: '#FFFFFF' },
+  repeatHint: { fontSize: 12, color: COLORS.muted, marginTop: isDesktopWeb ? 6 : 8, lineHeight: 17 },
   dangerCard: {
     borderWidth: 1.5,
     borderStyle: 'dashed',

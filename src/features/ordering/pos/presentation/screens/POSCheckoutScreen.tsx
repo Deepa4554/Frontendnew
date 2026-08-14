@@ -3237,24 +3237,17 @@ export const POSCheckoutScreen = () => {
           )}
 
           {/* ---------- Expanded cart sheet — full order details, guest info, split/discount, Fire to Kitchen ---------- */}
-          <Modal
-            visible={cartExpanded}
-            transparent
-            animationType="slide"
-            onRequestClose={() => setCartExpanded(false)}
-          >
-            <View style={styles.cartSheetOverlay}>
-              <TouchableOpacity
-                style={styles.cartSheetBackdrop}
-                activeOpacity={1}
-                onPress={() => setCartExpanded(false)}
-              />
+          <Modal visible={cartExpanded} transparent animationType={isDesktopWeb ? 'fade' : 'slide'} onRequestClose={() => setCartExpanded(false)}>
+            <View style={isDesktopWeb ? styles.optionsOverlayDesktop : styles.cartSheetOverlay}>
+              {!isDesktopWeb && (
+                <TouchableOpacity style={styles.cartSheetBackdrop} activeOpacity={1} onPress={() => setCartExpanded(false)} />
+              )}
               {/* Header and summary sit outside the ScrollView so only the line items
                   move: on a full order the Total and the KOT buttons used to scroll off
                   the bottom of the sheet, and the cashier had to swipe past every line
                   to fire the order. */}
-              <View style={styles.cartSheet}>
-                <View style={styles.cartSheetHandle} />
+              <View style={isDesktopWeb ? [styles.optionsSheetDesktop, styles.payFirstSheetDesktop] : styles.cartSheet}>
+                {!isDesktopWeb && <View style={styles.cartSheetHandle} />}
                 {renderCartHeader()}
                 <ScrollView
                   style={styles.cartSheetScroll}
@@ -3365,15 +3358,10 @@ export const POSCheckoutScreen = () => {
       </Modal>
 
       {/* ---------- Note editor for one existing cart line ---------- */}
-      <Modal
-        visible={!!notePromptLineId}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setNotePromptLineId(null)}
-      >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHeader}>
+      <Modal visible={!!notePromptLineId} transparent animationType="fade" onRequestClose={() => setNotePromptLineId(null)}>
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? styles.optionsSheetDesktop : styles.modalSheet}>
+            <View style={[styles.modalHeader, isDesktopWeb && styles.optionsHeaderDesktop]}>
               <View style={{ flex: 1, minWidth: 0, marginRight: 6 }}>
                 <Text
                   style={[
@@ -3710,25 +3698,15 @@ export const POSCheckoutScreen = () => {
       <Modal
         visible={draftsModalVisible}
         transparent
-        animationType="slide"
+        animationType={isDesktopWeb ? 'fade' : 'slide'}
         onRequestClose={() => setDraftsModalVisible(false)}
       >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text
-                style={[
-                  styles.modalTitle,
-                  modalHeadingOverride(styles.modalTitle.fontSize),
-                ]}
-              >
-                Saved Drafts
-              </Text>
-              <CloseButton
-                onPress={() => setDraftsModalVisible(false)}
-                size={22}
-              />
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? styles.optionsSheetDesktop : styles.modalSheet}>
+            {!isDesktopWeb && <View style={styles.modalHandle} />}
+            <View style={[styles.modalHeader, isDesktopWeb && styles.optionsHeaderDesktop]}>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Saved Drafts</Text>
+              <CloseButton onPress={() => setDraftsModalVisible(false)} size={22} />
             </View>
             <Text style={styles.draftsModalHint}>
               Drafts live only on this device — no order is created and no table
@@ -3793,25 +3771,15 @@ export const POSCheckoutScreen = () => {
       <Modal
         visible={waiterModalVisible}
         transparent
-        animationType="slide"
+        animationType={isDesktopWeb ? 'fade' : 'slide'}
         onRequestClose={() => setWaiterModalVisible(false)}
       >
-        <View style={modalOverlayStyle}>
-          <View style={styles.modalSheet}>
-            <View style={styles.modalHandle} />
-            <View style={styles.modalHeader}>
-              <Text
-                style={[
-                  styles.modalTitle,
-                  modalHeadingOverride(styles.modalTitle.fontSize),
-                ]}
-              >
-                Who's serving this order?
-              </Text>
-              <CloseButton
-                onPress={() => setWaiterModalVisible(false)}
-                size={22}
-              />
+        <View style={isDesktopWeb ? styles.optionsOverlayDesktop : modalOverlayStyle}>
+          <View style={isDesktopWeb ? styles.optionsSheetDesktop : styles.modalSheet}>
+            {!isDesktopWeb && <View style={styles.modalHandle} />}
+            <View style={[styles.modalHeader, isDesktopWeb && styles.optionsHeaderDesktop]}>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Who's serving this order?</Text>
+              <CloseButton onPress={() => setWaiterModalVisible(false)} size={22} />
             </View>
             <ScrollView style={{ maxHeight: 360 }}>
               {allStaff.map(s => {

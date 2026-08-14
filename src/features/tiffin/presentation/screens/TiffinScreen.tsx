@@ -955,7 +955,7 @@ const BillingTab: React.FC<{ COLORS: ReturnType<typeof useThemeColors>; styles: 
           <>
             {pending.length > 0 && (
               <TouchableOpacity style={[styles.addBtn, generate.isPending && { opacity: 0.6 }, webNoOutline]} onPress={() => runGenerate()} disabled={generate.isPending}>
-                {generate.isPending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon name="file-document-plus-outline" size={16} color="#FFFFFF" />}
+                {generate.isPending ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon name="file-plus-outline" size={16} color="#FFFFFF" />}
                 <Text style={styles.addBtnText}>Generate {pending.length} {pending.length === 1 ? 'bill' : 'bills'}</Text>
               </TouchableOpacity>
             )}
@@ -1006,10 +1006,7 @@ const BillingRow: React.FC<{
         <Text style={styles.avatarText}>{line.name.trim().charAt(0).toUpperCase() || '?'}</Text>
       </View>
       <View style={{ flex: 1 }}>
-        <View style={styles.cardTopRow}>
-          <Text style={styles.customerName} numberOfLines={1}>{line.name}</Text>
-          <Text style={[styles.outstandingText, clear && styles.clearText]}>{money0(line.amount)}</Text>
-        </View>
+        <Text style={styles.customerName} numberOfLines={1}>{line.name}</Text>
         <Text style={styles.customerMeta} numberOfLines={1}>
           {line.deliveredDays} {line.deliveredDays === 1 ? 'day' : 'days'} · {line.totalQty} plates · {money0(line.rate)}/plate
         </Text>
@@ -1020,27 +1017,30 @@ const BillingRow: React.FC<{
         )}
       </View>
 
-      {busy ? (
-        <ActivityIndicator size="small" color={COLORS.accent} style={{ width: 40 }} />
-      ) : (
-        <View style={styles.rowActions}>
-          {/* Reprint is available the moment a bill exists — a paid bill only shows this. */}
-          {billed && (
-            <TouchableOpacity style={[styles.iconBtn, webNoOutline]} onPress={onPrint}>
-              <Icon name="printer-outline" size={18} color={COLORS.heading} />
-            </TouchableOpacity>
-          )}
-          {!clear && (
-            <TouchableOpacity
-              style={[styles.rowActionBtn, styles.rowActionBtnPrimary, line.amount <= 0 && { opacity: 0.4 }, webNoOutline]}
-              onPress={onCollect}
-              disabled={line.amount <= 0}
-            >
-              <Text style={[styles.rowActionText, styles.rowActionTextPrimary]}>Collect</Text>
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
+      <View style={{ alignItems: 'flex-end', gap: 4 }}>
+        <Text style={[styles.outstandingText, clear && styles.clearText]}>{money0(line.amount)}</Text>
+        {busy ? (
+          <ActivityIndicator size="small" color={COLORS.accent} style={{ width: 40 }} />
+        ) : (
+          <View style={styles.rowActions}>
+            {/* Reprint is available the moment a bill exists — a paid bill only shows this. */}
+            {billed && (
+              <TouchableOpacity style={[styles.iconBtn, webNoOutline]} onPress={onPrint}>
+                <Icon name="printer-outline" size={18} color={COLORS.heading} />
+              </TouchableOpacity>
+            )}
+            {!clear && (
+              <TouchableOpacity
+                style={[styles.rowActionBtn, styles.rowActionBtnPrimary, line.amount <= 0 && { opacity: 0.4 }, webNoOutline]}
+                onPress={onCollect}
+                disabled={line.amount <= 0}
+              >
+                <Text style={[styles.rowActionText, styles.rowActionTextPrimary]}>Collect</Text>
+              </TouchableOpacity>
+            )}
+          </View>
+        )}
+      </View>
     </View>
   );
 };
