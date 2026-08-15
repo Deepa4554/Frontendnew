@@ -45,6 +45,7 @@ export const queryKeys = {
   ordersReport: (params?: unknown) => ['reports', 'orders', params] as const,
   customers: (params?: unknown) => ['customers', params] as const,
   customer: (id: number) => ['customers', id] as const,
+  customerByPhone: (phone: string) => ['customers', 'by-phone', phone] as const,
   crmInsights: ['customers', 'insights'] as const,
   tasks: (params?: unknown) => ['tasks', params] as const,
   notifications: ['notifications'] as const,

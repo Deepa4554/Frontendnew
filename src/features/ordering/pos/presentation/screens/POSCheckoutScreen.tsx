@@ -82,6 +82,7 @@ import {
   PaymentSplit,
 } from '../../../../../shared/components/billing/OrderBillActions';
 import { GuestPhonePrompt } from '../../../../../shared/components/billing/GuestPhonePrompt';
+import { CustomerLookupBadge } from '../../../../../shared/components/billing/CustomerLookupBadge';
 import {
   PaymentMethodPicker,
   PaymentMethodPickerResult,
@@ -4488,6 +4489,7 @@ export const POSCheckoutScreen = () => {
                 maxLength={10}
               />
             </View>
+            <CustomerLookupBadge phone={guestPhoneDraft} />
             <Text style={styles.guestFieldLabel}>Address</Text>
             <View style={styles.guestInputWrap}>
               <TextInput
@@ -4590,6 +4592,7 @@ export const POSCheckoutScreen = () => {
                     maxLength={10}
                   />
                 </View>
+                <CustomerLookupBadge phone={guestPhoneDraft} />
               </View>
             </View>
 

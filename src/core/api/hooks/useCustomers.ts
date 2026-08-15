@@ -14,6 +14,16 @@ export const useCustomers = (search?: string) =>
 export const useCustomer = (id: number | null) =>
   useQuery({ queryKey: queryKeys.customer(id ?? -1), queryFn: () => customersApi.get(id as number), enabled: id !== null });
 
+/** Fires only once `phone` is a complete 10-digit number — that alone keeps this from
+ * spamming the API on every keystroke while the guest number is being typed. */
+export const useCustomerByPhone = (phone: string) =>
+  useQuery({
+    queryKey: queryKeys.customerByPhone(phone),
+    queryFn: () => customersApi.lookupByPhone(phone),
+    enabled: phone.length === 10,
+    staleTime: 60_000,
+  });
+
 export const useCrmInsights = () => useQuery({ queryKey: queryKeys.crmInsights, queryFn: customersApi.insights });
 
 export const useCreateCustomer = () => {

@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
+import { CustomerLookupBadge } from './CustomerLookupBadge';
 
 export type PaymentMethod = 'Cash' | 'Card' | 'UPI' | 'Due';
 // UPI before Card — the far more common tender at an Indian counter, so it reads first.
@@ -343,6 +344,7 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
                     onFocus={() => setFocusedField('khata-phone')}
                     onBlur={() => setFocusedField(null)}
                   />
+                  <CustomerLookupBadge phone={khataPhone} />
                 </View>
               )}
             </View>

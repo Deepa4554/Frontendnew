@@ -3,6 +3,7 @@ import { Modal, View, Text, TextInput, TouchableOpacity, ActivityIndicator, Styl
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
+import { CustomerLookupBadge } from './CustomerLookupBadge';
 
 // See OrderBillActions' webNoOutline — same reason, the browser's own focus ring on a
 // react-native-web TouchableOpacity reads as a stray outline around the whole control.
@@ -88,6 +89,7 @@ export const GuestPhonePrompt: React.FC<Props> = ({ visible, initialPhone, onSub
             returnKeyType="done"
           />
           {!!error && <Text style={styles.error}>{error}</Text>}
+          {!error && <CustomerLookupBadge phone={phone} />}
 
           <View style={styles.actions}>
             <TouchableOpacity style={[styles.cancelBtn, webNoOutline]} onPress={onCancel} disabled={submitting}>

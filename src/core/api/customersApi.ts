@@ -75,6 +75,12 @@ export interface CustomerDetail {
   favoriteItems: FavoriteItem[];
 }
 
+export interface CustomerLookup {
+  exists: boolean;
+  id: number | null;
+  name: string | null;
+}
+
 export interface CreateCustomerRequest {
   name: string;
   email?: string;
@@ -141,6 +147,10 @@ export interface CrmInsights {
 }
 
 export const customersApi = {
+  /** Exact-phone existing-vs-new check, used while a guest number is being entered in
+   * POS/billing screens — unlike list(), this isn't Plus-gated (checkout must work on
+   * every plan tier). */
+  lookupByPhone: (phone: string) => apiClient.get<CustomerLookup>(`/customers/by-phone/${phone}`).then((r) => r.data),
   list: (params?: { search?: string; page?: number; pageSize?: number }) =>
     apiClient.get<PagedResult<CustomerSummary>>('/customers', { params }).then((r) => r.data),
   get: (id: number) => apiClient.get<CustomerDetail>(`/customers/${id}`).then((r) => r.data),
