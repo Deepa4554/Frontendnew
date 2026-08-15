@@ -34,6 +34,7 @@ import { KitchenFlowSettingsScreen } from '../../features/management/profile/pre
 import { StationManagementScreen } from '../../features/management/profile/presentation/screens/StationManagementScreen';
 import { TaxSlabManagementScreen } from '../../features/management/profile/presentation/screens/TaxSlabManagementScreen';
 import { OrderTypesSettingsScreen } from '../../features/management/profile/presentation/screens/OrderTypesSettingsScreen';
+import { ShiftSettingsScreen } from '../../features/management/profile/presentation/screens/ShiftSettingsScreen';
 import { AutoChargesSettingsScreen } from '../../features/management/profile/presentation/screens/AutoChargesSettingsScreen';
 import { OffersScreen } from '../../features/management/profile/presentation/screens/OffersScreen';
 import { ReceiptBuilderScreen } from '../../features/management/profile/presentation/screens/ReceiptBuilderScreen';
@@ -159,6 +160,7 @@ const KitchenFlowSettingsScreenComp = withRouteGuard(withDesktopShell(KitchenFlo
 const StationManagementScreenComp = withRouteGuard(withDesktopShell(StationManagementScreen, 'Profile'), 'StationManagement');
 const TaxSlabManagementScreenComp = withRouteGuard(withDesktopShell(TaxSlabManagementScreen, 'Profile'), 'TaxSlabManagement');
 const OrderTypesSettingsScreenComp = withRouteGuard(withDesktopShell(OrderTypesSettingsScreen, 'Profile'), 'OrderTypesSettings');
+const ShiftSettingsScreenComp = withRouteGuard(withDesktopShell(ShiftSettingsScreen, 'Profile'), 'ShiftSettings');
 const AutoChargesSettingsScreenComp = withRouteGuard(withDesktopShell(AutoChargesSettingsScreen, 'Profile'), 'AutoChargesSettings');
 const OffersScreenComp = withRouteGuard(withDesktopShell(OffersScreen, 'Profile'), 'Offers');
 const ReceiptBuilderScreenComp = withRouteGuard(withDesktopShell(ReceiptBuilderScreen, 'Profile'), 'ReceiptBuilder');
@@ -345,6 +347,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="StationManagement" component={StationManagementScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="TaxSlabManagement" component={TaxSlabManagementScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="OrderTypesSettings" component={OrderTypesSettingsScreenComp} options={{ headerShown: false }} />
+      <Stack.Screen name="ShiftSettings" component={ShiftSettingsScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="AutoChargesSettings" component={AutoChargesSettingsScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="Offers" component={OffersScreenComp} options={{ headerShown: false }} />
       <Stack.Screen name="ReceiptBuilder" component={ReceiptBuilderScreenComp} options={{ headerShown: false }} />

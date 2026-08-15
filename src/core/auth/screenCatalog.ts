@@ -84,6 +84,7 @@ export const SCREEN_CATALOG: ScreenCatalogEntry[] = [
   { key: 'StationManagement', label: 'Kitchen Stations', icon: 'chef-hat', minPlan: 'NORMAL', parent: 'Profile' },
   { key: 'TaxSlabManagement', label: 'Tax & GST Configuration', icon: 'percent-outline', minPlan: 'NORMAL', parent: 'Profile' },
   { key: 'OrderTypesSettings', label: 'Order Types', icon: 'clipboard-list-outline', minPlan: 'NORMAL', parent: 'Profile' },
+  { key: 'ShiftSettings', label: 'Shifts', icon: 'clock-outline', minPlan: 'NORMAL', parent: 'Profile' },
   { key: 'AutoChargesSettings', label: 'Auto Charges', icon: 'cash-plus', minPlan: 'NORMAL', parent: 'Profile' },
   { key: 'Offers', label: 'Offers & Discounts', icon: 'tag-multiple-outline', minPlan: 'NORMAL', parent: 'Profile' },
   { key: 'ReceiptBuilder', label: 'Receipt Builder', icon: 'receipt-text-outline', minPlan: 'NORMAL', parent: 'Profile' },

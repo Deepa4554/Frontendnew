@@ -11,6 +11,7 @@ type MockRecord = {
   staffId: number;
   staffName: string;
   date: string;
+  shiftKind: string;
   shiftId: number | null;
   punchInAt: string | null;
   punchOutAt: string | null;
@@ -50,7 +51,7 @@ jest.mock('../../../../../core/api/attendanceApi', () => ({
     list: jest.fn(async () => mockRecords),
     createManual: jest.fn(),
     correct: jest.fn(),
-    mark: jest.fn(async (req: { date: string; entries: { staffId: number; status: string }[] }) => {
+    mark: jest.fn(async (req: { date: string; entries: { staffId: number; status: string }[]; shiftKind?: string }) => {
       mockMark(req);
       const names: Record<number, string> = { 1: 'Asha Rao', 2: 'Vikram Shah' };
       const marked = req.entries.map((entry) => {
@@ -60,6 +61,7 @@ jest.mock('../../../../../core/api/attendanceApi', () => ({
           staffId: entry.staffId,
           staffName: names[entry.staffId],
           date: req.date,
+          shiftKind: req.shiftKind ? req.shiftKind.toUpperCase() : 'GENERAL',
           shiftId: null,
           punchInAt: null,
           punchOutAt: null,
@@ -77,6 +79,19 @@ jest.mock('../../../../../core/api/attendanceApi', () => ({
       });
       return marked;
     }),
+  },
+}));
+
+// Only General is enabled, so the shift-tab row never renders — the roll-call
+// interaction below is identical to how it behaved before ShiftKind existed.
+jest.mock('../../../../../core/api/settingsApi', () => ({
+  settingsApi: {
+    get: jest.fn(async () => ({
+      morningShiftEnabled: false,
+      eveningShiftEnabled: false,
+      nightShiftEnabled: false,
+      generalShiftEnabled: true,
+    })),
   },
 }));
 

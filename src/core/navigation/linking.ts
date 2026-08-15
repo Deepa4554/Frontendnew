@@ -144,6 +144,7 @@ export const linking: LinkingOptions<any> = {
           StationManagement: 'profile/stations',
           TaxSlabManagement: 'profile/tax-slabs',
           OrderTypesSettings: 'profile/order-types',
+          ShiftSettings: 'profile/shifts',
           AutoChargesSettings: 'profile/auto-charges',
           Offers: 'profile/offers',
           ReceiptBuilder: 'profile/receipt-builder',

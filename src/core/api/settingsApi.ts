@@ -45,6 +45,13 @@ export interface ApiSettings {
   deliveryEnabled: boolean;
   qsrEnabled: boolean;
   cashEnabled: boolean;
+  /** Which of the 4 fixed attendance shifts (Morning/Evening/Night/General) roll-call
+   * offers — an Owner turns off whichever this cafe doesn't run. At least one always
+   * stays true (enforced server-side), same rule as the order types above. */
+  morningShiftEnabled: boolean;
+  eveningShiftEnabled: boolean;
+  nightShiftEnabled: boolean;
+  generalShiftEnabled: boolean;
   /** Which optional sections print on the customer bill — see Receipt Builder settings
    * and printing/receiptFormat.ts buildReceiptLines, the shared line model every print
    * transport/screen renders from. Business name, items, and totals always print. */
@@ -116,6 +123,10 @@ export type UpdateSettingsRequest = Partial<
     | 'deliveryEnabled'
     | 'qsrEnabled'
     | 'cashEnabled'
+    | 'morningShiftEnabled'
+    | 'eveningShiftEnabled'
+    | 'nightShiftEnabled'
+    | 'generalShiftEnabled'
     | 'receiptShowAddress'
     | 'receiptShowWaiterName'
     | 'receiptShowGuestPhone'

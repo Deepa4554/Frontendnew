@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
@@ -9,7 +9,9 @@ import { InitialsAvatar } from '../../../../../shared/components/InitialsAvatar'
 import { showToast } from '../../../../../core/store/uiSlice';
 import { useStaff } from '../../../../../core/api/hooks/useStaff';
 import { useAttendanceList, useCreateManualAttendance, useCorrectAttendance, useMarkAttendance } from '../../../../../core/api/hooks/useAttendance';
-import { AttendanceRecord, AttendanceStatus, MarkAttendanceStatus } from '../../../../../core/api/attendanceApi';
+import { useSettings } from '../../../../../core/api/hooks/useSettings';
+import { AttendanceRecord, AttendanceStatus, MarkAttendanceStatus, ShiftKindOption } from '../../../../../core/api/attendanceApi';
+import { ApiSettings } from '../../../../../core/api/settingsApi';
 import { ApiStaff } from '../../../../../core/api/staffApi';
 import { getApiErrorMessage } from '../../../../../core/network/api';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
@@ -46,6 +48,18 @@ const MARK_OPTIONS: { key: MarkAttendanceStatus; label: string; icon: string; ma
   { key: 'Absent', label: 'Absent', icon: 'close-circle-outline', matches: ['ABSENT'] },
 ];
 
+/** The 4 fixed shifts, in the order tabs/pickers show them — General first since it's
+ * closest to the pre-ShiftKind "one record per day" behavior when it's among the
+ * enabled set. Filtered down to whichever settingsField is true in ApiSettings (Shift
+ * Settings screen) before rendering — a cafe running only General never sees a tab row
+ * at all. */
+const SHIFT_OPTIONS: { value: ShiftKindOption; settingsField: keyof ApiSettings; label: string; icon: string }[] = [
+  { value: 'General', settingsField: 'generalShiftEnabled', label: 'General', icon: 'clock-outline' },
+  { value: 'Morning', settingsField: 'morningShiftEnabled', label: 'Morning', icon: 'weather-sunset-up' },
+  { value: 'Evening', settingsField: 'eveningShiftEnabled', label: 'Evening', icon: 'weather-sunset-down' },
+  { value: 'Night', settingsField: 'nightShiftEnabled', label: 'Night', icon: 'weather-night' },
+];
+
 const MARK_LABEL: Record<MarkAttendanceStatus, string> = {
   Present: 'present',
   HalfDay: 'half day',
@@ -75,7 +89,23 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const insets = useSafeAreaInsets();
 
   const [date, setDate] = useState(toDateInput(new Date()));
-  const { data: records = [], isLoading, isError, refetch } = useAttendanceList({ date });
+  const { data: settings } = useSettings();
+
+  // Only the shifts an Owner turned on in Settings (Shifts) — a cafe that's never
+  // touched that screen (or only ever runs General) sees no tab row at all, and
+  // Attendance behaves exactly as it did before ShiftKind existed.
+  const enabledShifts = useMemo(
+    () => SHIFT_OPTIONS.filter((opt) => (settings ? settings[opt.settingsField] : opt.value === 'General')),
+    [settings],
+  );
+  const [shiftKind, setShiftKind] = useState<ShiftKindOption>('General');
+  useEffect(() => {
+    if (enabledShifts.length > 0 && !enabledShifts.some((opt) => opt.value === shiftKind)) {
+      setShiftKind(enabledShifts[0].value);
+    }
+  }, [enabledShifts, shiftKind]);
+
+  const { data: records = [], isLoading, isError, refetch } = useAttendanceList({ date, shiftKind });
   const { data: staff = [], isLoading: staffLoading } = useStaff();
 
   const shiftDate = (deltaDays: number) => {
@@ -118,10 +148,16 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const isFutureDate = date > toDateInput(new Date());
   const [markingStaffId, setMarkingStaffId] = useState<number | null>(null);
 
+  // Switching tabs re-scopes `records`/`rows` to the new shift automatically (the query
+  // key changes) — this just clears a stale in-flight spinner from the previous tab.
+  useEffect(() => {
+    setMarkingStaffId(null);
+  }, [shiftKind]);
+
   const markOne = async (staffId: number, name: string, status: MarkAttendanceStatus) => {
     setMarkingStaffId(staffId);
     try {
-      await markAttendance.mutateAsync({ date, entries: [{ staffId, status }] });
+      await markAttendance.mutateAsync({ date, entries: [{ staffId, status }], shiftKind });
       dispatch(showToast({ message: `${name} marked ${MARK_LABEL[status]}.`, icon: 'check-circle-outline', tone: 'success' }));
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not mark attendance'), icon: 'alert-circle-outline', tone: 'danger' }));
@@ -141,7 +177,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
       return;
     }
     try {
-      await markAttendance.mutateAsync({ date, entries });
+      await markAttendance.mutateAsync({ date, entries, shiftKind });
       dispatch(showToast({ message: `${entries.length} staff marked present.`, icon: 'check-circle-outline', tone: 'success' }));
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not mark attendance'), icon: 'alert-circle-outline', tone: 'danger' }));
@@ -155,6 +191,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const [punchOutTime, setPunchOutTime] = useState('17:00');
   const [breakMinutes, setBreakMinutes] = useState('0');
   const [editNote, setEditNote] = useState('');
+  const [manualShiftKind, setManualShiftKind] = useState<ShiftKindOption>('General');
 
   const [editingRecord, setEditingRecord] = useState<AttendanceRecord | null>(null);
   const [editPunchIn, setEditPunchIn] = useState('');
@@ -170,6 +207,9 @@ export const AttendanceScreen = ({ navigation }: any) => {
     setPunchOutTime('17:00');
     setBreakMinutes('0');
     setEditNote('');
+    // Defaults to whichever shift tab is currently open — a manager tapping + while
+    // looking at the Evening tab almost certainly means an Evening entry.
+    setManualShiftKind(shiftKind);
     setManualModalVisible(true);
   };
 
@@ -195,6 +235,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
         punchOutAt: punchOutTime ? new Date(`${date}T${punchOutTime}:00`).toISOString() : undefined,
         breakMinutes: parsedBreakMinutes,
         editNote: editNote.trim(),
+        shiftKind: manualShiftKind,
       });
       dispatch(showToast({ message: 'Attendance recorded.', icon: 'check-circle-outline', tone: 'success' }));
       setManualModalVisible(false);
@@ -242,28 +283,57 @@ export const AttendanceScreen = ({ navigation }: any) => {
   const dateNav = (
     <View style={styles.dateRow}>
       <TouchableOpacity style={styles.dateArrow} onPress={() => shiftDate(-1)}>
-        <Icon name="chevron-left" size={isDesktopWeb ? 16 : 22} color={COLORS.heading} />
+        <Icon name="chevron-left" size={isDesktopWeb ? 16 : 18} color={COLORS.heading} />
       </TouchableOpacity>
       <Text style={styles.dateText}>{date}</Text>
       <TouchableOpacity style={styles.dateArrow} onPress={() => shiftDate(1)}>
-        <Icon name="chevron-right" size={isDesktopWeb ? 16 : 22} color={COLORS.heading} />
+        <Icon name="chevron-right" size={isDesktopWeb ? 16 : 18} color={COLORS.heading} />
       </TouchableOpacity>
+    </View>
+  );
+
+  // Only rendered once 2+ shifts are turned on in Settings — a cafe running just one
+  // shift (the common case) sees no tab row and no change from before ShiftKind existed.
+  // On desktop the tabs ride in the page header's right slot instead of taking a row
+  // of their own, so the header keeps title / date / shift on one line.
+  const shiftTabs = enabledShifts.length > 1 && (
+    <View style={[styles.shiftTabRow, isDesktopWeb && styles.shiftTabRowHeader]} testID="attendance-shift-tabs">
+      {enabledShifts.map((opt) => {
+        const selected = opt.value === shiftKind;
+        return (
+          <TouchableOpacity
+            key={opt.value}
+            testID={`shift-tab-${opt.value}`}
+            style={[styles.shiftTab, selected && styles.shiftTabSelected]}
+            onPress={() => setShiftKind(opt.value)}
+          >
+            <Icon name={opt.icon} size={13} color={selected ? '#FFFFFF' : COLORS.muted} />
+            <Text style={[styles.shiftTabText, selected && styles.shiftTabTextSelected]}>{opt.label}</Text>
+          </TouchableOpacity>
+        );
+      })}
     </View>
   );
 
   return (
     <View style={styles.container}>
-      <DesktopPageHeader icon="clock-check-outline" title="Attendance" center={dateNav} />
+      <DesktopPageHeader icon="clock-check-outline" title="Attendance" center={dateNav} right={shiftTabs} />
       {!isDesktopWeb && (
-        <>
-          <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+        // One header block: title + date on the top line, shift tabs on the line under
+        // it. Three columns on a phone-width row would crush the tab labels, so the
+        // tabs get their own line but stay inside the header rather than floating
+        // above the list.
+        <View style={[styles.mobileHeaderBlock, { paddingTop: insets.top + 12 }]}>
+          <View style={styles.header}>
             <TouchableOpacity onPress={() => navigation?.goBack?.()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
               <Icon name="arrow-left" size={20} color={COLORS.heading} />
             </TouchableOpacity>
             <Text style={styles.headerTitle}>Attendance</Text>
+            <View style={styles.headerSpacer} />
+            {dateNav}
           </View>
-          {dateNav}
-        </>
+          {shiftTabs}
+        </View>
       )}
 
       {!isLoading && !staffLoading && rows.length > 0 && (
@@ -367,7 +437,7 @@ export const AttendanceScreen = ({ navigation }: any) => {
         )}
       </ScrollView>
 
-      <TouchableOpacity style={styles.fab} onPress={() => openManualModal()}>
+      <TouchableOpacity testID="attendance-fab" style={styles.fab} onPress={() => openManualModal()}>
         <Icon name="plus" size={26} color="#FFFFFF" />
       </TouchableOpacity>
 
@@ -379,6 +449,28 @@ export const AttendanceScreen = ({ navigation }: any) => {
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Record Attendance</Text>
               <CloseButton onPress={() => setManualModalVisible(false)} size={18} />
             </View>
+
+            {enabledShifts.length > 1 && (
+              <>
+                <Text style={styles.fieldLabel}>Shift</Text>
+                <View style={styles.shiftPickerRow}>
+                  {enabledShifts.map((opt) => {
+                    const selected = opt.value === manualShiftKind;
+                    return (
+                      <TouchableOpacity
+                        key={opt.value}
+                        testID={`manual-shift-${opt.value}`}
+                        style={[styles.shiftTab, selected && styles.shiftTabSelected]}
+                        onPress={() => setManualShiftKind(opt.value)}
+                      >
+                        <Icon name={opt.icon} size={13} color={selected ? '#FFFFFF' : COLORS.muted} />
+                        <Text style={[styles.shiftTabText, selected && styles.shiftTabTextSelected]}>{opt.label}</Text>
+                      </TouchableOpacity>
+                    );
+                  })}
+                </View>
+              </>
+            )}
 
             <Text style={styles.fieldLabel}>Staff Member</Text>
             <TouchableOpacity style={styles.staffSelect} onPress={() => setStaffPickerVisible(true)}>
@@ -520,14 +612,27 @@ export const AttendanceScreen = ({ navigation }: any) => {
 
 const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
+  mobileHeaderBlock: { borderBottomWidth: 1, borderBottomColor: COLORS.divider, paddingBottom: 2 },
   header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 7 : 7.5, paddingHorizontal: isDesktopWeb ? 12 : 12, paddingBottom: isDesktopWeb ? 6 : 6 },
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.heading },
-  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 6 : 12, paddingVertical: isDesktopWeb ? 0 : 6 },
-  dateArrow: { width: isDesktopWeb ? 22 : 32, height: isDesktopWeb ? 22 : 32, alignItems: 'center', justifyContent: 'center' },
+  headerSpacer: { flex: 1 },
+  dateRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 6 : 2, paddingVertical: isDesktopWeb ? 0 : 2 },
+  dateArrow: { width: isDesktopWeb ? 22 : 26, height: isDesktopWeb ? 22 : 26, alignItems: 'center', justifyContent: 'center' },
   dateText: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '700', color: COLORS.heading },
+  shiftTabRow: { flexDirection: 'row', justifyContent: 'center', gap: 6, paddingHorizontal: 16, paddingBottom: isDesktopWeb ? 8 : 6 },
+  // Inside the desktop header the row is just the chips — the surrounding header owns
+  // the padding, and the chips shrink to their own width instead of centering a strip.
+  shiftTabRowHeader: { paddingHorizontal: 0, paddingBottom: 0, flexShrink: 0 },
+  shiftTab: {
+    flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 12, paddingVertical: 6,
+    borderRadius: 14, backgroundColor: COLORS.cardAlt,
+  },
+  shiftTabSelected: { backgroundColor: COLORS.button },
+  shiftTabText: { fontSize: 11, fontWeight: '700', color: COLORS.muted },
+  shiftTabTextSelected: { color: '#FFFFFF' },
   summaryRow: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap',
-    gap: 8, paddingHorizontal: 16, paddingTop: isDesktopWeb ? 10 : 0, paddingBottom: 8,
+    gap: 8, paddingHorizontal: 16, paddingTop: isDesktopWeb ? 10 : 8, paddingBottom: 8,
   },
   summaryText: { fontSize: 11, fontWeight: '600', color: COLORS.muted, flexShrink: 1 },
   markAllBtn: {
@@ -562,6 +667,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isDesktopWeb ? 6 : 6 },
   modalTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: '800', color: COLORS.heading, marginBottom: isDesktopWeb ? 6 : 6, flexShrink: 1 },
   fieldLabel: { fontSize: 12, fontWeight: '600', color: COLORS.muted, marginBottom: isDesktopWeb ? 3 : 3, marginTop: isDesktopWeb ? 4 : 4.5 },
+  shiftPickerRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginBottom: isDesktopWeb ? 4 : 4.5 },
   staffSelect: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 6 : 6, backgroundColor: COLORS.cardAlt, borderRadius: 8, paddingHorizontal: isDesktopWeb ? 7 : 7.5, paddingVertical: isDesktopWeb ? 6 : 6 },
   staffSelectName: { fontSize: 12, fontWeight: '600', color: COLORS.heading },
   placeholderText: { fontSize: 12, color: COLORS.placeholder },

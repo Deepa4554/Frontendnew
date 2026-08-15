@@ -30,7 +30,7 @@ import { modalHeadingOverride } from '../../../../../shared/design/commonStyles'
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 
-type SettingId = /* 'security' | */ 'taxSlabs' | 'receipt' | 'receiptBuilder' | 'notif' | 'lang' | 'printer' | 'kitchen' | 'stations' | 'orderTypes' | 'autoCharges' | 'offers' | 'activeBranch';
+type SettingId = /* 'security' | */ 'taxSlabs' | 'receipt' | 'receiptBuilder' | 'notif' | 'lang' | 'printer' | 'kitchen' | 'stations' | 'orderTypes' | 'shifts' | 'autoCharges' | 'offers' | 'activeBranch';
 
 /** `route` is the screen-catalog key for tiles that push their own Stack screen — each one
  * is separately grantable under Custom Screen Access, so the tile has to be filtered by the
@@ -47,6 +47,7 @@ const SETTINGS: { id: SettingId; title: string; desc: string; icon: string; owne
   { id: 'kitchen', title: 'Kitchen Flow', desc: 'Choose 2-step or 3-step KDS status flow', icon: 'chef-hat', ownerOnly: true, route: 'KitchenFlowSettings' },
   { id: 'stations', title: 'Kitchen Stations', desc: 'Set up prep stations (Main Kitchen, Bar, Dessert) for KDS filtering and KOT routing', icon: 'chef-hat', ownerOnly: true, route: 'StationManagement' },
   { id: 'orderTypes', title: 'Order Types', desc: 'Choose which order types POS offers (Dine In/Takeaway/Delivery/Token)', icon: 'silverware-fork-knife', ownerOnly: true, route: 'OrderTypesSettings' },
+  { id: 'shifts', title: 'Shifts', desc: 'Choose which shifts are active for staff attendance (Morning/Evening/Night/General)', icon: 'clock-outline', ownerOnly: true, route: 'ShiftSettings' },
   { id: 'autoCharges', title: 'Auto Charges', desc: 'Set default Service/Packing/Delivery charges that apply automatically by order type', icon: 'cash-plus', ownerOnly: true, route: 'AutoChargesSettings' },
   { id: 'offers', title: 'Offers & Discounts', desc: 'Store-wide promotions that apply to every bill automatically — BOGO, happy hours, category and bill discounts', icon: 'tag-multiple-outline', ownerOnly: true, route: 'Offers' },
   // Not gated by `route`/canAccessRoute like the tiles above — this opens an in-place
@@ -135,6 +136,10 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
     }
     if (id === 'orderTypes') {
       navigation.navigate('OrderTypesSettings');
+      return;
+    }
+    if (id === 'shifts') {
+      navigation.navigate('ShiftSettings');
       return;
     }
     if (id === 'autoCharges') {

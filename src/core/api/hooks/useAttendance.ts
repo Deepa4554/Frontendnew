@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { attendanceApi, PunchRequest, ManualAttendanceRequest, CorrectAttendanceRequest, MarkAttendanceRequest } from '../attendanceApi';
+import { attendanceApi, PunchRequest, ManualAttendanceRequest, CorrectAttendanceRequest, MarkAttendanceRequest, ShiftKindOption } from '../attendanceApi';
 import { queryKeys } from './queryKeys';
 
 const invalidateAttendance = (qc: ReturnType<typeof useQueryClient>) => {
@@ -29,7 +29,7 @@ export const useBreakEnd = () => {
   return useMutation({ mutationFn: (req: PunchRequest) => attendanceApi.breakEnd(req), onSuccess: () => invalidateAttendance(qc) });
 };
 
-export const useAttendanceList = (params: { staffId?: number; date?: string; periodStart?: string; periodEnd?: string }) =>
+export const useAttendanceList = (params: { staffId?: number; date?: string; periodStart?: string; periodEnd?: string; shiftKind?: ShiftKindOption }) =>
   useQuery({ queryKey: queryKeys.attendance(params), queryFn: () => attendanceApi.list(params) });
 
 export const useCreateManualAttendance = () => {

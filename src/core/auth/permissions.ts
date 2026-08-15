@@ -17,6 +17,10 @@ const FLOOR_STAFF_HIDDEN_ROUTES = new Set([
   'Menu',
   'Inventory',
   'Dashboard',
+  // Revenue, cost/variance, and CRM numbers — ReportsController is Owner/Manager-only on
+  // the backend (see Policies.OwnerOrManager there), so without this a Waiter could open
+  // the Reports hub and every report link in it would just 403.
+  'Reports',
   'Integrations',
   'WhatsAppSetup',
   'DeliveryPartner',
@@ -38,6 +42,7 @@ const FLOOR_STAFF_HIDDEN_ROUTES = new Set([
   'StationManagement',
   'TaxSlabManagement',
   'OrderTypesSettings',
+  'ShiftSettings',
   'AutoChargesSettings',
   'Offers',
   'ReceiptBuilder',

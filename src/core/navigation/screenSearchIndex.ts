@@ -128,6 +128,7 @@ export const SCREEN_SEARCH_INDEX: ScreenSearchEntry[] = [
   { id: 'stationmanagement', label: 'Station Management', icon: 'silverware', permissionRouteKey: 'StationManagement', navigate: nav('StationManagement') },
   { id: 'taxslabmanagement', label: 'Tax Slab Management', keywords: ['tax slab', 'gst slab'], icon: 'percent-outline', permissionRouteKey: 'TaxSlabManagement', navigate: nav('TaxSlabManagement') },
   { id: 'ordertypessettings', label: 'Order Types Settings', icon: 'format-list-bulleted-type', permissionRouteKey: 'OrderTypesSettings', navigate: nav('OrderTypesSettings') },
+  { id: 'shiftsettings', label: 'Shift Settings', keywords: ['shifts', 'morning', 'evening', 'night', 'attendance shift'], icon: 'clock-outline', permissionRouteKey: 'ShiftSettings', navigate: nav('ShiftSettings') },
   { id: 'autochargessettings', label: 'Auto Charges Settings', icon: 'cash-plus', permissionRouteKey: 'AutoChargesSettings', navigate: nav('AutoChargesSettings') },
   { id: 'offers', label: 'Offers & Discounts', keywords: ['offer', 'bogo', 'buy one get one', 'happy hour', 'promotion', 'discount'], icon: 'tag-multiple-outline', permissionRouteKey: 'Offers', navigate: nav('Offers') },
   { id: 'receiptbuilder', label: 'Receipt Builder', icon: 'receipt', permissionRouteKey: 'ReceiptBuilder', navigate: nav('ReceiptBuilder') },
