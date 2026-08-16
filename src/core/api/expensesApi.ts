@@ -60,13 +60,18 @@ export interface PurchaseListItem {
   defaultCategory: ExpenseCategory;
 }
 
-/** `amount` is 0 for a row nobody bought that day. Every active row comes back regardless —
- * the sheet is the entry form, so staff need to see the row to fill it. */
+export type PaymentMode = 'Cash' | 'UPI' | 'Card';
+
+/** `amount` is 0 for a row nobody bought that day, and `paymentMode` is null with it —
+ * a blank row hasn't been paid any way yet, so there's nothing to default it to. Every
+ * active row comes back regardless — the sheet is the entry form, so staff need to see
+ * the row to fill it. */
 export interface DailyPurchaseLine {
   itemId: number;
   name: string;
   defaultCategory: ExpenseCategory;
   amount: number;
+  paymentMode: PaymentMode | null;
 }
 
 export interface DailyPurchaseSheet {
@@ -77,11 +82,12 @@ export interface DailyPurchaseSheet {
 }
 
 /** Saving replaces that date's list-sourced expenses rather than adding to them, so
- * re-saving a day corrects it instead of doubling it (see ExpensesController.SaveDailySheet). */
+ * re-saving a day corrects it instead of doubling it (see ExpensesController.SaveDailySheet).
+ * A line missing `paymentMode` still saves — the server defaults it to Cash. */
 export interface SaveDailyPurchaseRequest {
   date?: string;
   spentBy?: string;
-  lines: { itemId: number; amount: number }[];
+  lines: { itemId: number; amount: number; paymentMode?: PaymentMode }[];
 }
 
 export const expensesApi = {

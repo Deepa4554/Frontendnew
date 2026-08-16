@@ -516,6 +516,11 @@ export const POSCheckoutScreen = () => {
   // Quick in-menu item search — separate from the header's magnify icon, which
   // navigates away to the app-wide Search screen (orders/customers/staff).
   const [menuSearchQuery, setMenuSearchQuery] = useState('');
+  // Add-by-code/name box on the cart panel itself — lets a cashier drop an item straight
+  // into an order (by short code or name) without leaving the cart sheet to scroll the
+  // menu grid above it. Separate from menuSearchQuery so searching here never disturbs
+  // whatever the menu grid is currently filtered to.
+  const [cartQuickAddQuery, setCartQuickAddQuery] = useState('');
   // Veg Only: hides NonVeg and Eggetarian items from the picker below. Untagged items
   // (vegNonVegType null — never set on that menu item) stay visible either way, since
   // hiding them would be guessing they're non-veg rather than reading an actual claim.
@@ -796,6 +801,28 @@ export const POSCheckoutScreen = () => {
       return aExact - bExact || byPin(a, b) || byCategory(a, b);
     });
   }, [menuItems, activeCategory, menuSearchQuery, dietFilter, categoryRank]);
+
+  // Same name/short-code matching as filteredMenu above, but unfiltered by category/diet
+  // (the cart quick-add box is for "grab this one item fast", not browsing) and capped to
+  // a handful of results so the dropdown never outgrows the cart sheet it floats over.
+  const cartQuickAddMatches = useMemo(() => {
+    const q = cartQuickAddQuery.trim().toLowerCase();
+    if (q === '') return [];
+    const numericQ = /^\d+$/.test(q);
+    const codeMatches = (code: string) => (numericQ ? code === q : code.includes(q));
+    const matched = menuItems.filter(
+      (m) =>
+        m.name.toLowerCase().includes(q) ||
+        codeMatches((m.shortCode ?? '').toLowerCase()),
+    );
+    return matched
+      .sort((a, b) => {
+        const aExact = (a.shortCode ?? '').toLowerCase() === q ? 0 : 1;
+        const bExact = (b.shortCode ?? '').toLowerCase() === q ? 0 : 1;
+        return aExact - bExact || a.name.localeCompare(b.name);
+      })
+      .slice(0, 6);
+  }, [menuItems, cartQuickAddQuery]);
 
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { 'All Items': menuItems.length };
@@ -2573,6 +2600,65 @@ export const POSCheckoutScreen = () => {
             </>
           )}
         </View>
+      </View>
+
+      {/* Add-by-code/name box — lets the cashier drop another item straight into this
+          order without backing out of the cart sheet to scroll the menu grid above it.
+          Same short-code-aware matching as the main menu search (see cartQuickAddMatches),
+          just scoped to this one small box instead of the whole grid. */}
+      <View style={styles.cartQuickAddWrap}>
+        <View style={styles.cartQuickAddInputWrap}>
+          <Icon name="magnify" size={15} color={COLORS.muted} />
+          <TextInput
+            style={styles.cartQuickAddInput}
+            placeholder="Add item by name or code…"
+            placeholderTextColor={COLORS.placeholder}
+            value={cartQuickAddQuery}
+            onChangeText={setCartQuickAddQuery}
+            returnKeyType="search"
+          />
+          {!!cartQuickAddQuery && (
+            <TouchableOpacity
+              onPress={() => setCartQuickAddQuery('')}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            >
+              <Icon name="close-circle" size={15} color={COLORS.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        {cartQuickAddMatches.length > 0 && (
+          <View style={styles.cartQuickAddDropdown}>
+            {cartQuickAddMatches.map((item, idx) => (
+              <TouchableOpacity
+                key={item.id}
+                style={[
+                  styles.cartQuickAddRow,
+                  idx === cartQuickAddMatches.length - 1 && {
+                    borderBottomWidth: 0,
+                  },
+                ]}
+                onPress={() => {
+                  addToCart(item);
+                  setCartQuickAddQuery('');
+                }}
+              >
+                {!!item.shortCode && (
+                  <Text style={styles.cartQuickAddCode}>{item.shortCode}</Text>
+                )}
+                <Text
+                  style={styles.cartQuickAddName}
+                  numberOfLines={1}
+                  ellipsizeMode="tail"
+                >
+                  {item.name}
+                </Text>
+                <Text style={styles.cartQuickAddPrice}>
+                  ₹{item.price.toFixed(2)}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
       </View>
     </View>
   );
@@ -6357,7 +6443,80 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) =>
       backgroundColor: COLORS.background,
     },
     // Pinned order header (title, Hold, clear, table/guest/waiter row).
-    cartHeaderBlock: { flexShrink: 0 },
+    cartHeaderBlock: { flexShrink: 0, zIndex: 5 },
+    cartQuickAddWrap: {
+      paddingHorizontal: 10,
+      marginBottom: 8,
+      // Sits above the cart items ScrollView beneath it, so the results dropdown
+      // (also absolute, see cartQuickAddDropdown) floats over those rows instead
+      // of pushing them down.
+      zIndex: 5,
+    },
+    cartQuickAddInputWrap: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 6,
+      backgroundColor: COLORS.cardAlt,
+      borderWidth: INPUT_BORDER_WIDTH,
+      borderColor: COLORS.inputBorder,
+      borderRadius: 8,
+      paddingHorizontal: 8,
+      height: 34,
+    },
+    cartQuickAddInput: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 14,
+      color: COLORS.heading,
+      padding: 0,
+    },
+    cartQuickAddDropdown: {
+      position: 'absolute',
+      top: 38,
+      left: 10,
+      right: 10,
+      backgroundColor: COLORS.card,
+      borderWidth: INPUT_BORDER_WIDTH,
+      borderColor: COLORS.inputBorder,
+      borderRadius: 8,
+      paddingVertical: 2,
+      elevation: 6,
+      shadowColor: '#000',
+      shadowOpacity: 0.15,
+      shadowOffset: { width: 0, height: 2 },
+      shadowRadius: 6,
+    },
+    cartQuickAddRow: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: 8,
+      paddingHorizontal: 10,
+      paddingVertical: 9,
+      borderBottomWidth: 1,
+      borderBottomColor: COLORS.inputBorder,
+    },
+    cartQuickAddCode: {
+      fontSize: 11,
+      fontWeight: '700',
+      color: COLORS.accent,
+      backgroundColor: COLORS.pillActiveBg,
+      borderRadius: 4,
+      paddingHorizontal: 5,
+      paddingVertical: 2,
+      flexShrink: 0,
+    },
+    cartQuickAddName: {
+      flex: 1,
+      minWidth: 0,
+      fontSize: 13,
+      color: COLORS.heading,
+    },
+    cartQuickAddPrice: {
+      fontSize: 12,
+      fontWeight: '600',
+      color: COLORS.muted,
+      flexShrink: 0,
+    },
     // --- Receipt slip ---
     receiptOverlay: {
       flex: 1,

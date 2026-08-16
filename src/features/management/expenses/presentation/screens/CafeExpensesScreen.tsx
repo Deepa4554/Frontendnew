@@ -12,7 +12,7 @@ import {
   useCafeExpenses, useAddCafeExpense, useRemoveCafeExpense,
   useDailyPurchaseSheet, useSaveDailyPurchaseSheet, useAddPurchaseListItem, useRemovePurchaseListItem,
 } from '../../../../../core/api/hooks/useExpenses';
-import { ExpenseCategory } from '../../../../../core/api/expensesApi';
+import { ExpenseCategory, PaymentMode } from '../../../../../core/api/expensesApi';
 import { getApiErrorMessage } from '../../../../../core/network/api';
 import { ScreenContainer } from '../../../../../core/components/ScreenContainer';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
@@ -53,6 +53,13 @@ const CATEGORY_ICONS: Record<ExpenseCategory, string> = {
   Other: 'dots-horizontal-circle-outline',
 };
 
+const PAYMENT_MODES: PaymentMode[] = ['Cash', 'UPI', 'Card'];
+const PAYMENT_MODE_ICON: Record<PaymentMode, string> = {
+  Cash: 'cash',
+  UPI: 'qrcode-scan',
+  Card: 'credit-card-outline',
+};
+
 export const CafeExpensesScreen = () => {
   const { isDesktopWeb } = useResponsive();
   const COLORS = useThemeColors();
@@ -83,11 +90,18 @@ export const CafeExpensesScreen = () => {
   const removeListItem = useRemovePurchaseListItem();
 
   const [amounts, setAmounts] = useState<Record<number, string>>({});
+  const [paymentModes, setPaymentModes] = useState<Record<number, PaymentMode>>({});
   const loadedDateRef = useRef<string | null>(null);
 
   const [itemModalVisible, setItemModalVisible] = useState(false);
   const [newItemName, setNewItemName] = useState('');
   const [newItemCategory, setNewItemCategory] = useState<ExpenseCategory>('Supplies');
+
+  // The small centered "enter amount" popup — draft fields so Cancel doesn't touch
+  // `amounts`/`paymentModes` until Save is actually pressed.
+  const [entryItem, setEntryItem] = useState<{ itemId: number; name: string } | null>(null);
+  const [entryAmount, setEntryAmount] = useState('');
+  const [entryMode, setEntryMode] = useState<PaymentMode>('Cash');
 
   // Seeds the inputs from the server, but keeps whatever is already typed for a row we've
   // seen before — otherwise adding a row (which refetches the sheet) would wipe every
@@ -104,7 +118,28 @@ export const CafeExpensesScreen = () => {
       }
       return next;
     });
+    setPaymentModes((prev) => {
+      const next: Record<number, PaymentMode> = {};
+      for (const line of sheet.lines) {
+        const picked = isNewDay ? undefined : prev[line.itemId];
+        next[line.itemId] = picked ?? line.paymentMode ?? 'Cash';
+      }
+      return next;
+    });
   }, [sheet]);
+
+  const openEntry = (line: { itemId: number; name: string }) => {
+    setEntryAmount(amounts[line.itemId] ?? '');
+    setEntryMode(paymentModes[line.itemId] ?? 'Cash');
+    setEntryItem(line);
+  };
+
+  const saveEntry = () => {
+    if (!entryItem) return;
+    setAmounts((prev) => ({ ...prev, [entryItem.itemId]: entryAmount.replace(/[^0-9.]/g, '') }));
+    setPaymentModes((prev) => ({ ...prev, [entryItem.itemId]: entryMode }));
+    setEntryItem(null);
+  };
 
   // The day the arrows step from. Reads sheetDate first, not sheet.date: changing the date
   // swaps the query key, so `sheet` is undefined until the new day loads — stepping off
@@ -124,7 +159,7 @@ export const CafeExpensesScreen = () => {
   const saveDailySheet = async () => {
     if (!sheet) return;
     const lines = Object.entries(amounts)
-      .map(([itemId, raw]) => ({ itemId: Number(itemId), amount: parseFloat(raw) }))
+      .map(([itemId, raw]) => ({ itemId: Number(itemId), amount: parseFloat(raw), paymentMode: paymentModes[Number(itemId)] }))
       .filter((l) => !Number.isNaN(l.amount) && l.amount > 0);
     try {
       await saveSheet.mutateAsync({ date: sheet.date, lines });
@@ -284,26 +319,37 @@ export const CafeExpensesScreen = () => {
                 <Text style={styles.emptyText}>No rows yet — add the things you buy against each day.</Text>
               )}
 
-              {sheet?.lines.map((line) => (
-                <View key={line.itemId} style={styles.dailyRow}>
-                  <Text style={styles.dailyName} numberOfLines={1}>{line.name}</Text>
-                  <TextInput
-                    style={[styles.dailyInput, webNoOutline]}
-                    placeholder="0"
-                    placeholderTextColor={COLORS.placeholder}
-                    value={amounts[line.itemId] ?? ''}
-                    onChangeText={(t) => setAmounts((prev) => ({ ...prev, [line.itemId]: t.replace(/[^0-9.]/g, '') }))}
-                    keyboardType="decimal-pad"
-                  />
-                  <TouchableOpacity
-                    style={styles.deleteBtn}
-                    onPress={() => confirmRemoveItem(line.itemId, line.name)}
-                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                  >
-                    <Icon name="close" size={14} color={COLORS.muted} />
-                  </TouchableOpacity>
-                </View>
-              ))}
+              {sheet?.lines.map((line) => {
+                const raw = amounts[line.itemId] ?? '';
+                const amt = parseFloat(raw);
+                const hasAmount = !Number.isNaN(amt) && amt > 0;
+                const mode = paymentModes[line.itemId] ?? 'Cash';
+                return (
+                  <View key={line.itemId} style={styles.dailyRow}>
+                    <Text style={styles.dailyName} numberOfLines={1}>{line.name}</Text>
+                    <TouchableOpacity
+                      style={[styles.dailyAmountBtn, hasAmount && styles.dailyAmountBtnFilled, webNoOutline]}
+                      onPress={() => openEntry(line)}
+                    >
+                      {hasAmount ? (
+                        <>
+                          <Icon name={PAYMENT_MODE_ICON[mode]} size={13} color={COLORS.muted} />
+                          <Text style={styles.dailyAmountText}>₹{raw}</Text>
+                        </>
+                      ) : (
+                        <Text style={styles.dailyAmountPlaceholder}>Enter amount</Text>
+                      )}
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.deleteBtn}
+                      onPress={() => confirmRemoveItem(line.itemId, line.name)}
+                      hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                    >
+                      <Icon name="close" size={14} color={COLORS.muted} />
+                    </TouchableOpacity>
+                  </View>
+                );
+              })}
 
               <TouchableOpacity style={styles.addRowBtn} onPress={() => setItemModalVisible(true)}>
                 <Icon name="plus" size={14} color={COLORS.accent} />
@@ -516,6 +562,56 @@ export const CafeExpensesScreen = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={!!entryItem} transparent animationType="fade" onRequestClose={() => setEntryItem(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.entrySheet}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1}>
+                {entryItem?.name}
+              </Text>
+              <CloseButton onPress={() => setEntryItem(null)} size={18} />
+            </View>
+
+            <Text style={styles.fieldLabel}>Amount (₹)</Text>
+            <View style={{ borderRadius: 8 }}>
+              <TextInput
+                style={[styles.formInput, styles.entryAmountInput, webNoOutline]}
+                placeholder="0"
+                placeholderTextColor={COLORS.placeholder}
+                value={entryAmount}
+                onChangeText={(t) => setEntryAmount(t.replace(/[^0-9.]/g, ''))}
+                keyboardType="decimal-pad"
+                autoFocus
+              />
+            </View>
+
+            <Text style={styles.fieldLabel}>Paid via</Text>
+            <View style={styles.paymentModeRow}>
+              {PAYMENT_MODES.map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.paymentModePill, entryMode === m && styles.paymentModePillActive]}
+                  onPress={() => setEntryMode(m)}
+                >
+                  <Icon name={PAYMENT_MODE_ICON[m]} size={14} color={entryMode === m ? '#FFFFFF' : COLORS.muted} />
+                  <Text style={[styles.paymentModePillText, entryMode === m && styles.paymentModePillTextActive]}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setEntryItem(null)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={saveEntry}>
+                <Icon name="check" size={14} color="#FFFFFF" />
+                <Text style={styles.modalSaveText}>Save</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -587,11 +683,17 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     borderRadius: 8, paddingVertical: 6, paddingLeft: 10, paddingRight: 6, marginBottom: 5,
   },
   dailyName: { flex: 1, fontSize: isDesktopWeb ? 13 : 12, fontWeight: '600', color: COLORS.heading },
-  dailyInput: {
-    width: isDesktopWeb ? 120 : 96, backgroundColor: COLORS.background, borderRadius: 6,
+  // Tapping this opens the small centered amount+mode popup instead of typing inline —
+  // the row itself just shows what was last entered.
+  dailyAmountBtn: {
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
+    minWidth: isDesktopWeb ? 120 : 96, backgroundColor: COLORS.background, borderRadius: 6,
     borderWidth: 1, borderColor: COLORS.inputBorder,
-    paddingHorizontal: 8, height: 30, fontSize: 12, color: COLORS.heading, textAlign: 'right',
+    paddingHorizontal: 10, height: 30,
   },
+  dailyAmountBtnFilled: { borderColor: COLORS.accent },
+  dailyAmountText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
+  dailyAmountPlaceholder: { fontSize: 11.5, color: COLORS.placeholder },
   addRowBtn: {
     flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5,
     marginHorizontal: isDesktopWeb ? 16 : 12, marginTop: 4, marginBottom: isDesktopWeb ? 11 : 12,
@@ -630,4 +732,17 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     paddingVertical: 7.5, borderRadius: 6, backgroundColor: COLORS.button,
   },
   modalSaveText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
+
+  // Deliberately narrower than modalSheet (440) — this popup asks for exactly two things
+  // (amount, mode), so it reads as a quick centered prompt, not a form.
+  entrySheet: { width: '100%', maxWidth: 300, backgroundColor: COLORS.background, borderRadius: 12, padding: 12, overflow: 'hidden' },
+  entryAmountInput: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
+  paymentModeRow: { flexDirection: 'row', gap: 6 },
+  paymentModePill: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
+    paddingVertical: 7, borderRadius: 8, backgroundColor: COLORS.cardAlt,
+  },
+  paymentModePillActive: { backgroundColor: COLORS.button },
+  paymentModePillText: { fontSize: 11.5, fontWeight: '700', color: COLORS.muted },
+  paymentModePillTextActive: { color: '#FFFFFF' },
 });

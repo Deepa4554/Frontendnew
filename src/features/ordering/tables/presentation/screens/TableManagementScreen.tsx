@@ -109,7 +109,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const { data: allTables = [], isLoading, isError, refetch } = useTables();
   const { data: settings } = useSettings();
   const { data: ordersPage } = useOrders({ activeOnly: true, branchId: activeBranchId });
-  const activeOrders = ordersPage?.items ?? [];
+  // activeOnly also returns TAKEAWAY/DELIVERY/QSR tickets (see OrdersController.List) —
+  // those have no table, so counting them here would inflate this screen's "Active Orders"
+  // stat above what the table grid below actually shows occupied.
+  const activeOrders = (ordersPage?.items ?? []).filter((o) => o.tableCode);
   const role = useSelector((s: any) => s.auth.user?.role);
   const createTable = useCreateTable();
   const payOrder = usePayOrder();

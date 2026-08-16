@@ -130,6 +130,10 @@ export const TiffinScreen = () => {
   const [tab, setTab] = useState<Tab>('roster');
   const effectiveTab: Tab = tab === 'billing' && !canManage ? 'roster' : tab;
 
+  // Lives here, not inside RosterTab, so the header (which sits outside the tab's own
+  // ScrollView and never scrolls away) can show and drive it too.
+  const [date, setDate] = useState(() => toYmd(new Date()));
+
   // Roster/Subscribers/Billing, built once and reused in both header variants (mobile's own
   // row and DesktopPageHeader's `right` slot) so the tabs live in the same row as "Tiffin"
   // instead of a separate row underneath it. Icon-only on mobile — a back button + icon +
@@ -164,9 +168,38 @@ export const TiffinScreen = () => {
     </View>
   );
 
+  // Only meaningful on Roster — Subscribers has no day, Billing steps by month via its own
+  // control in the tab body (not moved here; a month picker isn't what was asked for).
+  const dateNav = effectiveTab === 'roster' ? (
+    <View style={styles.headerDateNav}>
+      <TouchableOpacity
+        style={[styles.headerDateBtn, webNoOutline]}
+        onPress={() => setDate((d) => addDays(d, -1))}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Icon name="chevron-left" size={16} color={COLORS.heading} />
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={webNoOutline}
+        onPress={() => setDate(toYmd(new Date()))}
+        disabled={isToday(date)}
+        hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
+      >
+        <Text style={styles.headerDateText} numberOfLines={1}>{dayLabel(date)}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity
+        style={[styles.headerDateBtn, webNoOutline]}
+        onPress={() => setDate((d) => addDays(d, 1))}
+        hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+      >
+        <Icon name="chevron-right" size={16} color={COLORS.heading} />
+      </TouchableOpacity>
+    </View>
+  ) : null;
+
   return (
     <View style={styles.container}>
-      <DesktopPageHeader icon="silverware-fork-knife" title="Tiffin" right={headerTabs} />
+      <DesktopPageHeader icon="silverware-fork-knife" title="Tiffin" right={<>{dateNav}{headerTabs}</>} />
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <TouchableOpacity style={styles.headerIconBtn} onPress={() => navigation.goBack()}>
@@ -175,11 +208,12 @@ export const TiffinScreen = () => {
           <Icon name="silverware-fork-knife" size={22} color={COLORS.accent} />
           <Text style={styles.headerTitle}>Tiffin</Text>
           <View style={{ flex: 1 }} />
+          {dateNav}
           {headerTabs}
         </View>
       )}
 
-      {effectiveTab === 'roster' && <RosterTab COLORS={COLORS} styles={styles} isDesktopWeb={isDesktopWeb} />}
+      {effectiveTab === 'roster' && <RosterTab COLORS={COLORS} styles={styles} isDesktopWeb={isDesktopWeb} date={date} setDate={setDate} />}
       {effectiveTab === 'subscribers' && <SubscribersTab COLORS={COLORS} styles={styles} isDesktopWeb={isDesktopWeb} />}
       {effectiveTab === 'billing' && canManage && <BillingTab COLORS={COLORS} styles={styles} />}
     </View>
@@ -265,9 +299,8 @@ const RosterCard = React.memo(({ e, styles, COLORS, busy, onSetQty }: {
   );
 });
 
-const RosterTab: React.FC<TabProps> = ({ COLORS, styles }) => {
+const RosterTab: React.FC<TabProps & { date: string; setDate: React.Dispatch<React.SetStateAction<string>> }> = ({ COLORS, styles, date, setDate }) => {
   const dispatch = useDispatch();
-  const [date, setDate] = useState(() => toYmd(new Date()));
   const [search, setSearch] = useState('');
   const { data, isLoading, isError, refetch } = useTiffinRoster(date);
   const mark = useMarkTiffin();
@@ -309,50 +342,15 @@ const RosterTab: React.FC<TabProps> = ({ COLORS, styles }) => {
     <ScreenContainer maxWidth={900} style={{ flex: 1, width: '100%', alignSelf: 'center' }}>
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
         {isError && !data ? (
-          <>
-            <View style={styles.dateNavRow}>
-              <TouchableOpacity style={[styles.navArrow, webNoOutline]} onPress={() => setDate((d) => addDays(d, -1))}>
-                <Icon name="chevron-left" size={20} color={COLORS.heading} />
-              </TouchableOpacity>
-              <View style={styles.dateNavCenter}>
-                <Text style={styles.dateNavText}>{dayLabel(date)}</Text>
-                {!isToday(date) && (
-                  <TouchableOpacity onPress={() => setDate(toYmd(new Date()))}>
-                    <Text style={styles.dateNavToday}>Jump to today</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <TouchableOpacity style={[styles.navArrow, webNoOutline]} onPress={() => setDate((d) => addDays(d, 1))}>
-                <Icon name="chevron-right" size={20} color={COLORS.heading} />
-              </TouchableOpacity>
-            </View>
-            <ErrorState title="Couldn't load the roster" message="Check your connection and try again." onRetry={() => refetch()} />
-          </>
+          <ErrorState title="Couldn't load the roster" message="Check your connection and try again." onRetry={() => refetch()} />
         ) : (
           <>
-            {/* Date nav + both summary cards in one row — arrows/date shrink to their own
-                content so the two cards can share the rest; wraps on very narrow screens
-                instead of clipping. */}
+            {/* Date nav lives in the screen header now, outside this ScrollView, so it stays
+                visible while the roster list scrolls — this row is just the day's two chips. */}
             <View style={styles.dateSummaryRow}>
-              <TouchableOpacity style={[styles.navArrowSmall, webNoOutline]} onPress={() => setDate((d) => addDays(d, -1))}>
-                <Icon name="chevron-left" size={13} color={COLORS.heading} />
-              </TouchableOpacity>
-              <View style={styles.dateNavCenterCompact}>
-                <Text style={styles.dateNavText} numberOfLines={1}>{dayLabel(date)}</Text>
-                {!isToday(date) && (
-                  <TouchableOpacity onPress={() => setDate(toYmd(new Date()))}>
-                    <Text style={styles.dateNavToday}>Jump to today</Text>
-                  </TouchableOpacity>
-                )}
-              </View>
-              <TouchableOpacity style={[styles.navArrowSmall, webNoOutline]} onPress={() => setDate((d) => addDays(d, 1))}>
-                <Icon name="chevron-right" size={13} color={COLORS.heading} />
-              </TouchableOpacity>
-
               {/* Single-line stat chips, not stacked cards — a label+value+sub card only reads
-                  well with real width to breathe; squeezed down next to the date arrows it just
-                  wraps mid-word. A chip sized to its own one line of text never wraps, and sits
-                  at the same height as the arrows/pills beside it instead of looming over them. */}
+                  well with real width to breathe. A chip sized to its own one line of text
+                  never wraps, and sits at the same height as pills elsewhere in the row. */}
               <View style={styles.statChipsRow}>
                 <View style={[styles.statChip, styles.statChipAccent]}>
                   <Icon name="food-variant" size={13} color={COLORS.muted} />
@@ -1229,13 +1227,16 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   tabPillText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
   tabPillTextActive: { color: '#FFFFFF' },
 
-  dateNavRow: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 16 : 12, marginBottom: 11 },
-  navArrow: { width: 40, height: 40, borderRadius: 8, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.cardAlt, borderWidth: 1, borderColor: COLORS.inputBorder },
-  dateNavCenter: { flex: 1, alignItems: 'center' },
-  dateNavText: { fontSize: isDesktopWeb ? 11 : 10.5, fontWeight: '800', color: COLORS.heading },
-  dateNavToday: { fontSize: 9.5, fontWeight: '700', color: COLORS.accent, marginTop: 1 },
+  // Compact day pill in the screen header (desktop right-slot / mobile header row) — this is
+  // the Roster tab's actual date control now; the old in-body arrows scrolled away with the
+  // list, which is the whole reason it moved up here.
+  headerDateNav: { flexDirection: 'row', alignItems: 'center', gap: 2 },
+  headerDateBtn: { width: 26, height: 26, borderRadius: 6, alignItems: 'center', justifyContent: 'center' },
+  headerDateText: { fontSize: isDesktopWeb ? 12.5 : 11.5, fontWeight: '700', color: COLORS.heading, minWidth: isDesktopWeb ? 68 : 56, textAlign: 'center' },
 
-  // Roster tab: date nav + both summary cards sharing one row (see dateSummaryRow below) —
+  dateNavText: { fontSize: isDesktopWeb ? 11 : 10.5, fontWeight: '800', color: COLORS.heading },
+
+  // Billing tab's month nav + both summary figures share one row (see dateSummaryRow below) —
   // smaller arrows and a content-sized (not flex:1) date block so the two flex:1 cards get
   // most of the width. flexWrap is the safety net if a very narrow screen can't fit all five.
   dateSummaryRow: {
