@@ -3,7 +3,26 @@ import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit, Pay
 import { PagedResult } from '../types';
 import { queryKeys } from './queryKeys';
 
-export const useOrders = (params?: { activeOnly?: boolean; branchId?: number | null; page?: number; pageSize?: number; from?: string; to?: string; kdsReady?: boolean; orderType?: string }) =>
+/**
+ * Per-call-site polling overrides. The defaults below are tuned for the live service screens
+ * (Tables, KDS, Token/Takeaway boards) where a ticket showing up late is a service problem.
+ *
+ * A screen that REVIEWS the day rather than driving it should pass something slower. The case
+ * that forced this to exist: BillingScreen asks for `{ from: today, to: today, pageSize: 500 }`
+ * — the whole day's orders, each with its full item/modifier/KOT/payment graph — and inherited
+ * the 10s cadence below, so it pulled the entire day's order history out of Postgres six times
+ * a minute, growing all day as orders accumulated, and (via refetchIntervalInBackground) kept
+ * doing it while the tab sat in the background. That single screen was reading roughly 700MB an
+ * hour off the database. Nothing on it needs to be live to the second: settling a bill fires
+ * OrdersHub's "ordersChanged" push, which invalidates the ['orders'] prefix this query lives
+ * under, so it still updates the moment anything actually changes.
+ */
+type OrdersPolling = { refetchInterval?: number; refetchIntervalInBackground?: boolean };
+
+export const useOrders = (
+  params?: { activeOnly?: boolean; branchId?: number | null; page?: number; pageSize?: number; from?: string; to?: string; kdsReady?: boolean; orderType?: string },
+  polling?: OrdersPolling,
+) =>
   useQuery({
     queryKey: queryKeys.orders(params),
     queryFn: () => ordersApi.list(params),
@@ -13,12 +32,12 @@ export const useOrders = (params?: { activeOnly?: boolean; branchId?: number | n
     // actual update mechanism — and a kitchen waiting half a minute to see a ticket is a
     // service problem. Back to roughly the pre-realtime cadence until the socket is proven
     // healthy; at ~6 requests/min this is still well inside the 200/min per-IP rate limit.
-    refetchInterval: 10000,
+    refetchInterval: polling?.refetchInterval ?? 10000,
     // React Query pauses refetchInterval whenever the tab/window loses focus unless this
     // is on — which silently disabled the safety net on exactly the screen that needs it
     // most: a KDS spends its whole life as an unfocused second window/monitor while staff
     // take orders elsewhere, so the board only caught up when someone touched it.
-    refetchIntervalInBackground: true,
+    refetchIntervalInBackground: polling?.refetchIntervalInBackground ?? true,
     staleTime: 0, // Data is immediately stale so any invalidation forces fresh fetch
   });
 

@@ -42,7 +42,17 @@ export const BillingScreen = () => {
   // 20-per-page cap, since this screen's revenue/transaction totals need to be exactly
   // today's real numbers.
   const todayIso = istToday();
-  const { data, isLoading, isError, refetch } = useOrders({ from: todayIso, to: todayIso, pageSize: 500 });
+  // Polling deliberately slowed and stopped in the background (see useOrders' OrdersPolling
+  // doc): this is the one call site that combines "every order today, full graph" with the
+  // 10s live-service cadence, and it was by far the largest reader of the database — the whole
+  // day's order history, six times a minute, all day, including while the tab was backgrounded.
+  // A settle/void anywhere still lands here immediately via OrdersHub's ordersChanged push, so
+  // this interval is only the safety net it always was on the other screens, and pull-to-refresh
+  // (refetch, below) covers a cashier who wants the totals recounted right now.
+  const { data, isLoading, isError, refetch } = useOrders(
+    { from: todayIso, to: todayIso, pageSize: 500 },
+    { refetchInterval: 60000, refetchIntervalInBackground: false },
+  );
   const { data: settings } = useSettings();
   const [openOrder, setOpenOrder] = useState<ApiOrder | null>(null);
   const [printing, setPrinting] = useState(false);

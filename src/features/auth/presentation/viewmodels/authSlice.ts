@@ -68,6 +68,13 @@ export const logout = createAsyncThunk('auth/logout', async () => {
 export const restoreSession = createAsyncThunk('auth/restoreSession', async (_: void, { rejectWithValue }) => {
   const user = await authRepository.restoreSession();
   if (!user) return rejectWithValue('Session expired');
+  // Same purge loginWithEmail does, and for the same reason — this is just the other way
+  // into an authenticated session. Anything fetched while the app was still anonymous (the
+  // settings/branding query ThemeProviderWrapper and RootNavigator both fire at boot, a
+  // ~1.2s head start on SplashScreen's restoreSession call) is cached under a flat,
+  // tenant-less key. Without this it survives straight into the restored session and keeps
+  // rendering until something happens to invalidate it.
+  queryClient.clear();
   return user;
 });
 

@@ -430,7 +430,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
       guestName: order.tableCode ? order.guestName : undefined,
       items: batchItems.map((i) => ({
         name: i.name, qty: i.qty, variantName: i.variantName, modifier: i.modifier, stationName: i.stationName, vegNonVegType: i.vegNonVegType,
-        selectedModifiers: i.selectedModifiers,
+        selectedModifiers: i.selectedModifiers, subtitle: i.subtitle,
       })),
     });
   };

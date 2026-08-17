@@ -92,6 +92,12 @@ export interface OrderItem {
    * backend OrderItem.VegNonVegType. Null for untagged items and for lines placed before
    * this field existed. */
   vegNonVegType?: 'Veg' | 'NonVeg' | 'Jain' | 'Eggetarian' | null;
+  /** Menu item's Subtitle, snapshotted when this line was placed — see backend
+   * OrderItem.Subtitle. Mainly populated on Combo items, where it's the only record of
+   * what the combo actually contains (e.g. "Aloo Tikki Burger + Fries + Cold Drink");
+   * printed on the KOT under the item name so the kitchen isn't just told "Combo 1". Null
+   * for items with no subtitle and for lines placed before this field existed. */
+  subtitle?: string | null;
 }
 
 /** Units of one line currently at each stage — keyed by OrderStatus. */

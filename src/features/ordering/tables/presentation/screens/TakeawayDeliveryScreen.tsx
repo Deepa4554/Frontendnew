@@ -224,7 +224,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
       time: new Date(currentBatch?.firedAt ?? order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
       items: currentBatchItems.map((i) => ({
         name: i.name, qty: i.qty, variantName: i.variantName, modifier: i.modifier, stationName: i.stationName, vegNonVegType: i.vegNonVegType,
-        selectedModifiers: i.selectedModifiers,
+        selectedModifiers: i.selectedModifiers, subtitle: i.subtitle,
       })),
     });
     setPrintingKot(false);

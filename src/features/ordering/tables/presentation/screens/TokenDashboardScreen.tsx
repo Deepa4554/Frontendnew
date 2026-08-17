@@ -213,7 +213,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
       guestName: order.guestName,
       items: currentBatchItems.map((i) => ({
         name: i.name, qty: i.qty, variantName: i.variantName, modifier: i.modifier, stationName: i.stationName, vegNonVegType: i.vegNonVegType,
-        selectedModifiers: i.selectedModifiers,
+        selectedModifiers: i.selectedModifiers, subtitle: i.subtitle,
       })),
     });
     setPrintingKot(false);

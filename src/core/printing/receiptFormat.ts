@@ -359,6 +359,12 @@ export interface PrintableKotItem {
   vegNonVegType?: PrintableVegNonVegType | null;
   /** Variant (Half/Full/...) that was ordered — the kitchen makes the wrong portion without it. */
   variantName?: string | null;
+  /** Menu item's Subtitle, snapshotted at order time (see OrderItem.subtitle). Mainly
+   * populated on Combo items, where it's the only record of what the combo contains — a
+   * bare "Combo 1" line tells the kitchen nothing to actually make. Printed under the item
+   * name, plain (no `+`/`>>` marker), so it reads as "what this is" rather than as an
+   * add-on or a customer instruction. */
+  subtitle?: string | null;
   /** Free-text kitchen instruction for this line, e.g. "No onion" — no prices belong
    * on a kitchen ticket, only what to make and how. */
   modifier?: string | null;
@@ -462,6 +468,7 @@ export function buildKotLines(kot: PrintableKot, columns = 32): ReceiptLine[] {
     // Add-ons and notes indent past the serial number so they hang under their item's text
     // rather than under its number, which would read as another numbered line.
     const indent = ' '.repeat(seq.length);
+    if (item.subtitle) push({ kind: 'text', text: `${indent}${item.subtitle}` });
     for (const addOn of item.selectedModifiers ?? []) {
       push({ kind: 'text', text: `${indent}+ ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
     }

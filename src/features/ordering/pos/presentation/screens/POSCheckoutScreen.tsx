@@ -2291,6 +2291,7 @@ export const POSCheckoutScreen = () => {
         stationName: i.stationName,
         vegNonVegType: i.vegNonVegType,
         selectedModifiers: i.selectedModifiers,
+        subtitle: i.subtitle,
       })),
     });
     dispatch(
