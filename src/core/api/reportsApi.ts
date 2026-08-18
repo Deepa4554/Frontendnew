@@ -100,6 +100,9 @@ export interface TaxRateLine {
 
 export interface TaxBillLine {
   orderId: number;
+  /** The number printed on the guest's copy of this bill (see ApiOrder.number). Show this,
+   * not orderId — the filing detail is only checkable against physical bills if they match. */
+  orderNumber: string;
   title: string;
   createdAt: string;
   taxableAmount: number;
@@ -127,6 +130,8 @@ export interface OrderDetailItem {
 
 export interface OrderDetailLine {
   orderId: number;
+  /** The number printed on the guest's copy of this bill (see ApiOrder.number). */
+  orderNumber: string;
   title: string;
   createdAt: string;
   orderType: string;

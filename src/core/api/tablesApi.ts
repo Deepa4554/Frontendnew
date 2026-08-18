@@ -7,6 +7,11 @@ export interface ApiTable {
   seats: number;
   status: 'empty' | 'occupied';
   orderId: number | null;
+  /** The cafe's own bill number, pre-formatted ("#7"). Null when the table is empty, and
+   * absent from a deployed API build that predates per-tenant bill numbering — call sites
+   * must tolerate undefined. Never rebuild this from `orderId`: the id is a sequence shared
+   * by every tenant, which is what used to print a new cafe's first table as "Order #1455". */
+  orderNumber?: string | null;
   orderStatus: string | null;
   bill: number | null;
   guestName: string | null;

@@ -30,8 +30,8 @@ const fmtDateTime = (iso: string) => {
   return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
 };
 
-const billLabel = (o: { orderId: number; tableCode: string | null; tokenNumber: number | null }) =>
-  o.tokenNumber != null ? `Token #${o.tokenNumber}` : o.tableCode ? `Table ${o.tableCode}` : `Bill #${o.orderId}`;
+const billLabel = (o: { orderNumber: string; tableCode: string | null; tokenNumber: number | null }) =>
+  o.tokenNumber != null ? `Token #${o.tokenNumber}` : o.tableCode ? `Table ${o.tableCode}` : `Bill ${o.orderNumber}`;
 
 export const OrderDetailReportScreen = () => {
   const { isDesktopWeb } = useResponsive();
@@ -57,7 +57,7 @@ export const OrderDetailReportScreen = () => {
   const q = search.trim().toLowerCase();
   const filtered = (data?.orders ?? []).filter(
     (o) =>
-      String(o.orderId).includes(q) ||
+      o.orderNumber.toLowerCase().includes(q) ||
       o.title.toLowerCase().includes(q) ||
       (o.customerName ?? '').toLowerCase().includes(q) ||
       (o.customerPhone ?? '').toLowerCase().includes(q) ||

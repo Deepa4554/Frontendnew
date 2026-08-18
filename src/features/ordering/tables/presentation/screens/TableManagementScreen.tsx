@@ -63,6 +63,13 @@ const ITEM_STATUS_COLOR: Record<string, 'dangerAccent' | 'warning' | 'success'> 
 /** Occupied ÷ total tables, no AI involved — just a threshold on the real percentage. */
 const DINING_STATUS_THRESHOLDS = { busy: 70, moderate: 30 };
 
+/** The bill number to show for an occupied table. Prefers what the server sent — that's the
+ * cafe's own counter (ApiTable.orderNumber). The "#{1000 + id}" fallback is only for an API
+ * build deployed before per-tenant numbering, where the tile would otherwise show nothing;
+ * it reproduces exactly what that older server would have printed on the matching bill. */
+const tableOrderLabel = (table: Pick<ApiTable, 'orderId' | 'orderNumber'>) =>
+  table.orderNumber ?? (table.orderId != null ? `#${1000 + table.orderId}` : '—');
+
 export const TableManagementScreen = ({ navigation }: any) => {
   const dispatch = useDispatch();
   const COLORS = useThemeColors();
@@ -242,6 +249,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
     Available: TABLES.filter((t) => t.status === 'empty').length,
     Occupied: TABLES.filter((t) => t.status === 'occupied').length,
   }), [TABLES]);
+  // Occupied tables sort to the front of the grid — those are the ones staff act on
+  // (settle, shift, add items), so they shouldn't be hunted for among the free tiles.
+  // Sort is stable, so within each group the zone's own table order is preserved.
   const FILTERED_TABLES = useMemo(() => TABLES.filter((t) => {
     const matchesCapacity = capacityFilter === 'All Sizes' || t.seats === parseInt(capacityFilter, 10);
     const matchesStatus =
@@ -249,7 +259,8 @@ export const TableManagementScreen = ({ navigation }: any) => {
       (statusFilter === 'Available' && t.status === 'empty') ||
       (statusFilter === 'Occupied' && t.status === 'occupied');
     return matchesCapacity && matchesStatus;
-  }), [TABLES, capacityFilter, statusFilter]);
+  }).sort((a, b) => Number(b.status === 'occupied') - Number(a.status === 'occupied')),
+  [TABLES, capacityFilter, statusFilter]);
 
   const occupiedCount = allTables.filter((t) => t.status === 'occupied').length;
   const freeTableCount = allTables.filter((t) => t.status === 'empty').length;
@@ -782,7 +793,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 {table.status === 'occupied' && (
                   <>
                     <Text style={[styles.tileMeta, { color: style.text }]} numberOfLines={1}>
-                      {table.guestName ? table.guestName : `Order #${1000 + table.orderId!}`} · {table.orderStatus}
+                      {table.guestName ? table.guestName : `Order ${tableOrderLabel(table)}`} · {table.orderStatus}
                     </Text>
                     <Text style={[styles.tileBill, { color: style.text }]}>₹{table.bill?.toFixed(2)}</Text>
                   </>
@@ -866,7 +877,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
               <Text style={styles.modalLine} numberOfLines={1}>
                 {occupiedModal?.guestName
                   ? `Guest: ${occupiedModal.guestName}`
-                  : `Order #${occupiedModal?.orderId != null ? 1000 + occupiedModal.orderId : '—'}`}
+                  : `Order ${occupiedModal ? tableOrderLabel(occupiedModal) : '—'}`}
               </Text>
               <View style={styles.orderHeaderActions}>
                 {/* QR guest session (doc Section 5.6) — independent of the order lifecycle

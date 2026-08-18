@@ -118,8 +118,9 @@ export interface FireBatch {
   batchNumber: number;
   status: OrderStatus;
   firedAt: string;
-  /** Tenant-wide sequential ticket id (same "#1000+id" convention as ApiOrder.number) —
-   * the KOT-wise KDS view sorts/labels by this instead of by table. */
+  /** Sequential kitchen-ticket id, derived server-side from a sequence shared across all
+   * tenants — so unlike ApiOrder.number (per-cafe) this is NOT the cafe's own KOT count.
+   * It only needs to be stable and ordered for the KOT-wise KDS view to sort/label by. */
   kotNumber: string;
 }
 
@@ -164,6 +165,9 @@ export interface PayOptions {
 
 export interface ApiOrder {
   id: number;
+  /** The cafe's own running bill number, pre-formatted ("#7") — starts at 1 for each cafe
+   * and never resets. Display this; never derive a number from `id`, which is a sequence
+   * shared by every tenant on the platform. See backend OrderNumberFormat / BillCounter. */
   number: string;
   title: string;
   orderType: string;

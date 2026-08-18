@@ -154,6 +154,17 @@ let writeCharacteristic: BtCharacteristic | null = null;
  * every single print. */
 let attachedForAddress: string | null = null;
 const disconnectHandlerAttached = new WeakSet<BtDevice>();
+/** Every device handle this page has resolved at least once this session (via the chooser or
+ * getDevices()), keyed by the address it was resolved for — kept even after `pairedDevice`
+ * moves on to a different printer. Without this, a cafe with more than one saved Bluetooth
+ * printer (e.g. a kitchen station printer plus the device's default) re-triggers the browser's
+ * chooser every time printing switches between them, even though both were already granted
+ * permission earlier in this same tab: attachSilently drops `pairedDevice` on an address
+ * mismatch, and getDevices() alone can't be relied on to bring it back (Chrome hides it behind
+ * a flag by default — see findPermittedDevice). Checking this cache first means switching back
+ * to a printer already seen this session only needs a plain gatt.connect(), which needs no user
+ * gesture, so no picker. */
+const knownDevices = new Map<string, BtDevice>();
 
 /** The printer this page is meant to stay attached to. Set once a connection has succeeded (or
  * by restoreSavedPrinter from the saved config), and it's what licenses the background
@@ -265,6 +276,7 @@ function installListeners() {
 function remember(device: BtDevice, forAddress?: string) {
   pairedDevice = device;
   attachedForAddress = forAddress ?? device.id;
+  knownDevices.set(attachedForAddress, device);
   writeCharacteristic = null;
   if (!disconnectHandlerAttached.has(device)) {
     // The characteristic handle goes stale the moment GATT drops (printer powered off, out of
@@ -330,8 +342,9 @@ async function findPermittedDevice(address: string): Promise<BtDevice | null> {
 }
 
 /** Gets `pairedDevice` pointing at `address` without any UI: the handle already held by this
- * page load if it matches, otherwise whatever getDevices() can give back. False means only the
- * chooser can help, which needs a user gesture and so is the caller's problem. */
+ * page load if it matches, otherwise a device this page resolved earlier for that same address
+ * (knownDevices), otherwise whatever getDevices() can give back. False means only the chooser
+ * can help, which needs a user gesture and so is the caller's problem. */
 async function attachSilently(address: string): Promise<boolean> {
   // Saved config points at a different printer than the one attached in this tab (station
   // printers, or the user re-scanned) — drop the stale handle and re-resolve.
@@ -340,8 +353,16 @@ async function attachSilently(address: string): Promise<boolean> {
     writeCharacteristic = null;
   }
   if (!pairedDevice) {
-    const permitted = await findPermittedDevice(address);
-    if (permitted) remember(permitted, address);
+    // A printer this page already resolved once this session (e.g. the till switched from the
+    // default printer to a station printer and back) needs no re-lookup at all — reusing the
+    // handle here is what keeps that switch from re-opening the chooser.
+    const known = knownDevices.get(address);
+    if (known) {
+      remember(known, address);
+    } else {
+      const permitted = await findPermittedDevice(address);
+      if (permitted) remember(permitted, address);
+    }
   }
   return !!pairedDevice;
 }

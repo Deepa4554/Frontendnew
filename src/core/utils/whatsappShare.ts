@@ -32,12 +32,12 @@ const formatBillText = (p: ShareBillParams): string => {
   // link to fall back on (token fetch failed) does the text need to be
   // self-sufficient, so it keeps the full itemized breakdown in that case.
   if (p.receiptUrl) {
-    // ♥ / → instead of 🙏 / 📄 deliberately — those are 4-byte "astral plane" emoji, and
-    // some WhatsApp clients garble them to "�" when opened via a wa.me click-to-chat
-    // redirect (reported in production). These older, single-code-point symbols render
-    // correctly everywhere.
+    // No emoji or pictographs in this message. 4-byte "astral plane" emoji (🙏, 📄)
+    // garble to "�" in some WhatsApp clients opened via a wa.me click-to-chat redirect,
+    // and the single-code-point fallback (♥) was reported doing the same in production.
+    // → is kept because it renders correctly on the same clients that garbled ♥.
     return [
-      `Hi! Thanks for visiting *${p.businessName}* ♥`,
+      `Hi! Thanks for visiting *${p.businessName}*`,
       '',
       `Order ${p.orderNumber} — Total: *₹${p.total.toFixed(2)}*`,
       '',

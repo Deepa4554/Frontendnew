@@ -136,7 +136,7 @@ export const TaxGstReportScreen = () => {
                 data.bills.map((b, i) => (
                   <View key={b.orderId} style={[styles.row, i !== data.bills.length - 1 && styles.rowDivider]}>
                     <View style={styles.rowHeader}>
-                      <Text style={styles.itemName} numberOfLines={1}>#{b.orderId} {b.title}</Text>
+                      <Text style={styles.itemName} numberOfLines={1}>{b.orderNumber} {b.title}</Text>
                       <Text style={styles.itemValue}>₹{b.taxAmount.toFixed(2)}</Text>
                     </View>
                     <Text style={styles.metaText}>

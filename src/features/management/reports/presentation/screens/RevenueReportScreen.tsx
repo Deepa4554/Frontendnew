@@ -163,7 +163,7 @@ export const RevenueReportScreen = () => {
                           onPress={() => navigation.navigate('OrderDetailReport')}
                         >
                           <View style={{ flex: 1 }}>
-                            <Text style={styles.rowLabel} numberOfLines={1}>#{o.orderId} {o.title}</Text>
+                            <Text style={styles.rowLabel} numberOfLines={1}>{o.orderNumber} {o.title}</Text>
                             <Text style={styles.billMeta}>
                               {new Date(o.createdAt).toLocaleString()} · {o.orderType} · {o.customerName ?? 'Walk-in'}
                             </Text>
