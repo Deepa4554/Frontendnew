@@ -28,6 +28,7 @@ import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { ordersApi } from '../../../../../core/api/ordersApi';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
+import { markKotPrinted } from '../../../../../core/printing/printedKots';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
 import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
@@ -432,6 +433,9 @@ export const TableManagementScreen = ({ navigation }: any) => {
     const batchItems = order.items.filter((i) => i.fireBatch === order.currentFireBatch && !i.voided);
     if (batchItems.length === 0) return null;
     const batch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
+    // Claim it before printing — see printedKots.ts for why (AutoKotPrintHost's safety net
+    // must not re-print a batch this screen is already handling).
+    if (batch) markKotPrinted(batch.kotNumber);
     return PrinterService.printKot({
       title: order.tableCode ? `Table ${order.tableCode}` : order.title,
       kotNumber: batch?.kotNumber || `#${order.currentFireBatch}`,

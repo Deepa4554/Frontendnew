@@ -11,6 +11,7 @@ import { useResponsive } from '../../core/utils/useResponsive';
 import { withDesktopShell } from '../../shared/components/desktop/withDesktopShell';
 import { withRouteGuard } from './withRouteGuard';
 import { PendingOrdersHost } from '../../shared/components/PendingOrdersHost';
+import { AutoKotPrintHost } from '../../shared/components/AutoKotPrintHost';
 import { usePlanCategory } from '../../core/plan/planCategory';
 import { canAccessRoute, isRouteHiddenByOrderType } from '../../core/auth/permissions';
 import { useSettings } from '../../core/api/hooks/useSettings';
@@ -357,6 +358,7 @@ export const AppNavigator = () => {
       <Stack.Screen name="SupportTicket" component={SupportTicketScreenComp} options={{ headerShown: false }} />
     </Stack.Navigator>
     <PendingOrdersHost />
+    <AutoKotPrintHost />
     </>
   );
 };

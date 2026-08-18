@@ -65,6 +65,7 @@ import {
   ordersApi,
 } from '../../../../../core/api/ordersApi';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
+import { markKotPrinted } from '../../../../../core/printing/printedKots';
 import { getPrinterConfig } from '../../../../../core/printing/printerConfig';
 import { buildTaxBreakdown } from '../../../../../core/printing/receiptFormat';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
@@ -2272,6 +2273,9 @@ export const POSCheckoutScreen = () => {
     const batch = order.fireBatches.find(
       b => b.batchNumber === order.currentFireBatch,
     );
+    // Claim it before printing — see printedKots.ts for why (AutoKotPrintHost's safety net
+    // must not re-print a batch this screen is already handling).
+    if (batch) markKotPrinted(batch.kotNumber);
     // order.title already reads "Takeaway/Delivery – <guest>" once neither tokenNumber
     // nor tableCode applies, so guestName is only added on top for Token/Table — otherwise
     // it'd repeat the same name twice.

@@ -147,11 +147,7 @@ export const ItemRateButton: React.FC<{
         hitSlop={{ top: 8, bottom: 8, left: 4, right: 4 }}
         style={[styles.rateChip, pending && { opacity: 0.5 }]}
       >
-        {/* "@" is the till's own shorthand for a per-unit rate, and it's what stops this being
-            read as a second line total — on the Tables open-order rows the chip sits right after
-            "₹240.00" for the line, where a bare "₹120" would look like the same figure disagreeing
-            with itself. "@₹120" next to "₹240.00" reads as 2 at 120, which is what it is. */}
-        <Text style={styles.rateChipText}>@₹{item.price}</Text>
+        <Text style={styles.rateChipText}>₹{item.price}</Text>
         <Icon name="pencil-outline" size={isDesktopWeb ? 10 : 11} color={COLORS.accent} />
       </TouchableOpacity>
     </Tooltip>

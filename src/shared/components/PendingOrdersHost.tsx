@@ -13,6 +13,7 @@ import { CloseButton } from './atoms/CloseButton';
 import { NonBlockingOverlay } from './NonBlockingOverlay';
 import { useResponsive } from '../../core/utils/useResponsive';
 import { PrinterService } from '../../core/printing/PrinterService';
+import { markKotPrinted } from '../../core/printing/printedKots';
 
 /**
  * Staff-Confirm Mode's floor-wide alert — mounted once at the AppNavigator level (not inside
@@ -67,6 +68,9 @@ export const PendingOrdersHost = () => {
     const batchItems = order.items.filter((i) => i.fireBatch === order.currentFireBatch && !i.voided);
     if (batchItems.length === 0) return;
     const batch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
+    // Claim it before printing, not after — AutoKotPrintHost's own poll can land while this
+    // request is still in flight, and it must see this batch as already spoken for.
+    if (batch) markKotPrinted(batch.kotNumber);
     const result = await PrinterService.printKot({
       title: order.tableCode ? `Table ${order.tableCode}` : order.title,
       kotNumber: batch?.kotNumber || `#${order.currentFireBatch}`,

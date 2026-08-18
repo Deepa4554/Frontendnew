@@ -21,6 +21,7 @@ import { getApiErrorMessage } from '../../../../../core/network/api';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
+import { markKotPrinted } from '../../../../../core/printing/printedKots';
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
 import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
 import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
@@ -205,6 +206,9 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
       return;
     }
     const currentBatch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
+    // Claim it before printing — see printedKots.ts for why (AutoKotPrintHost's safety net
+    // must not re-print a batch this screen is already handling).
+    if (currentBatch) markKotPrinted(currentBatch.kotNumber);
     setPrintingKot(true);
     const result = await PrinterService.printKot({
       title: `Token #${order.tokenNumber}`,
