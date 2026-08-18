@@ -20,14 +20,45 @@ export interface PrintResult {
  */
 const columnsFor = (config: PrinterConfig): number => config.columns ?? 32;
 
+/**
+ * Every print on this device runs through here, one at a time, tail to tail.
+ *
+ * A printer is a single serial device, not a pool: the Bluetooth path shares one BLEPrinter
+ * connection process-wide, and even the WiFi relay opens one socket per ESC/POS blob to the
+ * same IP. Fire two jobs concurrently and their bytes land interleaved — the paper comes out
+ * with lines from different tickets spliced mid-word into each other, which is what a batch
+ * of simultaneous KOTs actually produced on real hardware. Nothing about the formatting is
+ * wrong in that case; the transport just got two writers.
+ *
+ * Queued rather than rejected: a second ticket during a first one is completely normal (two
+ * stations on one order, a bill while a KOT is going), it simply has to wait its turn.
+ */
+let printQueue: Promise<unknown> = Promise.resolve();
+
+function enqueuePrint(job: () => Promise<PrintResult>): Promise<PrintResult> {
+  const run = printQueue.then(job, job);
+  // The chain must never inherit a rejection, or one failed job would sink every print after
+  // it. printLinesNow resolves its own errors into a PrintResult, but the transports it calls
+  // are third-party — this is the belt to that braces.
+  printQueue = run.then(() => undefined, () => undefined);
+  return run;
+}
+
+function printLines(lines: ReceiptLine[], config: PrinterConfig = getPrinterConfig()): Promise<PrintResult> {
+  return enqueuePrint(() => printLinesNow(lines, config));
+}
+
 /** Routes an already-built line model to whichever printer is configured on this
  * device — WiFi goes through the backend relay (works on both mobile and web, see
  * PrintController.cs), Bluetooth talks straight to the printer: via BLEPrinter on native,
  * via Web Bluetooth in Chrome/Android (see BluetoothPrinter.web.ts for that path's browser
  * limitations). Shared by printReceipt (customer bill) and printKot (kitchen ticket) below —
  * same transports, different content. `config` defaults to this device's single global
- * printer; printKot passes a station-specific one when routing a split ticket. */
-async function printLines(lines: ReceiptLine[], config: PrinterConfig = getPrinterConfig()): Promise<PrintResult> {
+ * printer; printKot passes a station-specific one when routing a split ticket.
+ *
+ * Call printLines (the queued wrapper above), not this — talking to the transport directly
+ * is what lets two tickets interleave on the paper. */
+async function printLinesNow(lines: ReceiptLine[], config: PrinterConfig): Promise<PrintResult> {
   const columns = columnsFor(config);
 
   if (config.type === 'none') {
