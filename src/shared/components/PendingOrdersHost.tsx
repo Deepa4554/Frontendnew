@@ -4,6 +4,7 @@ import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePendingConfirmationOrders, useConfirmGuestOrder, useCancelOrder } from '../../core/api/hooks/useOrders';
+import { ApiOrder } from '../../core/api/ordersApi';
 import { showToast } from '../../core/store/uiSlice';
 import { getApiErrorMessage } from '../../core/network/api';
 import { WarmColors as COLORS } from '../design/warmTheme';
@@ -11,6 +12,7 @@ import { confirmAlert } from './ConfirmDialogHost';
 import { CloseButton } from './atoms/CloseButton';
 import { NonBlockingOverlay } from './NonBlockingOverlay';
 import { useResponsive } from '../../core/utils/useResponsive';
+import { PrinterService } from '../../core/printing/PrinterService';
 
 /**
  * Staff-Confirm Mode's floor-wide alert — mounted once at the AppNavigator level (not inside
@@ -54,6 +56,30 @@ export const PendingOrdersHost = () => {
     seenIds.current = currentIds;
   }, [orders, dispatch]);
 
+  // Confirming a guest QR order fires it server-side (OrdersController.ConfirmGuestOrder)
+  // exactly like a staff Fire — but unlike every staff-facing screen (TableManagementScreen,
+  // POSCheckoutScreen, ...), which each print the newly-fired batch themselves right after
+  // firing, this global host never did. A guest's own phone has no printer attached, so
+  // without this the kitchen never got a physical ticket for anything ordered by QR — the
+  // order was genuinely in the kitchen's queue, just with no paper to show for it. Same
+  // batch-filtering logic as TableManagementScreen.printCurrentKot.
+  const autoPrintKot = async (order: ApiOrder) => {
+    const batchItems = order.items.filter((i) => i.fireBatch === order.currentFireBatch && !i.voided);
+    if (batchItems.length === 0) return;
+    const batch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
+    const result = await PrinterService.printKot({
+      title: order.tableCode ? `Table ${order.tableCode}` : order.title,
+      kotNumber: batch?.kotNumber || `#${order.currentFireBatch}`,
+      time: new Date(batch?.firedAt ?? order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      guestName: order.tableCode ? order.guestName : undefined,
+      items: batchItems.map((i) => ({
+        name: i.name, qty: i.qty, variantName: i.variantName, modifier: i.modifier, stationName: i.stationName, vegNonVegType: i.vegNonVegType,
+        selectedModifiers: i.selectedModifiers, subtitle: i.subtitle,
+      })),
+    });
+    dispatch(showToast({ message: result.ok ? 'KOT sent to kitchen printer.' : result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'warning' }));
+  };
+
   const handleConfirm = async (id: number) => {
     try {
       const result = await confirmOrder.mutateAsync(id);
@@ -64,6 +90,7 @@ export const PendingOrdersHost = () => {
         dispatch(showToast({ message: 'Guest cart was empty — order removed.', icon: 'information-outline', tone: 'warning' }));
       } else {
         dispatch(showToast({ message: 'Order confirmed — sent to kitchen.', icon: 'check-circle', tone: 'success' }));
+        await autoPrintKot(result);
       }
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not confirm order'), icon: 'alert-circle-outline', tone: 'danger' }));
