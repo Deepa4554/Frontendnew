@@ -369,10 +369,16 @@ const MenuRow = React.memo(
             next to the name instead of staying pinned to the right edge like
             every other row. */}
             <View style={styles.menuSubtitleFillDesktop}>
+              {/* Combo contents ("Burger + Fries + Cold Coffee") routinely run longer than the
+              row has room for and get cut off with "…" — the single-line clamp still has to
+              stay (there's no vertical room to wrap), but a hover tooltip at least lets staff
+              read the full list without opening the item. */}
               {!!item.subtitle && (
-                <Text style={styles.menuSubtitleDesktop} numberOfLines={1}>
-                  · {item.subtitle}
-                </Text>
+                <Tooltip label={item.subtitle} placement="bottom">
+                  <Text style={styles.menuSubtitleDesktop} numberOfLines={1}>
+                    · {item.subtitle}
+                  </Text>
+                </Tooltip>
               )}
             </View>
             <Text style={styles.menuPriceDesktop}>
