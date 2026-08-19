@@ -153,6 +153,29 @@ export const customersApi = {
   lookupByPhone: (phone: string) => apiClient.get<CustomerLookup>(`/customers/by-phone/${phone}`).then((r) => r.data),
   list: (params?: { search?: string; page?: number; pageSize?: number }) =>
     apiClient.get<PagedResult<CustomerSummary>>('/customers', { params }).then((r) => r.data),
+  /**
+   * Every customer, walked one page at a time — for the directory's export, which has to
+   * cover the whole book rather than whatever the screen happens to be showing.
+   *
+   * Asking for one enormous page does NOT work and fails silently: the server clamps pageSize
+   * to Pagination.MaxPageSize (100), so `pageSize: 100000` returns exactly 100 customers and a
+   * `totalCount` saying there are more — an export that looks complete and quietly isn't.
+   * Hence the loop, which keeps going until it has as many rows as `totalCount` claims.
+   *
+   * `totalCount` is re-read every page rather than trusted once: customers can be created
+   * while this runs. The page cap is a backstop against a count that never settles, not a
+   * limit anyone should hit — 200 pages is 20,000 customers.
+   */
+  listAll: async (search?: string): Promise<CustomerSummary[]> => {
+    const pageSize = 100;
+    const all: CustomerSummary[] = [];
+    for (let page = 1; page <= 200; page++) {
+      const result = await customersApi.list({ search, page, pageSize });
+      all.push(...result.items);
+      if (all.length >= result.totalCount || result.items.length === 0) break;
+    }
+    return all;
+  },
   get: (id: number) => apiClient.get<CustomerDetail>(`/customers/${id}`).then((r) => r.data),
   create: (req: CreateCustomerRequest) => apiClient.post<CustomerSummary>('/customers', req).then((r) => r.data),
   update: (id: number, req: UpdateCustomerRequest) => apiClient.patch<CustomerSummary>(`/customers/${id}`, req).then((r) => r.data),

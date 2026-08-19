@@ -10,7 +10,7 @@ import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { selectTableForOrder, resumeOrder } from '../../../../../core/store/tablesSlice';
 import { canManageTables, isOwnerOrManager } from '../../../../../core/auth/permissions';
-import { useTables, useCreateTable, useRevokeSession, useMergeTable, useUnmergeTable } from '../../../../../core/api/hooks/useTables';
+import { useTables, useCreateTable, useUpdateTable, useDeleteTable, useRevokeSession, useMergeTable, useUnmergeTable } from '../../../../../core/api/hooks/useTables';
 import {
   useOrders,
   useOrder,
@@ -123,6 +123,8 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const activeOrders = (ordersPage?.items ?? []).filter((o) => o.tableCode);
   const role = useSelector((s: any) => s.auth.user?.role);
   const createTable = useCreateTable();
+  const updateTable = useUpdateTable();
+  const deleteTable = useDeleteTable();
   const payOrder = usePayOrder();
   const fireOrder = useFireOrder();
   const cancelOrder = useCancelOrder();
@@ -155,6 +157,16 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
   const [occupiedModal, setOccupiedModal] = useState<ApiTable | null>(null);
   const [addModalVisible, setAddModalVisible] = useState(false);
+  // The table currently being edited (rename / seats / delete), or null. Held as the whole
+  // ApiTable rather than an id so the modal can show what it started from even after a
+  // refetch drops the row — e.g. the delete that just succeeded.
+  const [editingTable, setEditingTable] = useState<ApiTable | null>(null);
+  const [editName, setEditName] = useState('');
+  const [editSeats, setEditSeats] = useState(4);
+  // Second stage of the delete: the modal swaps its actions for a confirm strip rather than
+  // firing on the first tap. Deleting a table is not undoable and the button sits next to
+  // Save, so a mis-tap has to cost a second deliberate one.
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
   const [newSeats, setNewSeats] = useState(4);
   // The new table's display name (its code — what every order records as TableCode, and what
   // the tile shows). Optional: left blank the server auto-numbers the next "T{n}", which is
@@ -605,6 +617,68 @@ export const TableManagementScreen = ({ navigation }: any) => {
     setNewTableName('');
   };
 
+  const openEditModal = (table: ApiTable) => {
+    setEditingTable(table);
+    setEditName(table.code);
+    setEditSeats(table.seats);
+    setConfirmingDelete(false);
+  };
+
+  const closeEditModal = () => {
+    setEditingTable(null);
+    setEditName('');
+    setConfirmingDelete(false);
+  };
+
+  const handleSaveTable = async () => {
+    if (!editingTable) return;
+    const name = editName.trim();
+    if (!name) {
+      dispatch(showToast({ message: 'Table name cannot be empty.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    const renaming = name !== editingTable.code;
+    // Same local pre-check as Add — saves a round trip and points at the field to change.
+    // Compared against every OTHER table, since keeping your own name is not a clash.
+    if (renaming && allTables.some((t) => t.id !== editingTable.id && t.code.toLowerCase() === name.toLowerCase())) {
+      dispatch(showToast({ message: `A table named "${name}" already exists.`, icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    try {
+      const res = await updateTable.mutateAsync({ id: editingTable.id, code: name, seats: editSeats });
+      // A rename silently invalidates the QR sticker physically taped to that table — the
+      // token encodes the table's name, not its id. Staff have no way to discover that until
+      // a guest's scan fails, so the toast has to say it, and stays a warning (not a success)
+      // to survive being skim-read.
+      if (res.qrCodeInvalidated) {
+        dispatch(showToast({
+          message: `Renamed to ${name}. Reprint this table's QR — the old one no longer works.`,
+          icon: 'qrcode-remove',
+          tone: 'warning',
+        }));
+      } else {
+        dispatch(showToast({ message: 'Table updated', icon: 'check-circle-outline', tone: 'success' }));
+      }
+      closeEditModal();
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not update table'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const handleDeleteTable = async () => {
+    if (!editingTable) return;
+    try {
+      await deleteTable.mutateAsync(editingTable.id);
+      dispatch(showToast({ message: `Table ${editingTable.code} deleted`, icon: 'check-circle-outline', tone: 'success' }));
+      closeEditModal();
+    } catch (err) {
+      // The server refuses a table that is merged or has an open order, and says which —
+      // surface its message rather than a generic one, since the fix differs for each.
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not delete table'), icon: 'alert-circle-outline', tone: 'danger' }));
+      setConfirmingDelete(false);
+    }
+  };
+
   const handleAddTable = async () => {
     const targetZone = newZoneMode ? newZoneName.trim() : activeZone;
     if (newZoneMode && !targetZone) {
@@ -763,6 +837,21 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 </View>
                 {table.status === 'occupied' && (
                   <Icon name="account-multiple" size={18} color={style.text} style={styles.tileTopIcon} />
+                )}
+
+                {/* Rename / resize / delete. Only on EMPTY tiles: the status badge sits
+                    top-right there, leaving this corner free, and every edit the sheet offers
+                    is one the server refuses on an occupied table anyway. Hidden mid-picker so
+                    it can't be mistaken for choosing a Shift/Merge target. */}
+                {canAdd && !pickerActive && table.status === 'empty' && (
+                  <TouchableOpacity
+                    style={styles.tileEditBtn}
+                    onPress={() => openEditModal(table)}
+                    accessibilityLabel={`Edit table ${table.code}`}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon name="pencil-outline" size={15} color={style.text} />
+                  </TouchableOpacity>
                 )}
 
                 <Text style={[styles.tileId, { color: style.text }]} numberOfLines={1}>{table.code}</Text>
@@ -1339,6 +1428,93 @@ export const TableManagementScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* ---------- Edit / Delete Table (Owner/Manager only) ---------- */}
+      <Modal
+        visible={!!editingTable}
+        transparent
+        animationType="fade"
+        onRequestClose={closeEditModal}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Edit {editingTable?.code}</Text>
+
+            <Text style={styles.modalLine}>Table Name</Text>
+            <View style={styles.newZoneInputWrap}>
+              <TextInput
+                style={styles.newZoneInput}
+                value={editName}
+                onChangeText={setEditName}
+                placeholder="e.g. T5, Corner Booth"
+                placeholderTextColor={COLORS.placeholder}
+                maxLength={20}
+                autoCapitalize="characters"
+              />
+            </View>
+            {/* Shown only while the name is actually different, so it reads as a consequence
+                of what the user just typed rather than a permanent warning they learn to
+                ignore. The QR encodes the NAME, so renaming orphans the printed sticker. */}
+            {!!editingTable && editName.trim() !== editingTable.code && (
+              <Text style={styles.editWarnText}>
+                Renaming breaks this table's printed QR code — you'll need to reprint it.
+              </Text>
+            )}
+
+            <Text style={[styles.modalLine, { marginTop: 14 }]}>Seats</Text>
+            <View style={styles.seatStepperRow}>
+              <TouchableOpacity style={styles.seatStepBtn} onPress={() => setEditSeats((n) => Math.max(1, n - 1))}>
+                <Text style={styles.seatStepText}>−</Text>
+              </TouchableOpacity>
+              <Text style={styles.seatValue}>{editSeats}</Text>
+              <TouchableOpacity style={styles.seatStepBtn} onPress={() => setEditSeats((n) => n + 1)}>
+                <Text style={styles.seatStepText}>+</Text>
+              </TouchableOpacity>
+            </View>
+
+            {confirmingDelete ? (
+              <>
+                <Text style={[styles.editWarnText, { marginTop: 16 }]}>
+                  Delete {editingTable?.code} permanently? Past orders placed here keep their records.
+                </Text>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setConfirmingDelete(false)}>
+                    <Text style={styles.modalCancelText}>Keep Table</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalDeleteBtn} onPress={handleDeleteTable} disabled={deleteTable.isPending}>
+                    {deleteTable.isPending ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Icon name="trash-can-outline" size={16} color="#FFFFFF" />
+                    )}
+                    <Text style={styles.modalPayText}>Delete</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            ) : (
+              <>
+                <TouchableOpacity style={styles.editDeleteLink} onPress={() => setConfirmingDelete(true)}>
+                  <Icon name="trash-can-outline" size={15} color={COLORS.danger} />
+                  <Text style={styles.editDeleteLinkText}>Delete this table</Text>
+                </TouchableOpacity>
+                <View style={styles.modalActions}>
+                  <TouchableOpacity style={styles.modalCancelBtn} onPress={closeEditModal}>
+                    <Text style={styles.modalCancelText}>Cancel</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity style={styles.modalPayBtn} onPress={handleSaveTable} disabled={updateTable.isPending}>
+                    {updateTable.isPending ? (
+                      <ActivityIndicator size="small" color="#FFFFFF" />
+                    ) : (
+                      <Icon name="content-save-outline" size={16} color="#FFFFFF" />
+                    )}
+                    <Text style={styles.modalPayText}>Save</Text>
+                  </TouchableOpacity>
+                </View>
+              </>
+            )}
+          </View>
+        </View>
+      </Modal>
+
       {/* Same wastage bargain as the void prompt below, for a quantity cut rather than a
           whole line. */}
       <QtyReasonPrompt editor={qtyEditor} />
@@ -1537,6 +1713,15 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   },
   tileSecondaryBtn: { marginTop: 6, alignItems: 'center' },
   tileSecondaryBtnText: { fontSize: fs(10), fontWeight: '700', color: COLORS.muted, textDecorationLine: 'underline' },
+  // Mirror of tileTopIcon on the opposite corner. Only empty tiles show this, and their
+  // status badge is the right-hand one (tileStatusBadgeRight), so the two never collide.
+  tileEditBtn: {
+    position: 'absolute',
+    top: 10,
+    left: 10,
+    opacity: 0.75,
+    zIndex: 1,
+  },
   efficiencyCard: {
     backgroundColor: COLORS.cardAlt,
     marginHorizontal: isDesktopWeb ? 12 : 12,
@@ -1775,6 +1960,36 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     backgroundColor: COLORS.button,
     borderRadius: 6,
     paddingVertical: isDesktopWeb ? 10 : 10.5,
+  },
+  // Same shape as modalPayBtn so the confirm strip doesn't re-layout when it replaces
+  // Save — only the colour says this one is destructive.
+  modalDeleteBtn: {
+    flex: 1.3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: isDesktopWeb ? 6 : 6,
+    backgroundColor: COLORS.danger,
+    borderRadius: 6,
+    paddingVertical: isDesktopWeb ? 10 : 10.5,
+  },
+  editWarnText: {
+    marginTop: 8,
+    fontSize: fs(11),
+    lineHeight: fs(15),
+    color: COLORS.warning,
+  },
+  editDeleteLink: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    marginTop: 18,
+  },
+  editDeleteLinkText: {
+    fontSize: fs(12),
+    fontWeight: '700',
+    color: COLORS.danger,
   },
   modalPayText: {
     fontSize: fs(14),

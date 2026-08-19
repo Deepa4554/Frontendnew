@@ -3,6 +3,8 @@ import { buildEscPosFromLines, escPosToBase64 } from './escpos';
 import { PrintableKot, PrintableKotItem, PrintableReceipt, PrintableTokenSlip, ReceiptLine, buildKotLines, buildReceiptLines, buildTokenSlipLines } from './receiptFormat';
 import { printApi } from '../api/printApi';
 import { BluetoothPrinter } from './BluetoothPrinter';
+import { BrowserPrinter } from './BrowserPrinter';
+import { getLogoRaster } from './logoRaster';
 
 export interface PrintResult {
   ok: boolean;
@@ -52,9 +54,11 @@ function printLines(lines: ReceiptLine[], config: PrinterConfig = getPrinterConf
  * device — WiFi goes through the backend relay (works on both mobile and web, see
  * PrintController.cs), Bluetooth talks straight to the printer: via BLEPrinter on native,
  * via Web Bluetooth in Chrome/Android (see BluetoothPrinter.web.ts for that path's browser
- * limitations). Shared by printReceipt (customer bill) and printKot (kitchen ticket) below —
- * same transports, different content. `config` defaults to this device's single global
- * printer; printKot passes a station-specific one when routing a split ticket.
+ * limitations), and Browser hands the receipt to the OS print dialog, which is the only one
+ * of the three that reaches a USB printer (see BrowserPrinter.web.ts). Shared by printReceipt
+ * (customer bill) and printKot (kitchen ticket) below — same transports, different content.
+ * `config` defaults to this device's single global printer; printKot passes a
+ * station-specific one when routing a split ticket.
  *
  * Call printLines (the queued wrapper above), not this — talking to the transport directly
  * is what lets two tickets interleave on the paper. */
@@ -78,6 +82,18 @@ async function printLinesNow(lines: ReceiptLine[], config: PrinterConfig): Promi
     }
   }
 
+  if (config.type === 'browser') {
+    try {
+      await BrowserPrinter.printLines(lines, columns);
+      // Deliberately not "Sent to printer" like the other two: this only got as far as opening
+      // the dialog. The browser tells a page nothing about what happened after that — confirmed,
+      // sent elsewhere, or cancelled all look identical from here.
+      return { ok: true, message: 'Opened the print dialog — pick your printer and confirm.' };
+    } catch (err) {
+      return { ok: false, message: extractErrorMessage(err) };
+    }
+  }
+
   // Bluetooth
   if (!config.bluetoothAddress) {
     return { ok: false, message: 'No Bluetooth printer paired. Check Printer Settings.' };
@@ -96,9 +112,16 @@ export const PrinterService = {
    * the order's ready to be paid (see Token Dashboard's "Generate Bill"). `configOverride`
    * lets Printer Settings test-print against a just-edited (not yet saved) or
    * station-scoped config instead of this device's stored default. */
-  printReceipt(receipt: PrintableReceipt, configOverride?: PrinterConfig): Promise<PrintResult> {
+  async printReceipt(receipt: PrintableReceipt, configOverride?: PrinterConfig): Promise<PrintResult> {
     const config = configOverride ?? getPrinterConfig();
-    return printLines(buildReceiptLines(receipt, columnsFor(config)), config);
+    const columns = columnsFor(config);
+    // Only the two transports that speak raw ESC/POS can use a pre-dithered raster (see
+    // logoRaster.ts) — fetching it for 'browser' (which wants the real image, via
+    // receipt.logoUrl instead — see buildReceiptLines) or 'none' (which prints nothing at
+    // all) would just be a wasted request on the way to a bill that was never going to carry
+    // the raster bytes anyway.
+    const logoRaster = config.type === 'wifi' || config.type === 'bluetooth' ? await getLogoRaster(columns) : null;
+    return printLines(buildReceiptLines(receipt, columns, logoRaster), config);
   },
   /** Kitchen ticket — items only, no prices. See Token Dashboard's "Print KOT". When the
    * order's items span more than one kitchen station (see PrintableKotItem.stationName),

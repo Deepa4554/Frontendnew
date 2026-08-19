@@ -62,6 +62,9 @@ export interface ApiSettings {
   receiptShowFooter: boolean;
   /** GST/tax registration number line — blank/null means don't print one. */
   gstNumber: string | null;
+  /** Food/trade licence number (FSSAI, shop licence), set on the Cafe Profile screen and
+   * printed on every bill. Null until an Owner enters one. */
+  licenceNumber: string | null;
   /** The cafe's UPI address ("cafe@okaxis") that bill QR codes are addressed to. Null until
    * an Owner sets one in Cafe Settings, and while it's null no UPI QR is offered anywhere —
    * see buildUpiPaymentUri and buildReceiptLines. */

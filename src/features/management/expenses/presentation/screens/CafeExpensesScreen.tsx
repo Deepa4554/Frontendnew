@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
@@ -12,7 +12,7 @@ import {
   useCafeExpenses, useAddCafeExpense, useRemoveCafeExpense,
   useDailyPurchaseSheet, useSaveDailyPurchaseSheet, useAddPurchaseListItem, useRemovePurchaseListItem,
 } from '../../../../../core/api/hooks/useExpenses';
-import { ExpenseCategory, PaymentMode } from '../../../../../core/api/expensesApi';
+import { CafeExpense, ExpenseCategory, PaymentMode, UNSET_PAYMENT_MODE } from '../../../../../core/api/expensesApi';
 import { getApiErrorMessage } from '../../../../../core/network/api';
 import { ScreenContainer } from '../../../../../core/components/ScreenContainer';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
@@ -53,11 +53,24 @@ const CATEGORY_ICONS: Record<ExpenseCategory, string> = {
   Other: 'dots-horizontal-circle-outline',
 };
 
-const PAYMENT_MODES: PaymentMode[] = ['Cash', 'UPI', 'Card'];
+const PAYMENT_MODES: PaymentMode[] = ['Cash', 'UPI', 'Card', 'Due'];
 const PAYMENT_MODE_ICON: Record<PaymentMode, string> = {
   Cash: 'cash',
   UPI: 'qrcode-scan',
   Card: 'credit-card-outline',
+  // Same notebook the POS uses for its own Due tender (PaymentMethodPicker.METHOD_ICON) —
+  // different direction of credit, but staff read the icon as "udhaar" either way.
+  Due: 'notebook-outline',
+};
+
+/** The mode a row is filtered and totalled under. Rows saved before the field existed have
+ * none, and are shown as their own bucket rather than being read as Cash. */
+const modeOf = (e: CafeExpense) => e.paymentMode ?? UNSET_PAYMENT_MODE;
+const ALL_MODES = 'All';
+const MODE_FILTER_ICON: Record<string, string> = {
+  [ALL_MODES]: 'filter-variant',
+  ...PAYMENT_MODE_ICON,
+  [UNSET_PAYMENT_MODE]: 'help-circle-outline',
 };
 
 export const CafeExpensesScreen = () => {
@@ -76,6 +89,10 @@ export const CafeExpensesScreen = () => {
   const [category, setCategory] = useState<ExpenseCategory>('Rent');
   const [purpose, setPurpose] = useState('');
   const [spentBy, setSpentBy] = useState('');
+  const [expenseMode, setExpenseMode] = useState<PaymentMode>('Cash');
+
+  // Which payment mode the history list below is narrowed to; ALL_MODES = no filter.
+  const [modeFilter, setModeFilter] = useState<string>(ALL_MODES);
 
   // ---------- Daily purchase list ----------
   // Daily opens first on purpose: filling the day's sheet is the recurring job, while the
@@ -205,11 +222,29 @@ export const CafeExpensesScreen = () => {
     ]);
   };
 
+  // Chips are built from the modes actually present, so tapping one never lands on an empty
+  // list. The active filter is kept on the end regardless: deleting the last UPI row would
+  // otherwise take the UPI chip away while the list stayed filtered to it, with nothing left
+  // to tap to get back.
+  const modeChips = useMemo(() => {
+    const present = new Set((data?.recent ?? []).map(modeOf));
+    const chips: string[] = [ALL_MODES, ...PAYMENT_MODES.filter((m) => present.has(m))];
+    if (present.has(UNSET_PAYMENT_MODE)) chips.push(UNSET_PAYMENT_MODE);
+    if (!chips.includes(modeFilter)) chips.push(modeFilter);
+    return chips;
+  }, [data?.recent, modeFilter]);
+
+  const visibleExpenses = (data?.recent ?? []).filter((e) => modeFilter === ALL_MODES || modeOf(e) === modeFilter);
+  // All-time for the picked mode, not this month's — it's the total of exactly what's listed
+  // underneath, so the two can't disagree.
+  const visibleTotal = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
+
   const openModal = () => {
     setAmount('');
     setCategory('Rent');
     setPurpose('');
     setSpentBy('');
+    setExpenseMode('Cash');
     setModalVisible(true);
   };
 
@@ -228,7 +263,7 @@ export const CafeExpensesScreen = () => {
       return;
     }
     try {
-      const result = await addExpense.mutateAsync({ amount: amt, category, purpose: purpose.trim(), spentBy: spentBy.trim() });
+      const result = await addExpense.mutateAsync({ amount: amt, category, purpose: purpose.trim(), spentBy: spentBy.trim(), paymentMode: expenseMode });
       setModalVisible(false);
       // Above ApprovalThresholds.ExpenseAmount, the backend holds this as a pending
       // ApprovalRequest for the Owner instead of recording it — nothing's on the books yet.
@@ -405,16 +440,55 @@ export const CafeExpensesScreen = () => {
           </View>
         )}
 
+        {!!data?.byPaymentModeThisMonth.length && (
+          <View style={styles.categoryCard}>
+            <Text style={styles.sectionTitle}>THIS MONTH BY PAYMENT MODE</Text>
+            {data.byPaymentModeThisMonth.map((m) => (
+              <View key={m.mode} style={styles.categoryRow}>
+                <Icon name={MODE_FILTER_ICON[m.mode] ?? 'circle'} size={16} color={COLORS.accent} />
+                <Text style={styles.categoryName}>{m.mode}</Text>
+                <Text style={styles.categoryAmount}>{money(m.total)}</Text>
+              </View>
+            ))}
+          </View>
+        )}
+
         <TouchableOpacity style={styles.addBtn} onPress={openModal}>
           <Icon name="plus" size={16} color="#FFFFFF" />
           <Text style={styles.addBtnText}>Add Expense</Text>
         </TouchableOpacity>
 
-        <Text style={styles.sectionTitle}>ALL EXPENSES</Text>
+        <View style={styles.listHeaderRow}>
+          <Text style={[styles.sectionTitle, styles.listHeaderTitle]}>
+            {modeFilter === ALL_MODES ? 'ALL EXPENSES' : `${modeFilter.toUpperCase()} EXPENSES`}
+          </Text>
+          {!isLoading && visibleExpenses.length > 0 && (
+            <Text style={styles.listHeaderTotal}>{money(visibleTotal)}</Text>
+          )}
+        </View>
+
+        {!isLoading && modeChips.length > 1 && (
+          <View style={styles.modeFilterRow}>
+            {modeChips.map((m) => (
+              <TouchableOpacity
+                key={m}
+                style={[styles.paymentModePill, styles.modeFilterPill, modeFilter === m && styles.paymentModePillActive]}
+                onPress={() => setModeFilter(m)}
+              >
+                <Icon name={MODE_FILTER_ICON[m] ?? 'circle'} size={13} color={modeFilter === m ? '#FFFFFF' : COLORS.muted} />
+                <Text style={[styles.paymentModePillText, modeFilter === m && styles.paymentModePillTextActive]}>{m}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {isLoading && <SkeletonList rows={6} />}
         {!isLoading && (data?.recent.length ?? 0) === 0 && <Text style={styles.emptyText}>No expenses logged yet.</Text>}
+        {!isLoading && (data?.recent.length ?? 0) > 0 && visibleExpenses.length === 0 && (
+          <Text style={styles.emptyText}>Nothing paid by {modeFilter} yet.</Text>
+        )}
 
-        {data?.recent.map((e) => (
+        {visibleExpenses.map((e) => (
           <View key={e.id} style={styles.expenseCard}>
             <View style={styles.expenseIconBox}>
               <Icon name={CATEGORY_ICONS[e.category] ?? 'circle'} size={18} color={COLORS.heading} />
@@ -425,7 +499,7 @@ export const CafeExpensesScreen = () => {
                 <Text style={styles.expenseAmount}>{money(e.amount)}</Text>
               </View>
               <Text style={styles.expenseMeta}>
-                {e.category} · By {e.spentBy} · {new Date(e.spentAt).toLocaleDateString()}
+                {e.category} · {modeOf(e)} · By {e.spentBy} · {new Date(e.spentAt).toLocaleDateString()}
               </Text>
             </View>
             <TouchableOpacity style={styles.deleteBtn} onPress={() => confirmDelete(e.id, e.purpose)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
@@ -471,6 +545,23 @@ export const CafeExpensesScreen = () => {
                 </TouchableOpacity>
               ))}
             </View>
+
+            <Text style={styles.fieldLabel}>Paid via</Text>
+            <View style={styles.paymentModeRow}>
+              {PAYMENT_MODES.map((m) => (
+                <TouchableOpacity
+                  key={m}
+                  style={[styles.paymentModePill, expenseMode === m && styles.paymentModePillActive]}
+                  onPress={() => setExpenseMode(m)}
+                >
+                  <Icon name={PAYMENT_MODE_ICON[m]} size={14} color={expenseMode === m ? '#FFFFFF' : COLORS.muted} />
+                  <Text style={[styles.paymentModePillText, expenseMode === m && styles.paymentModePillTextActive]}>{m}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {expenseMode === 'Due' && (
+              <Text style={styles.modeHint}>Not paid to the vendor yet — still counted in this month's spend.</Text>
+            )}
 
             <Text style={styles.fieldLabel}>Purpose</Text>
             <View style={{ borderRadius: 8 }}>
@@ -737,7 +828,22 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   // (amount, mode), so it reads as a quick centered prompt, not a form.
   entrySheet: { width: '100%', maxWidth: 300, backgroundColor: COLORS.background, borderRadius: 12, padding: 12, overflow: 'hidden' },
   entryAmountInput: { fontSize: 18, fontWeight: '700', textAlign: 'center' },
-  paymentModeRow: { flexDirection: 'row', gap: 6 },
+  // Wraps since Due made it four pills — they no longer fit one line on a narrow phone.
+  paymentModeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  modeHint: { fontSize: 11, color: COLORS.muted, marginTop: 5 },
+  modeFilterRow: {
+    flexDirection: 'row', flexWrap: 'wrap', gap: 6,
+    marginHorizontal: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 9 : 9.5,
+  },
+  // Drops the equal-width flex the form pills use: there can be six of these, and splitting a
+  // phone's width six ways clips "Not set". Sized to content and wrapped instead.
+  modeFilterPill: { flex: 0, paddingHorizontal: 10, paddingVertical: 6 },
+  listHeaderRow: { flexDirection: 'row', alignItems: 'center' },
+  listHeaderTitle: { flex: 1 },
+  listHeaderTotal: {
+    fontSize: 12, fontWeight: '700', color: COLORS.heading,
+    marginRight: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 7 : 7.5,
+  },
   paymentModePill: {
     flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4,
     paddingVertical: 7, borderRadius: 8, backgroundColor: COLORS.cardAlt,

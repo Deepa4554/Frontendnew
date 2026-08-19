@@ -80,6 +80,8 @@ export const BillingScreen = () => {
       guestPhone: openOrder.guestPhone ?? undefined,
       waiterName: openOrder.servedByName ?? openOrder.createdByName,
       gstNumber: settings?.gstNumber,
+      licenceNumber: settings?.licenceNumber,
+      logoUrl: settings?.logoUrl,
       upiVpa: settings?.upiVpa,
       amountDue: openOrder.balanceDue ?? openOrder.total,
       items: openOrder.items,

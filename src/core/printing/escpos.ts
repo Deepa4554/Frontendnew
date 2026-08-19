@@ -113,6 +113,19 @@ function renderLine(b: ByteBuilder, line: ReceiptLine, columns: number) {
       b.push(...CMD.ALIGN_LEFT);
       return;
     }
+    case 'image': {
+      // No raster bytes means either this cafe has no logo, or (on the 'browser' transport,
+      // which never fetches one) the caller only supplied previewUrl — either way, nothing
+      // for THIS renderer to do; escpos.ts never touches previewUrl.
+      if (!line.escposBytes) return;
+      // Already the complete "GS v 0" command (header + packed bitmap) built server-side —
+      // see ThermalLogoRasterizer.cs — so it's written out verbatim, the same way
+      // qrCommand's bytes are, just not composed here.
+      b.push(...CMD.ALIGN_CENTER);
+      b.push(...Array.from(line.escposBytes));
+      b.push(...CMD.ALIGN_LEFT);
+      return;
+    }
   }
 }
 

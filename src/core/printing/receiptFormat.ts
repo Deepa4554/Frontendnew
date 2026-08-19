@@ -116,6 +116,13 @@ export interface PrintableReceipt {
   waiterName?: string | null;
   /** GST/tax registration number — blank/undefined means don't print a line for it. */
   gstNumber?: string | null;
+  /** Food/trade licence number (FSSAI, shop licence). Same rule as gstNumber: no value,
+   * no line — a bill shouldn't carry an empty "Licence No:" label. */
+  licenceNumber?: string | null;
+  /** The cafe's own logo URL (Cafe Profile screen) — only consumed by the 'browser' transport
+   * (see the 'image' ReceiptLine kind's own note). The ESC/POS transports get their copy of
+   * the logo from a separately pre-fetched raster, not from this field. */
+  logoUrl?: string | null;
   items: PrintableReceiptItem[];
   subtotal: number;
   discountPct?: number;
@@ -158,7 +165,20 @@ export type ReceiptLine =
   // (escpos.ts); the BLE transport has no confirmed QR command and prints `fallbackText`
   // instead (see blePrinterMarkup.ts), so every caller has to say what a printer that can't
   // draw the code should tell the person holding the paper.
-  | { kind: 'qr'; data: string; size?: number; fallbackText: string };
+  | { kind: 'qr'; data: string; size?: number; fallbackText: string }
+  // The cafe's logo. Two independent, both-optional payloads because each transport needs a
+  // different form of the same image and none of them can produce the other's from it:
+  //  - `escposBytes` is a complete ESC/POS "GS v 0" raster command, pre-decoded/dithered
+  //    server-side (see logoRaster.ts / ThermalLogoRasterizer.cs) because this app has no
+  //    image-processing library on native to do that client-side. escpos.ts writes it out
+  //    verbatim, the way qrCommand's bytes already are.
+  //  - `previewUrl` is the plain logo URL, for BrowserPrinter.web.ts to hand to the OS print
+  //    driver as a real `<img>` — no dithering wanted there, the driver does its own halftoning.
+  // Only PrinterService's caller knows which transport is about to run, so buildReceiptLines
+  // takes both from the same PrintableReceipt.logoUrl / a pre-fetched raster and lets whichever
+  // renderer actually runs pick the field it understands. No confirmed BLE image command exists
+  // on the native transport, so blePrinterMarkup.ts drops this kind unconditionally.
+  | { kind: 'image'; escposBytes?: Uint8Array; previewUrl?: string };
 
 const money = (n: number) => `Rs.${n.toFixed(2)}`;
 
@@ -253,13 +273,28 @@ const twoCol = (left: string, right: string, width: number): string => {
 };
 
 /** 32 columns fits most 58mm thermal printers (the common size for small cafes); pass 48 for 80mm. */
-export function buildReceiptLines(receipt: PrintableReceipt, columns = 32): ReceiptLine[] {
+/**
+ * `logoRaster` is optional and pre-fetched by the caller (see PrinterService.printReceipt) —
+ * this function stays synchronous like every other build*Lines function, so it cannot go and
+ * fetch the bytes itself. Omit it (undefined/null) and the bill prints exactly as it did
+ * before logos existed; pass it and the logo prints above the business name.
+ *
+ * Deliberately the customer bill only — buildKotLines and buildTokenSlipLines don't take this
+ * parameter. A kitchen ticket is read by staff mid-service, not handed to a customer, and
+ * spending the paper and print time on a logo there buys nothing; a token slip is a number to
+ * be called out, same reasoning.
+ */
+export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoRaster?: Uint8Array | null): ReceiptLine[] {
   const lines: ReceiptLine[] = [];
   const push = makePush(lines, columns);
 
+  if (logoRaster || receipt.logoUrl) {
+    push({ kind: 'image', escposBytes: logoRaster ?? undefined, previewUrl: receipt.logoUrl ?? undefined });
+  }
   push({ kind: 'text', text: receipt.businessName, align: 'center', bold: true, big: true });
   if (receipt.addressLine && receipt.showAddress !== false) push({ kind: 'text', text: receipt.addressLine, align: 'center' });
   if (receipt.gstNumber) push({ kind: 'text', text: `GSTIN: ${receipt.gstNumber}`, align: 'center' });
+  if (receipt.licenceNumber) push({ kind: 'text', text: `Licence No: ${receipt.licenceNumber}`, align: 'center' });
   push({ kind: 'feed' });
 
   push({ kind: 'dashes' });

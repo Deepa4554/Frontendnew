@@ -7,9 +7,10 @@ jest.mock('./printerConfig', () => {
   return { getPrinterConfig: () => wifi, getEffectivePrinterConfig: () => wifi };
 });
 jest.mock('../api/printApi', () => ({ printApi: { printWifi: jest.fn() } }));
-// Not reached by the transport these tests exercise, but PrinterService imports it eagerly
-// and it pulls in a native module that cannot load under jest.
+// Both are only reached by the transports these tests don't exercise, but PrinterService
+// imports them eagerly and the BLE one pulls in a native module that cannot load under jest.
 jest.mock('./BluetoothPrinter', () => ({ BluetoothPrinter: { connect: jest.fn(), printLines: jest.fn() } }));
+jest.mock('./BrowserPrinter', () => ({ BrowserPrinter: { printLines: jest.fn() } }));
 
 const mockPrintWifi = printApi.printWifi as jest.MockedFunction<typeof printApi.printWifi>;
 

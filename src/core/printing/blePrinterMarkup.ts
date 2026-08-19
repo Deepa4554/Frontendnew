@@ -16,6 +16,15 @@ export function buildMarkupFromLines(lines: ReceiptLine[], columns = 32): string
       parts.push('');
       continue;
     }
+    if (line.kind === 'image') {
+      // react-native-thermal-receipt-printer's BLEPrinter exposes no image/raster command at
+      // all (only printText/printBill markup — see node_modules/.../dist/index.d.ts), unlike
+      // the WiFi and Web Bluetooth transports which both send raw ESC/POS bytes and so CAN
+      // print the logo (see escpos.ts). Dropping the line is the honest option here: there is
+      // no markup tag to fall back to the way 'qr' does, and a bill with everything except a
+      // missing logo band is a far smaller problem than one that doesn't print at all.
+      continue;
+    }
     if (line.kind === 'qr') {
       // react-native-thermal-receipt-printer's tagged-text markup has no confirmed QR
       // command — rather than silently print nothing, print the line's own plain-text

@@ -16,7 +16,10 @@ function getLocalApiOrigin(): string {
   // Use whatever IP/hostname the browser is currently accessing from,
   // just change the port to 5080 for the backend. This way localhost,
   // 192.168.x.x, or any other IP automatically works.
-  const host = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+  // `window` alone isn't enough of a guard: React Native's jest preset defines a window with
+  // no `location` on it, so reading .hostname straight off it throws at import time and takes
+  // down every suite that transitively imports this module.
+  const host = (typeof window !== 'undefined' && window.location?.hostname) || 'localhost';
   return `http://${host}:5080`;
 }
 

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Modal, View, Text, TouchableOpacity, StyleSheet, ScrollView, ActivityIndicator, Platform, Dimensions } from 'react-native';
+import { Modal, View, Text, TouchableOpacity, StyleSheet, ActivityIndicator, Platform, Dimensions } from 'react-native';
 import { useDispatch } from 'react-redux';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -15,13 +15,22 @@ import { useResponsive } from '../../core/utils/useResponsive';
 import { PrinterService } from '../../core/printing/PrinterService';
 import { markKotPrinted } from '../../core/printing/printedKots';
 
+/** How a pending order is named on screen — its table if it has one, else its own title. */
+const orderLabel = (o: { tableCode?: string | null; title: string }) =>
+  o.tableCode ? `Table ${o.tableCode}` : o.title;
+
 /**
  * Staff-Confirm Mode's floor-wide alert — mounted once at the AppNavigator level (not inside
  * any one screen) so "Table T5 — new order, confirm karein?" shows up no matter which tab a
- * staff member is on, POS/Tables/anywhere. Polls usePendingConfirmationOrders (5s — this
- * codebase has no WebSocket, see GuestSessionController) and toasts the instant a NEW pending
- * order shows up; unlike a plain toast (1.8s auto-dismiss), the floating pill below stays up
- * for as long as anything is actually waiting, so it can't be missed by someone glancing away.
+ * staff member is on, POS/Tables/anywhere. Fed by usePendingConfirmationOrders, which rides
+ * OrdersHub's realtime push with a 30s poll behind it as a safety net, and toasts when NEW
+ * pending orders show up; unlike a plain toast (1.8s auto-dismiss), the floating pill below
+ * stays up for as long as anything is actually waiting, so it can't be missed by someone
+ * glancing away.
+ *
+ * The sheet deals out ONE order at a time rather than listing them all. During a QR rush the
+ * list meant scrolling a wall of near-identical cards and tapping the wrong table's Confirm;
+ * a single card with the queue position ("Order 3 of 10") is the whole job at that moment.
  */
 export const PendingOrdersHost = () => {
   const { isDesktopWeb } = useResponsive();
@@ -32,6 +41,16 @@ export const PendingOrdersHost = () => {
   const confirmOrder = useConfirmGuestOrder();
   const cancelOrder = useCancelOrder();
   const [open, setOpen] = useState(false);
+  // Which order id is mid-request. useConfirmGuestOrder/useCancelOrder are ONE mutation
+  // object shared by every card, so their `isPending` reads true for the whole list at
+  // once — confirming a single order put a spinner on all ten and disabled them, which is
+  // exactly when staff are trying to work the queue down one by one. Tracked per id instead.
+  const [busyId, setBusyId] = useState<number | null>(null);
+  // How many of this batch have already left the queue, so the header can say "Order 3 of
+  // 10" rather than "Order 1 of 8" — the total has to hold still while staff work down the
+  // queue, otherwise the number reads like the backlog never shrinks. Maintained by the
+  // id-diff effect below, and reset once the queue actually empties.
+  const [handled, setHandled] = useState(0);
   // null on the very first render = "haven't established a baseline yet". Only orders that
   // appear AFTER that baseline trigger a toast — otherwise every app launch with something
   // already pending (e.g. from before this device was open) would toast for old news.
@@ -43,18 +62,34 @@ export const PendingOrdersHost = () => {
       seenIds.current = currentIds;
       return;
     }
-    orders
-      .filter((o) => !seenIds.current!.has(o.id))
-      .forEach((o) => {
-        dispatch(
-          showToast({
-            message: `${o.tableCode ? `Table ${o.tableCode}` : o.title} — new order, confirm karein?`,
-            icon: 'bell-alert-outline',
-            tone: 'warning',
-          }),
-        );
-      });
+    const fresh = orders.filter((o) => !seenIds.current!.has(o.id));
+    // Orders that LEFT the queue since the last tick — confirmed or rejected here, or dealt
+    // with by someone on another device. Counted off the id diff rather than incremented at
+    // the call site so that `handled` rises in exactly the same render `queue.length` falls;
+    // that lockstep is what keeps the header's "of N" total from flickering (bumping it when
+    // the mutation resolved showed "of 11" out of 10 until the refetch caught up), and it
+    // keeps the count honest when an order is confirmed on another device entirely.
+    let departed = 0;
+    seenIds.current.forEach((id) => {
+      if (!currentIds.has(id)) departed += 1;
+    });
     seenIds.current = currentIds;
+    if (departed > 0) setHandled((n) => n + departed);
+    if (fresh.length === 0) return;
+    // Collapsed into a single toast deliberately. A QR rush lands several orders in one
+    // push, and uiSlice holds exactly one toast at a time — dispatching per order had each
+    // overwrite the last, so only the final table's name was ever readable. The count is
+    // what staff act on; the per-order detail is in the pill and the sheet below.
+    dispatch(
+      showToast({
+        message:
+          fresh.length === 1
+            ? `${orderLabel(fresh[0])} — new order, confirm karein?`
+            : `${fresh.length} new orders — confirm karein?`,
+        icon: 'bell-alert-outline',
+        tone: 'warning',
+      }),
+    );
   }, [orders, dispatch]);
 
   // Confirming a guest QR order fires it server-side (OrdersController.ConfirmGuestOrder)
@@ -85,6 +120,8 @@ export const PendingOrdersHost = () => {
   };
 
   const handleConfirm = async (id: number) => {
+    if (busyId !== null) return;
+    setBusyId(id);
     try {
       const result = await confirmOrder.mutateAsync(id);
       // The server auto-cancels a pending order whose cart came back empty (the guest
@@ -98,21 +135,27 @@ export const PendingOrdersHost = () => {
       }
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not confirm order'), icon: 'alert-circle-outline', tone: 'danger' }));
+    } finally {
+      setBusyId(null);
     }
   };
 
   const handleReject = (id: number, label: string) => {
+    if (busyId !== null) return;
     confirmAlert(`Reject ${label}?`, "This cancels the guest's cart — nothing reaches the kitchen.", [
       { text: 'Keep waiting', style: 'cancel' },
       {
         text: 'Reject',
         style: 'destructive',
         onPress: async () => {
+          setBusyId(id);
           try {
             await cancelOrder.mutateAsync({ id, reason: 'Rejected by staff before confirmation' });
             dispatch(showToast({ message: 'Order rejected.', icon: 'close-circle-outline', tone: 'warning' }));
           } catch (err) {
             dispatch(showToast({ message: getApiErrorMessage(err, 'Could not reject order'), icon: 'alert-circle-outline', tone: 'danger' }));
+          } finally {
+            setBusyId(null);
           }
         },
       },
@@ -121,12 +164,24 @@ export const PendingOrdersHost = () => {
 
   // The component stays mounted after the queue empties (it just renders null), so an
   // `open` left true from the last batch would make the NEXT pending order skip the pill
-  // and pop the full sheet unprompted. Reset while empty.
+  // and pop the full sheet unprompted. Same for `handled`, which would otherwise start the
+  // next batch at "Order 11 of 12". Reset both while empty.
   useEffect(() => {
-    if (orders.length === 0 && open) setOpen(false);
-  }, [orders.length, open]);
+    if (orders.length > 0) return;
+    if (open) setOpen(false);
+    if (handled !== 0) setHandled(0);
+  }, [orders.length, open, handled]);
 
   if (orders.length === 0) return null;
+
+  // FIFO. The API hands these back newest-first (OrdersController's
+  // OrderByDescending(CreatedAt)), which is exactly backwards for a queue that shows one at
+  // a time — it would serve the guest who just ordered and leave the one who has been
+  // waiting longest for last. Re-sorted oldest-first, with id as the tiebreaker for orders
+  // punched in the same instant (the server tiebreaks on it for the same reason).
+  const queue = [...orders].sort((a, b) => a.createdAt.localeCompare(b.createdAt) || a.id - b.id);
+  const current = queue[0];
+  const upNext = queue.slice(1);
 
   return (
     <>
@@ -150,38 +205,46 @@ export const PendingOrdersHost = () => {
         <View style={styles.overlay}>
           <View style={styles.sheet}>
             <View style={styles.sheetHeader}>
-              <Text style={styles.sheetTitle}>Confirm Guest Orders</Text>
+              <View style={styles.sheetHeading}>
+                <Text style={styles.sheetTitle}>Confirm Guest Orders</Text>
+                <Text style={styles.sheetCounter}>
+                  Order {handled + 1} of {handled + queue.length}
+                </Text>
+              </View>
               <CloseButton onPress={() => setOpen(false)} size={18} color={COLORS.heading} />
             </View>
-            <ScrollView style={{ maxHeight: 420 }}>
-              {orders.map((o) => (
-                <View key={o.id} style={styles.orderCard}>
-                  <Text style={styles.orderTitle}>{o.tableCode ? `Table ${o.tableCode}` : o.title}</Text>
-                  <Text style={styles.orderSub}>
-                    {o.items.filter((i) => i.fireBatch === 0).length} item(s) · ₹{o.total.toFixed(2)}
-                  </Text>
-                  <View style={styles.orderActions}>
-                    <TouchableOpacity
-                      style={styles.rejectBtn}
-                      onPress={() => handleReject(o.id, o.tableCode ? `Table ${o.tableCode}` : o.title)}
-                    >
-                      <Text style={styles.rejectText}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={styles.confirmBtn}
-                      onPress={() => handleConfirm(o.id)}
-                      disabled={confirmOrder.isPending}
-                    >
-                      {confirmOrder.isPending ? (
-                        <ActivityIndicator size="small" color="#FFFFFF" />
-                      ) : (
-                        <Text style={styles.confirmText}>Confirm</Text>
-                      )}
-                    </TouchableOpacity>
-                  </View>
-                </View>
-              ))}
-            </ScrollView>
+            <View style={styles.orderCard}>
+              <Text style={styles.orderTitle}>{orderLabel(current)}</Text>
+              <Text style={styles.orderSub}>
+                {current.items.filter((i) => i.fireBatch === 0).length} item(s) · ₹{current.total.toFixed(2)}
+              </Text>
+              <View style={styles.orderActions}>
+                <TouchableOpacity
+                  style={[styles.rejectBtn, busyId !== null && styles.btnDisabled]}
+                  onPress={() => handleReject(current.id, orderLabel(current))}
+                  disabled={busyId !== null}
+                >
+                  <Text style={styles.rejectText}>Reject</Text>
+                </TouchableOpacity>
+                <TouchableOpacity
+                  style={styles.confirmBtn}
+                  onPress={() => handleConfirm(current.id)}
+                  disabled={busyId !== null}
+                >
+                  {busyId !== null ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.confirmText}>Confirm</Text>
+                  )}
+                </TouchableOpacity>
+              </View>
+            </View>
+            {upNext.length > 0 && (
+              <Text style={styles.upNext} numberOfLines={1}>
+                Aage: {upNext.slice(0, 3).map(orderLabel).join(', ')}
+                {upNext.length > 3 ? `  +${upNext.length - 3} aur` : ''}
+              </Text>
+            )}
           </View>
         </View>
       </Modal>
@@ -244,10 +307,25 @@ const styles = StyleSheet.create({
     marginBottom: isDesktopWeb ? 8 : 6,
     gap: isDesktopWeb ? 8 : 6,
   },
+  sheetHeading: {
+    flex: 1,
+    gap: 2,
+  },
   sheetTitle: {
     fontSize: 12,
     fontWeight: '800',
     color: COLORS.heading,
+  },
+  sheetCounter: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: COLORS.muted,
+  },
+  upNext: {
+    fontSize: 12,
+    color: COLORS.muted,
+    paddingHorizontal: isDesktopWeb ? 10 : 7.5,
+    paddingTop: isDesktopWeb ? 2 : 1.5,
   },
   orderCard: {
     backgroundColor: COLORS.background,
@@ -295,5 +373,8 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: '700',
     fontSize: 12,
+  },
+  btnDisabled: {
+    opacity: 0.45,
   },
 });

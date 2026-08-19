@@ -1,6 +1,7 @@
 import axios, { AxiosError } from 'axios';
 import { Platform } from 'react-native';
 import { getApiBaseUrl } from '../config/env';
+import { noteServerDate } from './serverClock';
 import {
   getAccessToken,
   setAccessToken,
@@ -95,8 +96,15 @@ const refreshTokens = (refreshToken?: string) => {
 };
 
 apiClient.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    // Every reply carries the server's own clock in its Date header — see serverClock.ts for
+    // why anything measuring the age of a server timestamp must not use the device's instead.
+    noteServerDate(response.headers?.date);
+    return response;
+  },
   async (error: AxiosError) => {
+    // An error response is still a response, and its Date header is just as good.
+    if (error.response) noteServerDate(error.response.headers?.date);
     const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
 
     const isAuthEndpoint = originalRequest?.url?.includes('/auth/login') || originalRequest?.url?.includes('/auth/register');

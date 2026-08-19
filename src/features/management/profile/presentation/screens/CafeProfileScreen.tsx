@@ -35,12 +35,15 @@ const DEFAULT_HOURS: DayHours[] = [
   { day: 'Sunday', open: false, from: '08:00 AM', to: '04:00 PM' },
 ];
 
-type FieldId = 'businessName' | 'phone' | 'address';
+type FieldId = 'businessName' | 'phone' | 'address' | 'licenceNumber';
 
 const FIELD_META: Record<FieldId, { label: string; placeholder: string; icon: string }> = {
   businessName: { label: 'Business Name', placeholder: 'e.g. Downtown Espresso', icon: 'storefront-outline' },
   phone: { label: 'Phone', placeholder: 'e.g. +91 98765 43210', icon: 'phone-outline' },
   address: { label: 'Location', placeholder: 'e.g. 123 Brew St, Metro City', icon: 'map-marker-outline' },
+  // Free text, not digits-only: FSSAI numbers are 14 digits but a state shop licence can
+  // carry letters and slashes, and rejecting those would just lock a cafe out of its own number.
+  licenceNumber: { label: 'Licence Number', placeholder: 'e.g. FSSAI 12345678901234', icon: 'certificate-outline' },
 };
 
 export const CafeProfileScreen = ({ navigation }: any) => {
@@ -227,7 +230,7 @@ export const CafeProfileScreen = ({ navigation }: any) => {
           <Text style={styles.cafeMeta}>{settings.tenantSlug ? `prabandhos.app/${settings.tenantSlug}` : 'Your cafe profile'}</Text>
         </View>
 
-        {(['businessName', 'phone', 'address'] as FieldId[]).map((field) => (
+        {(['businessName', 'phone', 'address', 'licenceNumber'] as FieldId[]).map((field) => (
           <TouchableOpacity key={field} style={styles.fieldCard} onPress={() => openFieldEditor(field)}>
             <View style={styles.fieldHeaderRow}>
               <Text style={styles.fieldLabel}>{FIELD_META[field].label.toUpperCase()}</Text>

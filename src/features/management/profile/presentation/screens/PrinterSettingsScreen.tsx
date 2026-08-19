@@ -12,6 +12,16 @@ import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 
+// Icon and label per transport. A lookup rather than the chain of ternaries this used to be
+// inline — a fourth option made that unreadable. 'browser' is labelled for the case it's
+// nearly always reached for: a USB printer, the one kind no other transport here can drive.
+const TYPE_META: Record<PrinterType, { icon: string; label: string }> = {
+  none: { icon: 'printer-off-outline', label: 'None' },
+  wifi: { icon: 'wifi', label: 'WiFi / LAN' },
+  bluetooth: { icon: 'bluetooth', label: 'Bluetooth' },
+  browser: { icon: 'usb', label: 'USB / Browser' },
+};
+
 const SAMPLE_RECEIPT = (businessName: string, taxRatePct: number) => ({
   businessName,
   orderNumber: '#TEST',
@@ -76,6 +86,10 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
         return;
       }
       persistConfig({ type, bluetoothAddress, bluetoothName, columns });
+    } else if (type === 'browser') {
+      // Nothing to point at — the printer is whichever one the person picks in the dialog, and
+      // the browser is what remembers that choice. Only the paper width is ours to store.
+      persistConfig({ type, columns });
     } else {
       persistConfig({ type: 'none' });
     }
@@ -148,6 +162,8 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
         ? { type, wifiIp: wifiIp.trim(), wifiPort: parseInt(wifiPort, 10) || 9100, columns }
         : type === 'bluetooth'
         ? { type, bluetoothAddress, bluetoothName, columns }
+        : type === 'browser'
+        ? { type, columns }
         : { type: 'none' as const };
     persistConfig(draftConfig);
 
@@ -178,16 +194,10 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
 
         <Text style={styles.fieldLabel}>Printer Type</Text>
         <View style={styles.typeRow}>
-          {(['none', 'wifi', 'bluetooth'] as PrinterType[]).map((t) => (
+          {(['none', 'wifi', 'bluetooth', 'browser'] as PrinterType[]).map((t) => (
             <TouchableOpacity key={t} style={[styles.typePill, type === t && styles.typePillActive]} onPress={() => setType(t)}>
-              <Icon
-                name={t === 'wifi' ? 'wifi' : t === 'bluetooth' ? 'bluetooth' : 'printer-off-outline'}
-                size={16}
-                color={type === t ? '#FFFFFF' : COLORS.muted}
-              />
-              <Text style={[styles.typeText, type === t && styles.typeTextActive]}>
-                {t === 'wifi' ? 'WiFi / LAN' : t === 'bluetooth' ? 'Bluetooth' : 'None'}
-              </Text>
+              <Icon name={TYPE_META[t].icon} size={16} color={type === t ? '#FFFFFF' : COLORS.muted} />
+              <Text style={[styles.typeText, type === t && styles.typeTextActive]}>{TYPE_META[t].label}</Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -289,6 +299,24 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
           </View>
         )}
 
+        {type === 'browser' && (
+          <View style={styles.card}>
+            <Text style={styles.fieldLabel}>Paper width</Text>
+            <View style={styles.columnsRow}>
+              {[32, 48].map((c) => (
+                <TouchableOpacity key={c} style={[styles.columnsPill, columns === c && styles.columnsPillActive]} onPress={() => setColumns(c)}>
+                  <Text style={[styles.columnsText, columns === c && styles.columnsTextActive]}>{c === 32 ? '58mm' : '80mm'}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.hint}>
+              {isWeb
+                ? 'Prints through the browser’s print dialog, so it can use a printer plugged into this computer over USB — the one kind Bluetooth and WiFi printing can’t reach. Plug the printer in and let Windows install it (it usually does that by itself), then pick it once in the dialog; the browser offers it by default after that.\n\nA dialog opens on every print and someone has to confirm it — that’s a browser rule, not a setting. In Chrome’s dialog, set Margins to None and switch Headers and footers off the first time, or the slip prints with page numbers and wide white edges.'
+                : 'This only works in the web app — the mobile app has no print dialog to hand the receipt to. Use Bluetooth or WiFi on this device instead.'}
+            </Text>
+          </View>
+        )}
+
         <TouchableOpacity style={styles.testBtn} onPress={testPrint} disabled={testing || type === 'none'}>
           {testing ? <ActivityIndicator size="small" color={COLORS.heading} /> : <Icon name="printer-check" size={18} color={COLORS.heading} />}
           <Text style={styles.testBtnText}>{testing ? 'Printing…' : 'Test Print'}</Text>
@@ -311,9 +339,11 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.heading },
   subtitle: { fontSize: 12, color: COLORS.muted, lineHeight: 18, marginBottom: isDesktopWeb ? 15 : 15 },
   fieldLabel: { fontSize: 12, fontWeight: '700', color: COLORS.muted, marginBottom: isDesktopWeb ? 6 : 6 },
-  typeRow: { flexDirection: 'row', gap: isDesktopWeb ? 6 : 6, marginBottom: isDesktopWeb ? 12 : 12 },
+  // Wraps because there are four of these now: they still sit on one row wherever there's
+  // room, and fall to two on a phone-width till rather than squeezing every label to nothing.
+  typeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: isDesktopWeb ? 6 : 6, marginBottom: isDesktopWeb ? 12 : 12 },
   typePill: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4.5 : 4.5,
+    flexGrow: 1, flexBasis: 92, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4.5 : 4.5,
     backgroundColor: COLORS.cardAlt, borderRadius: 9, paddingVertical: isDesktopWeb ? 9 : 9,
   },
   typePillActive: { backgroundColor: COLORS.button },

@@ -49,6 +49,7 @@ import { MenuItem, CreateMenuItemRequest } from '../../../../core/api/menuApi';
 import { Category, CategoryMutationResult } from '../../../../core/api/categoriesApi';
 import { RecipeImportRowError } from '../../../../core/api/recipeApi';
 import { getApiErrorMessage } from '../../../../core/network/api';
+import { ReportExportService } from '../../../../core/utils/reportExport';
 import { pickAndParseCsv, normalizeMenuCsvRows } from '../../../../core/utils/csvMenuImport';
 import { pickAndParseRecipeSheet, normalizeRecipeImportRows } from '../../../../core/utils/csvRecipeImport';
 import { pickImageAsDataUri } from '../../../../core/utils/imagePicker';
@@ -588,7 +589,7 @@ const MenuItemImageGallery = ({ menuItemId }: { menuItemId: number }) => {
 // box, or in the Add/Edit modal that sits above this still-mounted grid. React Query's
 // structural sharing keeps an unchanged item's identity stable across refetches, so a card
 // re-renders only when its own item's data actually changes. Same pattern as POSCheckout's MenuRow.
-const MenuCard = React.memo(({ item, cardWidthPct, styles, COLORS, onEditPrice, onEdit, onOpenRecipe, onToggleAvailable }: {
+const MenuCard = React.memo(({ item, cardWidthPct, styles, COLORS, onEditPrice, onEdit, onOpenRecipe, onToggleAvailable, onToggleSpecial }: {
   item: MenuItem;
   cardWidthPct: '48%' | '31%' | '23%';
   styles: ReturnType<typeof makeStyles>;
@@ -597,12 +598,13 @@ const MenuCard = React.memo(({ item, cardWidthPct, styles, COLORS, onEditPrice, 
   onEdit: (item: MenuItem) => void;
   onOpenRecipe: (item: MenuItem) => void;
   onToggleAvailable: (item: MenuItem) => void;
+  onToggleSpecial: (item: MenuItem) => void;
 }) => (
   <View style={[styles.itemCard, { width: cardWidthPct }, !item.available && styles.itemCardDisabled]}>
     {item.popular && item.available && (
       <View style={styles.aiSuggestBadge}>
         <Icon name="star" size={10} color={COLORS.accent} />
-        <Text style={styles.aiSuggestText}>POPULAR</Text>
+        <Text style={styles.aiSuggestText}>SPECIAL</Text>
       </View>
     )}
     {!item.available && (
@@ -631,6 +633,16 @@ const MenuCard = React.memo(({ item, cardWidthPct, styles, COLORS, onEditPrice, 
     </View>
 
     <View style={styles.itemIconsRow}>
+      {/* One tap marks the cafe's special — the flag behind it (MenuItem.popular) already
+          drove this badge and the QR page's Best Sellers fallback, it simply had no way to be
+          set from anywhere in the app. Filled star = on, outline = off. */}
+      <TouchableOpacity
+        onPress={() => onToggleSpecial(item)}
+        hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}
+        accessibilityLabel={item.popular ? `Remove ${item.name} from specials` : `Mark ${item.name} as special`}
+      >
+        <Icon name={item.popular ? 'star' : 'star-outline'} size={15} color={item.popular ? COLORS.accent : COLORS.muted} />
+      </TouchableOpacity>
       <TouchableOpacity onPress={() => onEdit(item)} hitSlop={{ top: 6, bottom: 6, left: 6, right: 6 }}>
         <Icon name="pencil-outline" size={14} color={COLORS.accent} />
       </TouchableOpacity>
@@ -946,6 +958,88 @@ export const MenuScreen = ({ navigation }: any) => {
     });
   }, [items, activeCategory, search]);
 
+  const [exportingMenu, setExportingMenu] = useState<'pdf' | 'excel' | null>(null);
+
+  /**
+   * The whole menu as a working list, split into the items that still need a photo and the
+   * ones that already have one — because the reason to take this list out of the app is
+   * almost always to go and get those photos made.
+   *
+   * Exports every item, not `filteredItems`: the category chips and search box are for
+   * working on screen, and a file called "Menu Items" that quietly held only one category
+   * would be worse than no export. Images themselves are deliberately not included — they are
+   * base64 data URIs running to tens of KB each and would bloat the file for no use.
+   */
+  const handleExportMenu = async (format: 'pdf' | 'excel') => {
+    setExportingMenu(format);
+    try {
+      if (items.length === 0) {
+        dispatch(showToast({ message: 'No menu items to export yet.', icon: 'information-outline', tone: 'warning' }));
+        return;
+      }
+      const columns = [
+        { key: 'name', label: 'Item' },
+        { key: 'category', label: 'Category' },
+        { key: 'price', label: 'Price', align: 'right' as const, format: (v: unknown) => `₹${Number(v).toFixed(2)}` },
+        { key: 'subtitle', label: 'Description' },
+        { key: 'available', label: 'Available' },
+      ];
+      const toRow = (m: MenuItem) => ({
+        name: m.name,
+        category: m.category,
+        price: m.price,
+        subtitle: m.subtitle ?? '',
+        available: m.available ? 'Yes' : 'No',
+      });
+      const needsPhoto = items.filter((m) => !m.image);
+      const hasPhoto = items.filter((m) => !!m.image);
+      const def = {
+        title: 'Menu Items',
+        businessName: settings?.businessName ?? 'CafePOS',
+        dateRangeLabel: `${items.length} items · ${needsPhoto.length} still need a photo`,
+        sections: [
+          { title: `Photo needed (${needsPhoto.length})`, columns, rows: needsPhoto.map(toRow) },
+          { title: `Already has a photo (${hasPhoto.length})`, columns, rows: hasPhoto.map(toRow) },
+        ],
+      };
+      if (format === 'pdf') await ReportExportService.exportToPDF(def);
+      else await ReportExportService.exportToExcel(def);
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not build the menu export'), icon: 'alert-circle-outline', tone: 'danger' }));
+    } finally {
+      setExportingMenu(null);
+    }
+  };
+
+  /**
+   * The same filtered items, but broken into category blocks so "All" reads as a menu rather
+   * than one long undifferentiated grid — which is what made finding an item to edit hard.
+   *
+   * Category order follows CATEGORIES (the cafe's own saved order, see the categories memo),
+   * not first-appearance, so the screen matches the order everything else prints in. A single
+   * selected category yields one unlabelled block, so nothing changes in that view.
+   */
+  const groupedItems = useMemo(() => {
+    if (activeCategory !== 'All') {
+      return filteredItems.length ? [{ category: activeCategory, items: filteredItems, showHeading: false }] : [];
+    }
+    const byCategory = new Map<string, MenuItem[]>();
+    for (const item of filteredItems) {
+      const bucket = byCategory.get(item.category);
+      if (bucket) bucket.push(item);
+      else byCategory.set(item.category, [item]);
+    }
+    const ordered = CATEGORIES.filter((c) => c !== 'All' && byCategory.has(c));
+    // Anything sitting in a category the chip row doesn't know about would otherwise vanish
+    // from "All" entirely — worse than showing it under its own heading at the end.
+    const orphans = [...byCategory.keys()].filter((c) => !ordered.includes(c));
+    return [...ordered, ...orphans].map((category) => ({
+      category,
+      items: byCategory.get(category)!,
+      showHeading: true,
+    }));
+  }, [filteredItems, activeCategory, CATEGORIES]);
+
   const categoryCounts = useMemo(() => {
     const counts: Record<string, number> = { All: items.length };
     for (const cat of CATEGORIES) {
@@ -1005,6 +1099,20 @@ export const MenuScreen = ({ navigation }: any) => {
   const toggleAvailabilityRef = useRef(toggleAvailability);
   toggleAvailabilityRef.current = toggleAvailability;
   const onCardToggleAvailable = useCallback((item: MenuItem) => toggleAvailabilityRef.current.mutate(item.id), []);
+
+  // Via a ref for the same reason onCardToggleAvailable uses one: MenuCard is React.memo'd,
+  // and a callback identity that changed on every render would defeat that for every card.
+  const updateMenuItemRef = useRef(updateMenuItem);
+  updateMenuItemRef.current = updateMenuItem;
+  const onCardToggleSpecial = useCallback((item: MenuItem) => {
+    updateMenuItemRef.current.mutate(
+      { id: item.id, req: { popular: !item.popular } },
+      {
+        onError: (err) =>
+          dispatch(showToast({ message: getApiErrorMessage(err, 'Could not update the special'), icon: 'alert-circle-outline', tone: 'danger' })),
+      },
+    );
+  }, [dispatch]);
 
   const onCardOpenRecipe = useCallback((item: MenuItem) => navigation.navigate('RecipeBuilder', { menuItemId: item.id }), [navigation]);
 
@@ -1352,6 +1460,33 @@ export const MenuScreen = ({ navigation }: any) => {
           <Icon name="chevron-right" size={20} color={COLORS.muted} />
         </TouchableOpacity>
 
+        <View style={styles.importBanner}>
+          <View style={styles.importBannerIcon}>
+            <Icon name="tray-arrow-down" size={20} color={COLORS.accent} />
+          </View>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.importBannerTitle}>Export the menu list</Text>
+            <Text style={styles.importBannerDesc}>
+              Every item with its category, price and description — the items still missing a photo listed first, so you can hand that list straight to whoever is making them.
+            </Text>
+          </View>
+          {(['excel', 'pdf'] as const).map((format) => (
+            <TouchableOpacity
+              key={format}
+              style={styles.menuExportBtn}
+              disabled={exportingMenu !== null}
+              onPress={() => handleExportMenu(format)}
+            >
+              {exportingMenu === format ? (
+                <ActivityIndicator size="small" color={COLORS.heading} />
+              ) : (
+                <Icon name={format === 'excel' ? 'file-excel-outline' : 'file-pdf-box'} size={15} color={COLORS.heading} />
+              )}
+              <Text style={styles.menuExportBtnText}>{format === 'excel' ? 'Excel' : 'PDF'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
         <TouchableOpacity style={styles.importBanner} onPress={handleImportRecipeSheet} disabled={importingRecipes} activeOpacity={0.85}>
           <View style={styles.importBannerIcon}>
             {importingRecipes ? (
@@ -1475,21 +1610,34 @@ export const MenuScreen = ({ navigation }: any) => {
 
         {menuLoading && <SkeletonGrid items={6} columns={2} style={{ paddingHorizontal: 16 }} />}
 
-        <View style={styles.grid}>
-          {!menuLoading && filteredItems.map((item) => (
-            <MenuCard
-              key={item.id}
-              item={item}
-              cardWidthPct={cardWidthPct}
-              styles={styles}
-              COLORS={COLORS}
-              onEditPrice={onCardEditPrice}
-              onEdit={onCardEdit}
-              onOpenRecipe={onCardOpenRecipe}
-              onToggleAvailable={onCardToggleAvailable}
-            />
-          ))}
-        </View>
+        {!menuLoading && groupedItems.map((group) => (
+          <View key={group.category}>
+            {/* Only under "All" — inside a single category the heading would just repeat the
+                chip already selected above the list. */}
+            {group.showHeading && (
+              <View style={styles.groupHeaderRow}>
+                <Text style={styles.groupHeaderText}>{group.category}</Text>
+                <Text style={styles.groupHeaderCount}>{group.items.length}</Text>
+              </View>
+            )}
+            <View style={styles.grid}>
+              {group.items.map((item) => (
+                <MenuCard
+                  key={item.id}
+                  item={item}
+                  cardWidthPct={cardWidthPct}
+                  styles={styles}
+                  COLORS={COLORS}
+                  onEditPrice={onCardEditPrice}
+                  onEdit={onCardEdit}
+                  onOpenRecipe={onCardOpenRecipe}
+                  onToggleAvailable={onCardToggleAvailable}
+                  onToggleSpecial={onCardToggleSpecial}
+                />
+              ))}
+            </View>
+          </View>
+        ))}
       </ScrollView>
 
       <TouchableOpacity style={styles.fab} onPress={openAddModal}>
@@ -2348,6 +2496,43 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     flexWrap: 'wrap',
     paddingHorizontal: isDesktopWeb ? 11 : 12,
     gap: isDesktopWeb ? 6 : 6,
+  },
+  menuExportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.card,
+    marginLeft: 6,
+  },
+  menuExportBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
+  groupHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: isDesktopWeb ? 11 : 12,
+    marginTop: 14,
+    marginBottom: 7,
+  },
+  groupHeaderText: {
+    fontSize: 12,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: COLORS.muted,
+    textTransform: 'uppercase',
+  },
+  groupHeaderCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: COLORS.muted,
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 8,
+    paddingHorizontal: 6,
+    paddingVertical: 1,
   },
   // Mirrors POSCheckoutScreen's menuCard exactly (same bg/radius/padding), plus a
   // thumbnail image and a row of admin controls (edit/recipe/availability) that the

@@ -8,7 +8,9 @@ import { useThemeColors } from '../../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../../core/utils/useResponsive';
 import { InitialsAvatar } from '../../../../shared/components/InitialsAvatar';
 import { useCustomers, useCreateCustomer } from '../../../../core/api/hooks/useCustomers';
-import { MembershipTier } from '../../../../core/api/customersApi';
+import { MembershipTier, customersApi } from '../../../../core/api/customersApi';
+import { ReportExportService } from '../../../../core/utils/reportExport';
+import { useSettings } from '../../../../core/api/hooks/useSettings';
 import { getApiErrorMessage } from '../../../../core/network/api';
 import { showToast } from '../../../../core/store/uiSlice';
 import { SkeletonList, SkeletonBox } from '../../../../shared/components/atoms/Skeleton';
@@ -92,6 +94,54 @@ export const CustomerDirectoryScreen = ({ navigation }: any) => {
   const members = data?.items ?? [];
   const totalPoints = members.reduce((sum, m) => sum + m.totalPoints, 0);
 
+  const { data: settings } = useSettings();
+  const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
+
+  /**
+   * The whole customer book as a contact list — name and mobile, which is what this is
+   * actually wanted for (a broadcast list, a reminder run), not the visit/spend analysis the
+   * date-ranged CRM report already covers.
+   *
+   * Deliberately re-fetches through listAll rather than exporting `members`: the screen only
+   * ever holds one page, so exporting what's on screen would hand over the most recent 20
+   * customers under a filename claiming to be all of them. Honours the search box, so a
+   * filtered view exports exactly what it says it is showing.
+   */
+  const handleExport = async (format: 'pdf' | 'excel') => {
+    setExporting(format);
+    try {
+      const all = await customersApi.listAll(search || undefined);
+      const withPhone = all.filter((c) => !!c.phone);
+      if (all.length === 0) {
+        dispatch(showToast({ message: 'No customers to export yet.', icon: 'information-outline', tone: 'warning' }));
+        return;
+      }
+      const def = {
+        title: search ? `Customer Contacts (matching "${search}")` : 'Customer Contacts',
+        businessName: settings?.businessName ?? 'CafePOS',
+        // Not a date range — this is the book as it stands right now, and saying so keeps the
+        // export from being mistaken for the period report.
+        dateRangeLabel: `${all.length} customers · ${withPhone.length} with a mobile number`,
+        sections: [
+          {
+            title: 'Customers',
+            columns: [
+              { key: 'name', label: 'Name' },
+              { key: 'phone', label: 'Mobile' },
+            ],
+            rows: all.map((c) => ({ name: c.name, phone: c.phone ?? '' })),
+          },
+        ],
+      };
+      if (format === 'pdf') await ReportExportService.exportToPDF(def);
+      else await ReportExportService.exportToExcel(def);
+    } catch (e: any) {
+      dispatch(showToast({ message: getApiErrorMessage(e) ?? 'Could not build the export.', icon: 'alert-circle-outline', tone: 'danger' }));
+    } finally {
+      setExporting(null);
+    }
+  };
+
   const createCustomer = useCreateCustomer();
   const [addVisible, setAddVisible] = useState(false);
   const [newName, setNewName] = useState('');
@@ -168,7 +218,25 @@ export const CustomerDirectoryScreen = ({ navigation }: any) => {
           </View>
         </View>
 
-        <Text style={[styles.sectionLabel, isDesktopWeb && { paddingHorizontal: 16 }]}>DIRECTORY</Text>
+        <View style={[styles.directoryRow, isDesktopWeb && { paddingHorizontal: 16 }]}>
+          <Text style={styles.sectionLabel}>DIRECTORY</Text>
+          <View style={{ flex: 1 }} />
+          {(['excel', 'pdf'] as const).map((format) => (
+            <TouchableOpacity
+              key={format}
+              style={styles.exportBtn}
+              disabled={exporting !== null}
+              onPress={() => handleExport(format)}
+            >
+              {exporting === format ? (
+                <ActivityIndicator size="small" color={COLORS.heading} />
+              ) : (
+                <Icon name={format === 'excel' ? 'file-excel-outline' : 'file-pdf-box'} size={15} color={COLORS.heading} />
+              )}
+              <Text style={styles.exportBtnText}>{format === 'excel' ? 'Excel' : 'PDF'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
 
         {isError && members.length === 0 ? (
           <ErrorState
@@ -324,6 +392,27 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     paddingHorizontal: isDesktopWeb ? 16 : 12,
     marginBottom: isDesktopWeb ? 6 : 9,
   },
+  /* The label keeps its own horizontal padding, so this row carries none of its own on
+     mobile — adding it again would double the inset. */
+  directoryRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingRight: isDesktopWeb ? 0 : 12,
+    gap: 8,
+  },
+  exportBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 5,
+    paddingVertical: 5,
+    paddingHorizontal: 10,
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.card,
+    marginBottom: isDesktopWeb ? 6 : 9,
+  },
+  exportBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
   memberCard: {
     flexDirection: 'row',
     alignItems: 'center',

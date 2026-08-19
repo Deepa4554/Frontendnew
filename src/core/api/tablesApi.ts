@@ -46,9 +46,28 @@ export interface CreateTableRequest {
   code?: string;
 }
 
+export interface UpdateTableRequest {
+  /** New display name. Omit to leave it alone. Renaming is refused by the server while the
+   * table has an open order (409) — see backend TablesController.Update. */
+  code?: string;
+  zone?: string;
+  seats?: number;
+}
+
+export interface UpdateTableResponse {
+  table: ApiTable;
+  /** True when the name changed, which silently breaks every QR sticker already taped to
+   * that table: a table QR encodes the table's CODE, not its id, so old stickers now decode
+   * to a name no table has. The UI must tell staff to reprint — nothing server-side can fix
+   * a sticker that is physically on a table. */
+  qrCodeInvalidated: boolean;
+}
+
 export const tablesApi = {
   list: () => apiClient.get<ApiTable[]>('/tables').then((r) => r.data),
   create: (req: CreateTableRequest) => apiClient.post<ApiTable>('/tables', req).then((r) => r.data),
+  update: (id: number, req: UpdateTableRequest) =>
+    apiClient.put<UpdateTableResponse>(`/tables/${id}`, req).then((r) => r.data),
   remove: (id: number) => apiClient.delete<void>(`/tables/${id}`).then((r) => r.data),
   /** A QR token not tied to any table — for browsing/ordering as takeaway, or when
    * every table is occupied. See backend TablesController.GetMenuOnlyQrToken. */

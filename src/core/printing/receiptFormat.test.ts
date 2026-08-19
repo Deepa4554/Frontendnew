@@ -1,4 +1,4 @@
-import { splitGst, buildTaxBreakdown, buildReceiptLines, PrintableReceipt, PrintableReceiptItem } from './receiptFormat';
+import { splitGst, buildTaxBreakdown, buildReceiptLines, buildKotLines, PrintableReceipt, PrintableReceiptItem } from './receiptFormat';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -144,5 +144,71 @@ describe('buildReceiptLines — cancelled items', () => {
     expect(out).toContain('Chapati Plain');
     expect(out).not.toContain('Chicken Dana');
     expect(out).not.toContain('7 up');
+  });
+});
+
+describe('buildReceiptLines — logo', () => {
+  const receipt = (over: Partial<PrintableReceipt> = {}): PrintableReceipt => ({
+    businessName: 'Cafe',
+    orderNumber: '#1294',
+    time: '02:07 PM',
+    title: 'Table #T1',
+    orderTypeLabel: 'Dine In',
+    items: [item()],
+    subtotal: 100,
+    taxRatePct: 5,
+    tax: 5,
+    total: 105,
+    footer: 'Thanks!',
+    ...over,
+  });
+
+  it('prints no image line for a bill built before logos existed', () => {
+    // Every caller that hasn't been touched yet calls buildReceiptLines with just (receipt,
+    // columns) — no third argument, no receipt.logoUrl. That has to keep printing exactly
+    // the bill it always did, not a blank logo band or a crash on a missing parameter.
+    const lines = buildReceiptLines(receipt());
+    expect(lines.some((l) => l.kind === 'image')).toBe(false);
+  });
+
+  it('carries the pre-fetched ESC/POS raster when the caller supplied one', () => {
+    const raster = new Uint8Array([0x1d, 0x76, 0x30, 0x00]);
+    const lines = buildReceiptLines(receipt(), 32, raster);
+    const img = lines.find((l) => l.kind === 'image');
+    expect(img).toBeDefined();
+    expect(img!.kind === 'image' && img!.escposBytes).toBe(raster);
+    // The 'browser' transport reads previewUrl, not escposBytes — a caller that only had a
+    // raster (the wifi/bluetooth path) must not also claim to have a preview URL it never had.
+    expect(img!.kind === 'image' && img!.previewUrl).toBeUndefined();
+  });
+
+  it('carries the plain logo URL when the receipt has one but no raster was fetched', () => {
+    // The 'browser' transport's own case: PrinterService.printReceipt never fetches a raster
+    // for it (see its own comment on why), so only receipt.logoUrl is available here.
+    const lines = buildReceiptLines(receipt({ logoUrl: 'https://example.com/logo.png' }), 32, null);
+    const img = lines.find((l) => l.kind === 'image');
+    expect(img).toBeDefined();
+    expect(img!.kind === 'image' && img!.previewUrl).toBe('https://example.com/logo.png');
+    expect(img!.kind === 'image' && img!.escposBytes).toBeUndefined();
+  });
+
+  it('is the very first line, ahead of the business name', () => {
+    // A logo the guest has to scroll past three lines to notice defeats the point of it — it
+    // has to be the first thing on the slip, above even the cafe's own name.
+    const lines = buildReceiptLines(receipt({ logoUrl: 'https://example.com/logo.png' }));
+    expect(lines[0].kind).toBe('image');
+  });
+
+  it('never adds an image line to a kitchen ticket or a token slip', () => {
+    // Only buildReceiptLines takes a logo parameter at all — buildKotLines/buildTokenSlipLines
+    // don't, on purpose (see buildReceiptLines' own doc comment on why a KOT/token slip
+    // shouldn't spend paper on it). This is really a type-level guarantee (there is no
+    // parameter to pass), but asserting the shipped behaviour keeps that guarantee visible
+    // here rather than only in a comment someone could stop reading.
+    const kotLines = buildKotLines({
+      title: 'Table #T1', kotNumber: 'KOT-1', time: '02:07 PM',
+      items: [{ name: 'Chicken Lolipop', qty: 1 }],
+    });
+    expect(kotLines.some((l) => l.kind === 'image')).toBe(false);
   });
 });

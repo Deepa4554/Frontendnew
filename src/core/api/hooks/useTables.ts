@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { tablesApi, CreateTableRequest } from '../tablesApi';
+import { tablesApi, CreateTableRequest, UpdateTableRequest } from '../tablesApi';
 import { queryKeys } from './queryKeys';
 
 // Tables' occupancy is derived from live orders, so it invalidates on the same
@@ -20,6 +20,19 @@ export const useCreateTable = () => {
   return useMutation({
     mutationFn: (req: CreateTableRequest) => tablesApi.create(req),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tables }),
+  });
+};
+
+export const useUpdateTable = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, ...req }: UpdateTableRequest & { id: number }) => tablesApi.update(id, req),
+    // Orders are invalidated alongside tables because a rename changes the label the floor
+    // plan matches open orders against — a stale order list would keep showing the old name.
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: queryKeys.tables });
+      qc.invalidateQueries({ queryKey: ['orders'] });
+    },
   });
 };
 

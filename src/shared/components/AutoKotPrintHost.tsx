@@ -4,6 +4,7 @@ import { useOrders } from '../../core/api/hooks/useOrders';
 import { ApiOrder, FireBatch } from '../../core/api/ordersApi';
 import { PrinterService } from '../../core/printing/PrinterService';
 import { isKotPrinted, markKotPrinted } from '../../core/printing/printedKots';
+import { serverNow } from '../../core/network/serverClock';
 import { showToast } from '../../core/store/uiSlice';
 
 /**
@@ -25,6 +26,19 @@ import { showToast } from '../../core/store/uiSlice';
 
 /** Sanity ceiling on one poll tick's worth of auto-prints — see where it's applied below. */
 const MAX_BATCHES_PER_TICK = 5;
+
+/**
+ * How late a kitchen ticket may still be worth making. Change this one number to retune.
+ *
+ * A guest's round should reach the printer within seconds; if it hasn't, something broke —
+ * printer off, tab closed, network down. The question this answers is what to do when that
+ * clears: a ticket ten minutes late is still food nobody has cooked yet, an hour late is a
+ * guest who has eaten and gone, and printing it just wastes paper and confuses the kitchen.
+ *
+ * Fifteen minutes is long enough to cover a printer being switched back on or a laptop waking
+ * up, and short enough that nothing prints for a table that has already been cleared.
+ */
+const MAX_BATCH_AGE_MS = 15 * 60 * 1000;
 
 export const AutoKotPrintHost = () => {
   const dispatch = useDispatch();
@@ -62,8 +76,14 @@ export const AutoKotPrintHost = () => {
       order.fireBatches.forEach((batch) => {
         if (isKotPrinted(batch.kotNumber)) return;
         // Claim it before the print resolves — printKot is async, and the next poll tick
-        // must not see this batch as still unclaimed and start a second print.
+        // must not see this batch as still unclaimed and start a second print. Stale batches
+        // are claimed too: they are decided, just decided against, and leaving them unmarked
+        // would re-evaluate the same dead tickets on every tick forever.
         markKotPrinted(batch.kotNumber);
+        // serverNow(), not Date.now(): firedAt is stamped by the server's UTC clock, so the
+        // age is only meaningful measured against that same clock. A till running ten minutes
+        // fast would otherwise discard perfectly fresh tickets — see serverClock.ts.
+        if (serverNow() - new Date(batch.firedAt).getTime() > MAX_BATCH_AGE_MS) return;
         unprinted.push({ order, batch });
       });
     });

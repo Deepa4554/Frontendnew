@@ -15,6 +15,9 @@ import { SkeletonGrid } from '../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../shared/components/atoms/StateComponents';
 import { showToast } from '../../../../core/store/uiSlice';
 import { AppDispatch } from '../../../../core/store';
+import { downloadQrCard } from '../../../../core/utils/qrCard';
+import { useSettings } from '../../../../core/api/hooks/useSettings';
+import { getApiErrorMessage } from '../../../../core/network/api';
 
 import { modalHeadingOverride } from '../../../../shared/design/commonStyles';
 import { useResponsive } from '../../../../core/utils/useResponsive';
@@ -23,6 +26,7 @@ import { DesktopPageHeader } from '../../../../shared/components/desktop/Desktop
 export const QRMenuScreen = ({ navigation }: any) => {
   const { isDesktopWeb } = useResponsive();
   const dispatch = useDispatch<AppDispatch>();
+  const { data: settings } = useSettings();
   const COLORS = useThemeColors();
   const styles = makeStyles(COLORS, isDesktopWeb);
   const insets = useSafeAreaInsets();
@@ -131,6 +135,51 @@ export const QRMenuScreen = ({ navigation }: any) => {
   const handleShareDelivery = () => {
     if (deliveryOrderUrl) shareOrCopy(`Order home delivery: ${deliveryOrderUrl}`, deliveryOrderUrl);
   };
+
+  const [downloading, setDownloading] = useState<string | null>(null);
+
+  /**
+   * Saves the code as a printable card rather than a bare image — see qrCard.ts for why the
+   * wording around the code is the part that actually gets it scanned.
+   */
+  const handleDownloadQr = async (key: string, url: string, heading: string, instruction: string) => {
+    setDownloading(key);
+    try {
+      await downloadQrCard({
+        url,
+        heading,
+        instruction,
+        businessName: settings?.businessName ?? 'Our Cafe',
+        fileLabel: heading,
+      });
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not build the QR card'), icon: 'alert-circle-outline', tone: 'danger' }));
+    } finally {
+      setDownloading(null);
+    }
+  };
+
+  // A render function, not a component defined inline: a component declared in the body gets a
+  // fresh identity every render, so React tears this down and rebuilds it each time — which
+  // would restart the spinner the moment `downloading` changes it.
+  const renderDownloadQr = ({ qrKey, url, heading, instruction }: { qrKey: string; url: string; heading: string; instruction: string }) => (
+    <TouchableOpacity
+      style={styles.downloadBtn}
+      disabled={downloading !== null}
+      onPress={() => handleDownloadQr(qrKey, url, heading, instruction)}
+    >
+      {downloading === qrKey ? (
+        <ActivityIndicator size="small" color={COLORS.heading} />
+      ) : (
+        <Icon name="printer-outline" size={14} color={COLORS.heading} />
+      )}
+      {/* One action, not two: on web this opens the browser's print dialog, where printing and
+          "Save as PDF" are both destinations in the same list; on a phone it writes the file and
+          hands it to the share sheet, which offers Print alongside everything else. A separate
+          "Download" button would run the identical code and just look like a choice. */}
+      <Text style={styles.downloadBtnText}>Print / Save QR card</Text>
+    </TouchableOpacity>
+  );
 
   return (
     <View style={styles.container}>
@@ -244,8 +293,16 @@ export const QRMenuScreen = ({ navigation }: any) => {
               <Text style={styles.shareBtnText}>Share Link</Text>
             </TouchableOpacity>
 
+            {selected && renderDownloadQr({
+              qrKey: `table-${selected.code}`,
+              url: orderUrl(selected),
+              heading: `Table ${selected.code}`,
+              instruction: 'Point your phone camera at the code to see the menu and order from your seat.',
+            })}
+
             <Text style={styles.hintText}>
-              Print this code and place it on the table. Scanning opens the live menu for Table {selected?.code}.
+              Opens a print-ready card — your cafe's name, the code, and "Scan to Order" under it.
+              Send it straight to a printer, or pick "Save as PDF" in the same dialog.
             </Text>
           </View>
         </View>
@@ -271,6 +328,13 @@ export const QRMenuScreen = ({ navigation }: any) => {
               <Icon name="share-variant" size={14} color="#FFFFFF" />
               <Text style={styles.shareBtnText}>Share Link</Text>
             </TouchableOpacity>
+
+            {genericOrderUrl && renderDownloadQr({
+              qrKey: 'generic',
+              url: genericOrderUrl,
+              heading: 'Our Menu',
+              instruction: 'Point your phone camera at the code to browse the full menu.',
+            })}
 
             <Text style={styles.hintText}>
               Not tied to any table — guests can browse the menu and prices here, but ordering is
@@ -349,6 +413,13 @@ export const QRMenuScreen = ({ navigation }: any) => {
               <Icon name="share-variant" size={14} color="#FFFFFF" />
               <Text style={styles.shareBtnText}>Share Link</Text>
             </TouchableOpacity>
+
+            {deliveryOrderUrl && renderDownloadQr({
+              qrKey: 'delivery',
+              url: deliveryOrderUrl,
+              heading: 'Home Delivery',
+              instruction: 'Point your phone camera at the code to order for delivery to your address.',
+            })}
 
             <Text style={styles.hintText}>
               Print this on flyers, packaging or a shopfront board. Scanning it opens the menu with
@@ -482,6 +553,22 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     width: '100%',
     marginBottom: 7.5,
   },
+  /* Outlined against Share's solid fill: both are useful, but sharing a link is the everyday
+     action and printing the card is the once-per-table one. */
+  downloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.card,
+    borderRadius: 6,
+    paddingVertical: 7.5,
+    width: '100%',
+    marginBottom: 7.5,
+  },
+  downloadBtnText: { fontSize: 12.5, fontWeight: '700', color: COLORS.heading },
   shareBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   hintText: { fontSize: 12, color: COLORS.muted, textAlign: 'center', lineHeight: 17 },
   pdfSection: {

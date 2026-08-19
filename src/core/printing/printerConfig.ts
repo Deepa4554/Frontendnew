@@ -1,6 +1,9 @@
 import { getItem, setItem, removeItem } from '../storage/mmkv';
 
-export type PrinterType = 'none' | 'wifi' | 'bluetooth';
+/** 'browser' hands the receipt to the browser's own print dialog, and through it to whatever
+ * printer the OS has a driver for — the only way to reach a USB printer, which neither of the
+ * other two can (see BrowserPrinter.web.ts). Web build only. */
+export type PrinterType = 'none' | 'wifi' | 'bluetooth' | 'browser';
 
 export interface PrinterConfig {
   type: PrinterType;

@@ -16,6 +16,12 @@ interface ToastState extends ToastPayload {
 
 interface UiState {
   toast: ToastState | null;
+  /** Monotonic counter behind ToastState.key. ToastHost re-runs its show/auto-dismiss
+   * effect when `toast.key` changes, so the key has to differ on every dispatch — the
+   * previous `Date.now()` handed out the SAME value to toasts fired within one
+   * millisecond, and the effect then never re-ran: that toast stayed on screen with no
+   * running dismiss timer. */
+  toastSeq: number;
   /** Desktop-web sidebar icon-only mode — lives here (not local component state)
    * because DesktopAppShell is re-instantiated fresh per screen (see withDesktopShell),
    * so local state would reset back to expanded on every navigation. */
@@ -24,6 +30,7 @@ interface UiState {
 
 const initialState: UiState = {
   toast: null,
+  toastSeq: 0,
   sidebarCollapsed: false,
 };
 
@@ -32,7 +39,8 @@ const uiSlice = createSlice({
   initialState,
   reducers: {
     showToast: (state, action: PayloadAction<ToastPayload>) => {
-      state.toast = { ...action.payload, key: Date.now() };
+      state.toastSeq += 1;
+      state.toast = { ...action.payload, key: state.toastSeq };
     },
     hideToast: (state) => {
       state.toast = null;

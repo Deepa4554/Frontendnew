@@ -2014,6 +2014,8 @@ export const POSCheckoutScreen = () => {
           guestPhone: order.guestPhone ?? undefined,
           waiterName: selectedWaiterName,
           gstNumber: settings?.gstNumber,
+      licenceNumber: settings?.licenceNumber,
+      logoUrl: settings?.logoUrl,
           upiVpa: settings?.upiVpa,
           amountDue: order.balanceDue ?? order.total,
           items: order.items,
@@ -2070,6 +2072,8 @@ export const POSCheckoutScreen = () => {
       guestPhone: guestPhone.trim() || undefined,
       waiterName: selectedWaiterName,
       gstNumber: settings?.gstNumber,
+      licenceNumber: settings?.licenceNumber,
+      logoUrl: settings?.logoUrl,
       upiVpa: settings?.upiVpa,
       // CartLine.price is already per-unit-with-toppings, the same thing the printer
       // multiplies by qty for a server order's line (see buildReceiptLines).
@@ -2443,6 +2447,8 @@ export const POSCheckoutScreen = () => {
       guestPhone: receipt.guestPhone,
       waiterName: selectedWaiterName,
       gstNumber: settings?.gstNumber,
+      licenceNumber: settings?.licenceNumber,
+      logoUrl: settings?.logoUrl,
       upiVpa: settings?.upiVpa,
       items: receipt.items,
       subtotal: receipt.subtotal,

@@ -20,8 +20,9 @@ const mockPrintKot = PrinterService.printKot as jest.MockedFunction<typeof Print
 let kotSeq = 0;
 const nextKot = () => `#K${++kotSeq}`;
 
-/** Minimal order shaped only as far as AutoKotPrintHost actually reads it. */
-const makeOrder = (opts: { createdByName: string | null; kotNumbers: string[] }) => ({
+/** Minimal order shaped only as far as AutoKotPrintHost actually reads it. `firedAtAgoMs`
+ * defaults to "just now", which is what every case except the staleness ones wants. */
+const makeOrder = (opts: { createdByName: string | null; kotNumbers: string[]; firedAtAgoMs?: number }) => ({
   id: kotSeq,
   title: 'Table #1',
   tableCode: 'T1',
@@ -36,9 +37,11 @@ const makeOrder = (opts: { createdByName: string | null; kotNumbers: string[] })
   fireBatches: opts.kotNumbers.map((kotNumber, i) => ({
     kotNumber,
     batchNumber: i + 1,
-    firedAt: '2026-08-19T14:30:00Z',
+    firedAt: new Date(Date.now() - (opts.firedAtAgoMs ?? 0)).toISOString(),
   })),
 });
+
+const MINUTE = 60 * 1000;
 
 /** One React Query page of orders. A fresh object each time, since the effect keys off `data`. */
 const loaded = (...orders: ReturnType<typeof makeOrder>[]) =>
@@ -112,6 +115,39 @@ describe('AutoKotPrintHost', () => {
     await flush();
 
     expect(mockPrintKot).not.toHaveBeenCalled();
+  });
+
+  it('does not print a round fired too long ago to still be worth cooking', async () => {
+    // The guest has eaten and gone. Whatever went wrong — printer off, tab closed — the ticket
+    // is now only paper: the kitchen either made this food long ago or never will.
+    mockUseOrders.mockReturnValue(loaded());
+    const { rerender } = await renderWithProviders(<AutoKotPrintHost />);
+    await flush();
+
+    mockUseOrders.mockReturnValue(
+      loaded(makeOrder({ createdByName: null, kotNumbers: [nextKot()], firedAtAgoMs: 45 * MINUTE })),
+    );
+    await rerender(<AutoKotPrintHost />);
+    await flush();
+
+    expect(mockPrintKot).not.toHaveBeenCalled();
+  });
+
+  it('still prints a round that is only a few minutes late', async () => {
+    // The other side of the same rule: a printer switched back on, or a laptop waking up,
+    // must not cost the kitchen a ticket for food nobody has started yet.
+    mockUseOrders.mockReturnValue(loaded());
+    const { rerender } = await renderWithProviders(<AutoKotPrintHost />);
+    await flush();
+
+    const late = nextKot();
+    mockUseOrders.mockReturnValue(
+      loaded(makeOrder({ createdByName: null, kotNumbers: [late], firedAtAgoMs: 6 * MINUTE })),
+    );
+    await rerender(<AutoKotPrintHost />);
+
+    await waitFor(() => expect(mockPrintKot).toHaveBeenCalledTimes(1));
+    expect(mockPrintKot).toHaveBeenCalledWith(expect.objectContaining({ kotNumber: late }));
   });
 
   it('refuses to print a whole pile that shows up in one poll tick', async () => {
