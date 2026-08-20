@@ -14,6 +14,16 @@ import { NonBlockingOverlay } from './NonBlockingOverlay';
 import { useResponsive } from '../../core/utils/useResponsive';
 import { PrinterService } from '../../core/printing/PrinterService';
 import { markKotPrinted } from '../../core/printing/printedKots';
+import { alertChime } from '../../core/notifications/alertChime';
+
+/**
+ * How often the chime repeats while orders are still waiting to be confirmed.
+ *
+ * Long enough not to become background noise anyone learns to tune out, short enough that a
+ * guest sitting at a table isn't waiting on a round nobody has noticed. Twenty seconds is
+ * about three reminders in the minute it should take someone to walk to the till.
+ */
+const PENDING_REMINDER_MS = 20000;
 
 /** How a pending order is named on screen — its table if it has one, else its own title. */
 const orderLabel = (o: { tableCode?: string | null; title: string }) =>
@@ -76,6 +86,10 @@ export const PendingOrdersHost = () => {
     seenIds.current = currentIds;
     if (departed > 0) setHandled((n) => n + departed);
     if (fresh.length === 0) return;
+    // One chime for the batch, for the same reason the toast below is one toast: five orders
+    // landing together are one event to the person at the counter, and five overlapping
+    // chimes just sound like a fault.
+    alertChime.play();
     // Collapsed into a single toast deliberately. A QR rush lands several orders in one
     // push, and uiSlice holds exactly one toast at a time — dispatching per order had each
     // overwrite the last, so only the final table's name was ever readable. The count is
@@ -91,6 +105,22 @@ export const PendingOrdersHost = () => {
       }),
     );
   }, [orders, dispatch]);
+
+  // Keyed on "is anything waiting", NOT on how many: the count changes every time an order is
+  // confirmed, and keying on that would restart the timer — and re-chime — on the way DOWN,
+  // beeping at staff for the work they are in the middle of doing.
+  const hasPending = orders.length > 0;
+  useEffect(() => {
+    // Silent while the sheet is open. Whoever opened it is looking at the queue right now;
+    // chiming at them is nagging someone already doing the thing being asked for. Closing it
+    // with orders still waiting re-arms this, which is the case the reminder is actually for.
+    if (!hasPending || open) return;
+    // Deliberately a reminder, not a one-shot: a QR order sits unmade until someone confirms
+    // it, and the single chime on arrival is easy to miss across a busy floor. It stops the
+    // moment the queue empties — the cleanup below runs when `hasPending` goes false.
+    const timer = setInterval(() => alertChime.play(), PENDING_REMINDER_MS);
+    return () => clearInterval(timer);
+  }, [hasPending, open]);
 
   // Confirming a guest QR order fires it server-side (OrdersController.ConfirmGuestOrder)
   // exactly like a staff Fire — but unlike every staff-facing screen (TableManagementScreen,
