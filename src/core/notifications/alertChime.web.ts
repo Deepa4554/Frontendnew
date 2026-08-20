@@ -41,23 +41,15 @@ function getContext(): AudioContext | null {
  * created before that starts out 'suspended' — so the very first chime on a freshly loaded,
  * untouched tab would be silent no matter what play() does.
  *
- * These listeners close that window: any click or keypress anywhere in the app builds the
- * context and gets it running, so by the time an order actually lands the till has long since
- * been touched and there is a live context waiting.
- *
- * Note that this CREATES the context rather than only resuming one — an earlier version tested
- * `context?.state`, which is null until the first play() and so did nothing at all on every
- * gesture. The context was then first built at the moment an order arrived, which is precisely
- * the moment it is too late to be asking the browser for permission to make noise.
- *
- * Deliberately not `once`: the browser suspends the context again on its own (a backgrounded
- * tab does exactly this), so re-arming on every gesture is cheaper than tracking that. Both
- * listeners are passive and exit immediately once the context is running.
+ * These listeners exist to close that window: any click or keypress anywhere in the app wakes
+ * the context up, so by the time an order actually lands the till has long since been touched.
+ * Deliberately not `once` — the browser can suspend the context again (a backgrounded tab
+ * does exactly this), and re-arming on every gesture is cheaper than tracking that. Both are
+ * passive and exit immediately when there is nothing to resume.
  */
 if (typeof window !== 'undefined') {
   const wake = () => {
-    const ctx = getContext();
-    if (ctx?.state === 'suspended') void ctx.resume().catch(() => {});
+    if (context?.state === 'suspended') void context.resume().catch(() => {});
   };
   window.addEventListener('pointerdown', wake, { passive: true });
   window.addEventListener('keydown', wake, { passive: true });
@@ -84,29 +76,17 @@ function playNote(ctx: AudioContext, hz: number, startAt: number): void {
   oscillator.stop(startAt + NOTE_SECONDS + RAMP_SECONDS);
 }
 
-/** Both notes, back to back, starting now. */
-function schedule(ctx: AudioContext): void {
-  const start = ctx.currentTime;
-  NOTES_HZ.forEach((hz, i) => playNote(ctx, hz, start + i * (NOTE_SECONDS + GAP_SECONDS)));
-}
-
 export const alertChime = {
   play(): void {
     try {
       const ctx = getContext();
       if (!ctx) return;
+      // A tab that was backgrounded comes back suspended. Resuming is async, but the notes are
+      // scheduled against the context clock and simply start once it is running again.
+      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
 
-      if (ctx.state === 'suspended') {
-        // Scheduling against a suspended context loses the notes silently: its currentTime does
-        // not advance while suspended, so by the time the async resume() settles, the start
-        // times computed from it are already in the past and nothing is ever heard. Waiting for
-        // the resume is the difference between a chime that arrives with the order and one that
-        // is first heard on the 20s reminder — which reads as "the sound is late".
-        void ctx.resume().then(() => schedule(ctx)).catch(() => {});
-        return;
-      }
-
-      schedule(ctx);
+      const start = ctx.currentTime;
+      NOTES_HZ.forEach((hz, i) => playNote(ctx, hz, start + i * (NOTE_SECONDS + GAP_SECONDS)));
     } catch {
       // See the module comment: the alert itself must survive a broken audio stack.
     }
