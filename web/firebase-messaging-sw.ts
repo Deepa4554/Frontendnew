@@ -14,11 +14,22 @@ import { initializeApp } from 'firebase/app';
 import { getMessaging, onBackgroundMessage } from 'firebase/messaging/sw';
 import { FIREBASE_WEB_CONFIG } from '../src/core/config/firebaseWebConfig';
 
+// TEMP DIAGNOSTIC — remove once push delivery is confirmed working end-to-end. Listens on the
+// raw 'push' event (below Firebase's own parsing) so we can tell "no push ever arrived at this
+// service worker" apart from "a push arrived but Firebase's onBackgroundMessage failed on it".
+self.addEventListener('push', (event) => {
+  console.log('[push diagnostic] RAW push event received at service worker:', event.data?.text());
+});
+
+console.log('[push diagnostic] firebase-messaging-sw.ts loaded, apiKey configured=', !!FIREBASE_WEB_CONFIG.apiKey);
+
 if (FIREBASE_WEB_CONFIG.apiKey) {
   const app = initializeApp(FIREBASE_WEB_CONFIG);
   const messaging = getMessaging(app);
 
   onBackgroundMessage(messaging, (payload) => {
+    // TEMP DIAGNOSTIC — remove once push delivery is confirmed working end-to-end.
+    console.log('[push diagnostic] onBackgroundMessage payload:', payload);
     const title = payload.notification?.title ?? 'PrabandhOS';
     self.registration.showNotification(title, {
       body: payload.notification?.body,

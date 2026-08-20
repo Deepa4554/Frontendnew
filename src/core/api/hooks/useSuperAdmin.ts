@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { superAdminApi, CreatePlatformExpenseRequest, UpdateTenantScreenAccessRequest } from '../superAdminApi';
-import { SubscriptionTier } from '../subscriptionApi';
+import { BillingCycle, SubscriptionTier } from '../subscriptionApi';
 import { UpdateStaffScreenAccessRequest } from '../staffApi';
 import { queryKeys } from './queryKeys';
 
@@ -17,8 +17,8 @@ export const useTenantSales = (tenantId: number | null) =>
 export const useChangeTenantPlan = () => {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ tenantId, plan }: { tenantId: number; plan: SubscriptionTier }) =>
-      superAdminApi.changeTenantPlan(tenantId, plan),
+    mutationFn: ({ tenantId, plan, cycle }: { tenantId: number; plan: SubscriptionTier; cycle: BillingCycle }) =>
+      superAdminApi.changeTenantPlan(tenantId, plan, cycle),
     onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.superAdminTenants }),
   });
 };

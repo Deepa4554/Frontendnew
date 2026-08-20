@@ -32,8 +32,13 @@ export const getPushToken = async (): Promise<string | null> => {
   try {
     const registration = await navigator.serviceWorker.register('/firebase-messaging-sw.js');
     await navigator.serviceWorker.ready;
-    return await getFcmToken(getMessaging(app), { vapidKey: FIREBASE_VAPID_KEY, serviceWorkerRegistration: registration });
-  } catch {
+    const token = await getFcmToken(getMessaging(app), { vapidKey: FIREBASE_VAPID_KEY, serviceWorkerRegistration: registration });
+    // TEMP DIAGNOSTIC — remove once push delivery is confirmed working end-to-end.
+    console.log('[push diagnostic] getPushToken succeeded:', token?.slice(0, 12) + '...');
+    return token;
+  } catch (err) {
+    // TEMP DIAGNOSTIC — remove once push delivery is confirmed working end-to-end.
+    console.error('[push diagnostic] getPushToken failed:', err);
     return null;
   }
 };

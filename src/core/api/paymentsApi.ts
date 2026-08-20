@@ -1,7 +1,8 @@
 import { apiClient } from '../network/api';
-import { ApiSubscription, SubscriptionTier } from './subscriptionApi';
+import { ApiSubscription, BillingCycle, CYCLE_TO_WIRE, SubscriptionTier } from './subscriptionApi';
 
-export type BillingCycle = 'MONTHLY' | 'YEARLY';
+// Re-exported for the screens and hooks that have always imported it from here.
+export type { BillingCycle };
 
 export interface CreatedOrder {
   orderId: string;
@@ -33,11 +34,6 @@ const PLAN_TO_WIRE: Record<SubscriptionTier, string> = {
   STARTER: 'Starter',
   PROFESSIONAL: 'Professional',
   ENTERPRISE: 'Enterprise',
-};
-
-const CYCLE_TO_WIRE: Record<BillingCycle, string> = {
-  MONTHLY: 'Monthly',
-  YEARLY: 'Yearly',
 };
 
 export const paymentsApi = {

@@ -39,11 +39,15 @@ export const usePushNotifications = () => {
       if (!granted || cancelled) return;
 
       const token = await getPushToken();
+      // TEMP DIAGNOSTIC — remove once push delivery is confirmed working end-to-end.
+      console.log('[push diagnostic] usePushNotifications: permission granted, token=', token ? token.slice(0, 12) + '...' : null);
       if (!token || cancelled || token === registeredTokenRef.current) return;
       registeredTokenRef.current = token;
       try {
         await deviceTokenApi.register(token, 'Web');
-      } catch {
+        console.log('[push diagnostic] deviceTokenApi.register succeeded');
+      } catch (err) {
+        console.error('[push diagnostic] deviceTokenApi.register FAILED:', err);
         // Best-effort — same as the native hook, a failed registration just means this
         // browser misses pushes until the next login/mount retries it.
       }
@@ -53,7 +57,9 @@ export const usePushNotifications = () => {
     let unsubscribeForeground: (() => void) | undefined;
     if (app) {
       try {
-        unsubscribeForeground = onMessage(getMessaging(app), () => {
+        unsubscribeForeground = onMessage(getMessaging(app), (payload) => {
+          // TEMP DIAGNOSTIC — remove once push delivery is confirmed working end-to-end.
+          console.log('[push diagnostic] FOREGROUND push received:', payload);
           // Tab is open and focused — a real notification popup would be redundant (the user
           // is already looking at the app), so this just refreshes the in-app list, same as a
           // foreground push does on native.

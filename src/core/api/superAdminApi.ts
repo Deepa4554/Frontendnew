@@ -1,5 +1,5 @@
 import { apiClient } from '../network/api';
-import { SubscriptionTier } from './subscriptionApi';
+import { BillingCycle, CYCLE_TO_WIRE, SubscriptionTier } from './subscriptionApi';
 import { ApiStaff, StaffScreenAccess, UpdateStaffScreenAccessRequest } from './staffApi';
 
 export interface ApiTenantSummary {
@@ -9,6 +9,10 @@ export interface ApiTenantSummary {
   status: string;
   createdAt: string;
   plan: string;
+  /** MONTHLY on the free trial and on any cafe with no subscription row — neither is sold
+   * on a cycle, so only show it alongside a paid `plan`. */
+  cycle: BillingCycle;
+  planStartedAt: string | null;
   planExpiresAt: string | null;
   staffCount: number;
   branchCount: number;
@@ -85,9 +89,9 @@ export interface UpdateTenantScreenAccessRequest {
 
 export const superAdminApi = {
   listTenants: () => apiClient.get<ApiTenantSummary[]>('/superadmin/tenants').then((r) => r.data),
-  changeTenantPlan: (tenantId: number, plan: SubscriptionTier) =>
+  changeTenantPlan: (tenantId: number, plan: SubscriptionTier, cycle: BillingCycle = 'MONTHLY') =>
     apiClient
-      .post<ApiTenantSummary>(`/superadmin/tenants/${tenantId}/change-plan`, { plan: PLAN_TO_WIRE[plan] })
+      .post<ApiTenantSummary>(`/superadmin/tenants/${tenantId}/change-plan`, { plan: PLAN_TO_WIRE[plan], cycle: CYCLE_TO_WIRE[cycle] })
       .then((r) => r.data),
   tenantSales: (tenantId: number) => apiClient.get<TenantSales>(`/superadmin/tenants/${tenantId}/sales`).then((r) => r.data),
   listExpenses: () => apiClient.get<PlatformExpenseSummary>('/superadmin/expenses').then((r) => r.data),

@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
 import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
-import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Platform, Dimensions } from 'react-native';
-import { Text, useTheme, Card, Button, Chip } from 'react-native-paper';
+import { View, StyleSheet, FlatList, TouchableOpacity, Modal, TextInput, ActivityIndicator, Text } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
@@ -36,8 +35,8 @@ const TYPE_LABELS: Record<string, string> = {
 
 export const CouponsScreen = ({ route, navigation }: any) => {
   const { isDesktopWeb } = useResponsive();
-  const theme = useTheme();
   const COLORS = useThemeColors();
+  const styles = makeStyles(COLORS, isDesktopWeb);
   const insets = useSafeAreaInsets();
   const dispatch = useDispatch();
   const customerId: number | undefined = route?.params?.customerId;
@@ -131,45 +130,50 @@ export const CouponsScreen = ({ route, navigation }: any) => {
   };
 
   const renderCoupon = ({ item }: { item: Coupon }) => {
-    const color = TYPE_COLORS[item.type] ?? '#64748B';
+    const color = TYPE_COLORS[item.type] ?? COLORS.muted;
     return (
-      <Card style={[styles.couponCard, { borderLeftColor: color, borderLeftWidth: 5 }]} mode="elevated">
-        <Card.Content>
-          <View style={styles.rowBetween}>
-            <Chip style={{ backgroundColor: `${color}20` }} textStyle={{ color, fontSize: 11 }}>
-              {TYPE_LABELS[item.type]}
-            </Chip>
-            {item.isUsed && (
-              <Chip style={{ backgroundColor: '#F1F5F9' }} textStyle={{ color: '#94A3B8', fontSize: 11 }}>
-                Used
-              </Chip>
-            )}
+      <View style={[styles.couponCard, { borderLeftColor: color }, item.isUsed && styles.couponCardUsed]}>
+        <View style={styles.rowBetween}>
+          <View style={[styles.typeChip, { backgroundColor: `${color}1A` }]}>
+            <Text style={[styles.typeChipText, { color }]}>{TYPE_LABELS[item.type]}</Text>
           </View>
-          <Text style={[styles.couponTitle, { color: theme.colors.onSurface }]}>{item.title}</Text>
-          <Text style={styles.couponDesc}>{item.description}</Text>
-          <View style={styles.couponMeta}>
-            <View style={[styles.codeTag, { backgroundColor: theme.colors.surfaceVariant }]}>
-              <Text style={[styles.codeText, { color: theme.colors.onSurfaceVariant }]}>{item.code}</Text>
+          {item.isUsed && (
+            <View style={[styles.typeChip, { backgroundColor: COLORS.chipBg }]}>
+              <Text style={[styles.typeChipText, { color: COLORS.muted }]}>Used</Text>
             </View>
-            <Text style={styles.expiry}>Expires: {new Date(item.expiresAt).toLocaleDateString()}</Text>
-          </View>
-          {!item.isUsed && (
-            <Button mode="contained-tonal" style={styles.applyBtn} compact onPress={() => handleRedeem(item)}>
-              Void
-            </Button>
           )}
-        </Card.Content>
-      </Card>
+        </View>
+        <Text style={styles.couponTitle}>{item.title}</Text>
+        {!!item.description && <Text style={styles.couponDesc}>{item.description}</Text>}
+        <View style={styles.couponMeta}>
+          <View style={styles.codeTag}>
+            <Text style={styles.codeText}>{item.code}</Text>
+          </View>
+          <Text style={styles.expiry}>Expires: {new Date(item.expiresAt).toLocaleDateString()}</Text>
+        </View>
+        {!item.isUsed && (
+          <TouchableOpacity style={styles.voidBtn} activeOpacity={0.8} onPress={() => handleRedeem(item)}>
+            <Text style={styles.voidBtnText}>Void</Text>
+          </TouchableOpacity>
+        )}
+      </View>
     );
   };
 
+  const issueBtn = (
+    <TouchableOpacity style={styles.issueBtn} activeOpacity={0.8} onPress={() => setIssueVisible(true)}>
+      <Icon name="plus" size={16} color="#FFFFFF" />
+      <Text style={styles.issueBtnText}>Issue</Text>
+    </TouchableOpacity>
+  );
+
   return (
-    <View style={[styles.container, { backgroundColor: theme.colors.background }]}>
+    <View style={styles.container}>
       <DesktopPageHeader
         icon="ticket-percent-outline"
         title="Coupons"
         onBack={() => navigation.goBack()}
-        right={<Button icon="plus" mode="outlined" onPress={() => setIssueVisible(true)}>Issue</Button>}
+        right={issueBtn}
       />
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
@@ -177,13 +181,11 @@ export const CouponsScreen = ({ route, navigation }: any) => {
             <Icon name="arrow-left" size={22} color={COLORS.heading} />
           </TouchableOpacity>
           <Icon name="ticket-percent-outline" size={22} color={COLORS.accent} />
-          <Text style={[styles.title, { color: COLORS.heading }]} numberOfLines={1}>
-            Coupons{customer?.summary.name ? <Text style={[styles.titleCount, { color: COLORS.muted }]}> · {customer.summary.name}</Text> : ''}
+          <Text style={styles.title} numberOfLines={1}>
+            Coupons{customer?.summary.name ? <Text style={styles.titleCount}> · {customer.summary.name}</Text> : ''}
           </Text>
           <View style={{ flex: 1 }} />
-          <Button icon="plus" mode="outlined" onPress={() => setIssueVisible(true)}>
-            Issue
-          </Button>
+          {issueBtn}
         </View>
       )}
 
@@ -203,21 +205,21 @@ export const CouponsScreen = ({ route, navigation }: any) => {
           keyExtractor={(item) => String(item.id)}
           renderItem={renderCoupon}
           contentContainerStyle={styles.list}
-          ListEmptyComponent={<Text style={{ textAlign: 'center', opacity: 0.5, marginTop: 40 }}>No coupons issued to this customer yet</Text>}
+          ListEmptyComponent={<Text style={styles.emptyText}>No coupons issued to this customer yet</Text>}
         />
       )}
 
       <Modal visible={issueVisible} transparent animationType="fade" onRequestClose={() => setIssueVisible(false)}>
         <View style={styles.modalOverlay}>
-          <View style={[styles.modalSheet, { backgroundColor: COLORS.background }]}>
+          <View style={styles.modalSheet}>
             <View style={styles.modalHeader}>
-              <Text style={[styles.modalTitle, { color: COLORS.heading }, modalHeadingOverride(styles.modalTitle.fontSize)]}>Issue Coupon</Text>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Issue Coupon</Text>
               <CloseButton onPress={() => setIssueVisible(false)} size={18} />
             </View>
 
             <View style={{ borderRadius: 10 }}>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: COLORS.cardAlt, color: COLORS.heading, borderColor: COLORS.inputBorder }]}
+                style={styles.modalInput}
                 value={title}
                 onChangeText={setTitle}
                 placeholder="Title"
@@ -227,7 +229,7 @@ export const CouponsScreen = ({ route, navigation }: any) => {
 
             <View style={{ borderRadius: 10 }}>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: COLORS.cardAlt, color: COLORS.heading, borderColor: COLORS.inputBorder, marginTop: 8 }]}
+                style={[styles.modalInput, { marginTop: 8 }]}
                 value={description}
                 onChangeText={setDescription}
                 placeholder="Description"
@@ -241,7 +243,10 @@ export const CouponsScreen = ({ route, navigation }: any) => {
                 return (
                   <TouchableOpacity
                     key={t}
-                    style={[styles.typePill, { backgroundColor: isActive ? COLORS.button : COLORS.cardAlt }]}
+                    style={[
+                      styles.typePill,
+                      { backgroundColor: isActive ? COLORS.button : COLORS.cardAlt, borderColor: isActive ? COLORS.button : COLORS.inputBorder },
+                    ]}
                     onPress={() => setType(t)}
                   >
                     <Text style={[styles.typePillText, { color: isActive ? '#FFFFFF' : COLORS.heading }]}>
@@ -255,7 +260,7 @@ export const CouponsScreen = ({ route, navigation }: any) => {
             <View style={[styles.fieldRow, { marginTop: 8 }]}>
               <View style={{ borderRadius: 10, flex: 1 }}>
                 <TextInput
-                  style={[styles.modalInput, { flex: 1, backgroundColor: COLORS.cardAlt, color: COLORS.heading, borderColor: COLORS.inputBorder }]}
+                  style={[styles.modalInput, { flex: 1 }]}
                   value={value}
                   onChangeText={setValue}
                   keyboardType="numeric"
@@ -265,7 +270,7 @@ export const CouponsScreen = ({ route, navigation }: any) => {
               </View>
               <View style={{ borderRadius: 10, flex: 1 }}>
                 <TextInput
-                  style={[styles.modalInput, { flex: 1, backgroundColor: COLORS.cardAlt, color: COLORS.heading, borderColor: COLORS.inputBorder }]}
+                  style={[styles.modalInput, { flex: 1 }]}
                   value={minOrderValue}
                   onChangeText={setMinOrderValue}
                   keyboardType="numeric"
@@ -277,7 +282,7 @@ export const CouponsScreen = ({ route, navigation }: any) => {
 
             <View style={{ borderRadius: 10 }}>
               <TextInput
-                style={[styles.modalInput, { backgroundColor: COLORS.cardAlt, color: COLORS.heading, borderColor: COLORS.inputBorder, marginTop: 8 }]}
+                style={[styles.modalInput, { marginTop: 8 }]}
                 value={validDays}
                 onChangeText={setValidDays}
                 keyboardType="numeric"
@@ -287,10 +292,10 @@ export const CouponsScreen = ({ route, navigation }: any) => {
             </View>
 
             <View style={styles.modalActions}>
-              <TouchableOpacity style={[styles.modalCancelBtn, { backgroundColor: COLORS.card }]} onPress={() => setIssueVisible(false)}>
-                <Text style={[styles.modalCancelText, { color: COLORS.heading }]}>Cancel</Text>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setIssueVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
               </TouchableOpacity>
-              <TouchableOpacity style={[styles.modalSaveBtn, { backgroundColor: COLORS.button }]} onPress={handleIssueCoupon} disabled={issueCoupon.isPending}>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleIssueCoupon} disabled={issueCoupon.isPending}>
                 {issueCoupon.isPending ? (
                   <ActivityIndicator size="small" color="#FFFFFF" />
                 ) : (
@@ -305,39 +310,90 @@ export const CouponsScreen = ({ route, navigation }: any) => {
   );
 };
 
-// Module-scope styles can't use the reactive useResponsive() hook (no component
-// context here) — a load-time width check is an acceptable static approximation for
-// this file since it doesn't need to react to a live window resize.
-const isDesktopWeb = Platform.OS === 'web' && Dimensions.get('window').width >= 768;
-
-const styles = StyleSheet.create({
-  container: { flex: 1 },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 12 : 12, paddingBottom: isDesktopWeb ? 9 : 9, gap: isDesktopWeb ? 7.5 : 7.5 },
+const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
+  container: { flex: 1, backgroundColor: COLORS.background },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 12, paddingBottom: 9, gap: 7.5 },
   headerIconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  title: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold' },
-  titleCount: { fontSize: 14, fontWeight: '400' },
-  list: { padding: isDesktopWeb ? 12 : 12, paddingTop: 0 },
-  couponCard: { marginBottom: isDesktopWeb ? 10.5 : 10.5, borderRadius: 8, overflow: 'hidden' },
-  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: isDesktopWeb ? 6 : 6 },
-  couponTitle: { fontSize: isDesktopWeb ? 17 : 14, fontWeight: '700', marginBottom: isDesktopWeb ? 3 : 3 },
-  couponDesc: { opacity: 0.65, fontSize: isDesktopWeb ? 13 : 12, marginBottom: isDesktopWeb ? 9 : 9 },
-  couponMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktopWeb ? 9 : 9 },
-  codeTag: { borderRadius: 8, paddingHorizontal: isDesktopWeb ? 9 : 9, paddingVertical: isDesktopWeb ? 3 : 3 },
-  codeText: { fontWeight: '800', letterSpacing: 2, fontSize: isDesktopWeb ? 13 : 12 },
-  expiry: { fontSize: 11, opacity: 0.55 },
-  applyBtn: { borderRadius: 6 },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 15 : 15 },
-  modalSheet: { width: '100%', borderRadius: 12, padding: isDesktopWeb ? 12 : 12, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: isDesktopWeb ? 6 : 6 },
-  modalTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: '800' },
-  modalInput: { borderWidth: INPUT_BORDER_WIDTH, borderRadius: isDesktopWeb ? 8 : 8, paddingHorizontal: 10, height: 34, fontSize: 12 },
-  modalActions: { flexDirection: 'row', gap: isDesktopWeb ? 6 : 6, marginTop: isDesktopWeb ? 9 : 9 },
-  modalCancelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6, paddingVertical: isDesktopWeb ? 7.5 : 7.5 },
-  modalCancelText: { fontSize: 12, fontWeight: '700' },
-  modalSaveBtn: { flex: 1.3, alignItems: 'center', justifyContent: 'center', borderRadius: 6, paddingVertical: 7.5 },
+  title: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.heading },
+  titleCount: { fontSize: 14, fontWeight: '400', color: COLORS.muted },
+  issueBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: isDesktopWeb ? 5 : 3.75,
+    backgroundColor: COLORS.button,
+    borderRadius: 6,
+    paddingHorizontal: isDesktopWeb ? 11 : 10.5,
+    paddingVertical: isDesktopWeb ? 8 : 6,
+  },
+  issueBtnText: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '700', color: '#FFFFFF' },
+  list: { padding: 12, paddingTop: 0 },
+  emptyText: { textAlign: 'center', color: COLORS.muted, fontSize: 12, marginTop: 40 },
+  couponCard: {
+    marginBottom: 10.5,
+    borderRadius: 8,
+    backgroundColor: COLORS.cardAlt,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    borderLeftWidth: 5,
+    padding: 12,
+  },
+  couponCardUsed: { opacity: 0.65 },
+  rowBetween: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 },
+  typeChip: { borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  typeChipText: { fontSize: 11, fontWeight: '700' },
+  couponTitle: { fontSize: isDesktopWeb ? 17 : 14, fontWeight: '700', color: COLORS.heading, marginBottom: 3 },
+  couponDesc: { fontSize: isDesktopWeb ? 13 : 12, color: COLORS.muted, marginBottom: 9 },
+  couponMeta: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 9 },
+  codeTag: { borderRadius: 8, paddingHorizontal: 9, paddingVertical: 3, backgroundColor: COLORS.chipBg },
+  codeText: { fontWeight: '800', letterSpacing: 2, fontSize: isDesktopWeb ? 13 : 12, color: COLORS.heading },
+  expiry: { fontSize: 11, color: COLORS.muted },
+  voidBtn: {
+    alignSelf: 'flex-start',
+    borderRadius: 6,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.card,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+  },
+  voidBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(43, 24, 16, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: isDesktopWeb ? 18 : 15,
+  },
+  // maxWidth keeps the sheet a centered dialog on a tablet/desktop browser instead of
+  // stretching edge-to-edge — same 420 cap the other CRM modals use.
+  modalSheet: {
+    width: '100%',
+    maxWidth: 420,
+    alignSelf: 'center',
+    backgroundColor: COLORS.background,
+    borderRadius: 12,
+    padding: 12,
+    overflow: 'hidden',
+  },
+  modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: 6 },
+  modalTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: '800', color: COLORS.heading },
+  modalInput: {
+    borderWidth: INPUT_BORDER_WIDTH,
+    borderRadius: 8,
+    paddingHorizontal: 10,
+    height: 34,
+    fontSize: 12,
+    backgroundColor: COLORS.cardAlt,
+    color: COLORS.heading,
+    borderColor: COLORS.inputBorder,
+  },
+  modalActions: { flexDirection: 'row', gap: 6, marginTop: 9 },
+  modalCancelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 6, paddingVertical: 7.5, backgroundColor: COLORS.card },
+  modalCancelText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
+  modalSaveBtn: { flex: 1.3, alignItems: 'center', justifyContent: 'center', borderRadius: 6, paddingVertical: 7.5, backgroundColor: COLORS.button },
   modalSaveText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   fieldRow: { flexDirection: 'row', gap: 4.5 },
   typeRow: { flexDirection: 'row', gap: 4.5 },
-  typePill: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 10, paddingVertical: 5.25 },
+  typePill: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, paddingVertical: 5.25 },
   typePillText: { fontSize: 12, fontWeight: '700' },
 });

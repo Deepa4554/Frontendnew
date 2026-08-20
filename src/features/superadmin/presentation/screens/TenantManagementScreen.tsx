@@ -11,7 +11,7 @@ import { useSuperAdminTenants, useChangeTenantPlan, useTenantSales } from '../..
 import { TenantScreenAccessModal } from './TenantScreenAccessModal';
 import { TenantStaffScreenAccessModal } from './TenantStaffScreenAccessModal';
 import { ApiTenantSummary } from '../../../../core/api/superAdminApi';
-import { SubscriptionTier } from '../../../../core/api/subscriptionApi';
+import { BillingCycle, cycleLabel, SubscriptionTier } from '../../../../core/api/subscriptionApi';
 import { getApiErrorMessage } from '../../../../core/network/api';
 import { logout } from '../../../auth/presentation/viewmodels/authSlice';
 import { AppDispatch } from '../../../../core/store';
@@ -47,6 +47,14 @@ const PLAN_OPTIONS: { key: SubscriptionTier; label: string }[] = [
 const PLAN_LABEL: Record<string, string> = { FREETRIAL: 'Free Trial', STARTER: 'Basic', PROFESSIONAL: 'Plus', ENTERPRISE: 'Enterprise', NONE: 'No plan' };
 const planLabel = (plan: string) => PLAN_LABEL[plan] ?? plan;
 
+const CYCLE_OPTIONS: BillingCycle[] = ['MONTHLY', 'YEARLY'];
+
+// The trial and a cafe with no subscription row both come back as MONTHLY because the column
+// can't be null — neither is actually sold on a cycle, so neither should advertise one.
+const isPaidPlan = (plan: string) => plan !== 'FREETRIAL' && plan !== 'NONE';
+
+const fmtDate = (iso: string | null) => (iso ? new Date(iso).toLocaleDateString('en-GB') : '—');
+
 // One tenant row. React.memo'd so the whole list skips re-render while the user types in the
 // search box — module-level `styles`/`COLORS` are already stable, and the passed setters are
 // stable setState functions, so a row re-renders only when its own tenant data changes.
@@ -58,10 +66,11 @@ const TenantCard = React.memo(({ tenant, onViewSales, onManageScreens, onManageS
   onChangePlan: (t: ApiTenantSummary) => void;
 }) => {
   const style = STATUS_STYLES[tenant.status] ?? STATUS_STYLES.TRIAL;
-  const expiresText = tenant.planExpiresAt
-    ? new Date(tenant.planExpiresAt) < new Date()
-      ? 'Expired'
-      : `Expires ${new Date(tenant.planExpiresAt).toLocaleDateString('en-GB')}`
+  const expired = !!tenant.planExpiresAt && new Date(tenant.planExpiresAt) < new Date();
+  // Both ends of the term, not just the far one — "Expires 12/09" on its own never said which
+  // plan period you were looking at, and can't distinguish a monthly from a yearly grant.
+  const termText = tenant.planExpiresAt
+    ? `${fmtDate(tenant.planStartedAt)} → ${fmtDate(tenant.planExpiresAt)}${expired ? ' · Expired' : ''}`
     : 'No expiry';
   return (
     <View style={styles.tenantCard}>
@@ -75,11 +84,18 @@ const TenantCard = React.memo(({ tenant, onViewSales, onManageScreens, onManageS
         <Icon name="domain" size={14} color={COLORS.muted} />
         <Text style={styles.metaText}>{tenant.branchCount} branches · {tenant.staffCount} staff</Text>
       </View>
-      <Text style={styles.expiryText}>{expiresText}</Text>
+      <Text style={[styles.expiryText, expired && styles.expiryTextExpired]}>{termText}</Text>
 
       <View style={styles.tenantBottomRow}>
-        <View style={styles.planPill}>
-          <Text style={styles.planPillText}>{planLabel(tenant.plan)}</Text>
+        <View style={styles.pillRow}>
+          <View style={styles.planPill}>
+            <Text style={styles.planPillText}>{planLabel(tenant.plan)}</Text>
+          </View>
+          {isPaidPlan(tenant.plan) && (
+            <View style={styles.cyclePill}>
+              <Text style={styles.cyclePillText}>{cycleLabel(tenant.cycle)}</Text>
+            </View>
+          )}
         </View>
         <View style={{ flexDirection: 'row', gap: 8 }}>
           <TouchableOpacity style={styles.salesBtn} onPress={() => onViewSales(tenant)}>
@@ -107,6 +123,7 @@ export const TenantManagementScreen = () => {
   const { isDesktopWeb } = useResponsive();
   const [search, setSearch] = useState('');
   const [managing, setManaging] = useState<ApiTenantSummary | null>(null);
+  const [cycle, setCycle] = useState<BillingCycle>('MONTHLY');
   const [viewingSales, setViewingSales] = useState<ApiTenantSummary | null>(null);
   const [managingScreens, setManagingScreens] = useState<ApiTenantSummary | null>(null);
   const [managingStaffAccess, setManagingStaffAccess] = useState<ApiTenantSummary | null>(null);
@@ -119,15 +136,23 @@ export const TenantManagementScreen = () => {
 
   const filtered = tenants.filter((t) => t.name.toLowerCase().includes(search.toLowerCase()));
 
+  // Opens the plan modal pre-set to whatever the cafe is already on, so renewing a yearly
+  // customer is one tap and can't silently drop them back to a month.
+  const openPlanModal = React.useCallback((tenant: ApiTenantSummary) => {
+    setCycle(isPaidPlan(tenant.plan) ? tenant.cycle : 'MONTHLY');
+    setManaging(tenant);
+  }, []);
+
   const applyPlan = async (plan: SubscriptionTier) => {
     if (!managing) return;
     const tenantName = managing.name;
+    const termText = plan === 'FREETRIAL' ? '14 days' : cycleLabel(cycle).toLowerCase();
     try {
-      await changePlan.mutateAsync({ tenantId: managing.id, plan });
+      await changePlan.mutateAsync({ tenantId: managing.id, plan, cycle });
       setManaging(null);
       // The modal closing was the only feedback before this — no confirmation that the
       // change actually landed, easy to mistake for a silent no-op.
-      dispatch(showToast({ message: `${tenantName}'s plan changed to ${planLabel(plan)}.`, icon: 'check-circle-outline', tone: 'success' }));
+      dispatch(showToast({ message: `${tenantName}'s plan changed to ${planLabel(plan)} for ${termText}.`, icon: 'check-circle-outline', tone: 'success' }));
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not change plan'), icon: 'alert-circle-outline', tone: 'danger' }));
     }
@@ -187,7 +212,7 @@ export const TenantManagementScreen = () => {
                 onViewSales={setViewingSales}
                 onManageScreens={setManagingScreens}
                 onManageStaff={setManagingStaffAccess}
-                onChangePlan={setManaging}
+                onChangePlan={openPlanModal}
               />
             ))}
           </>
@@ -201,7 +226,28 @@ export const TenantManagementScreen = () => {
               <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{managing?.name}</Text>
               <CloseButton onPress={() => setManaging(null)} size={18} />
             </View>
-            <Text style={styles.modalSubtitle}>Current plan: {managing ? planLabel(managing.plan) : ''}</Text>
+            <Text style={styles.modalSubtitle}>
+              Current plan: {managing ? planLabel(managing.plan) : ''}
+              {managing && isPaidPlan(managing.plan) ? ` · ${cycleLabel(managing.cycle)}` : ''}
+              {managing?.planExpiresAt ? ` · ${fmtDate(managing.planStartedAt)} → ${fmtDate(managing.planExpiresAt)}` : ''}
+            </Text>
+
+            <View style={styles.cycleToggle}>
+              {CYCLE_OPTIONS.map((opt) => (
+                <TouchableOpacity
+                  key={opt}
+                  style={[styles.cycleOption, cycle === opt && styles.cycleOptionActive]}
+                  disabled={changePlan.isPending}
+                  onPress={() => setCycle(opt)}
+                >
+                  <Text style={[styles.cycleOptionText, cycle === opt && styles.cycleOptionTextActive]}>{cycleLabel(opt)}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            <Text style={styles.cycleHint}>
+              The term starts today. Free Trial always runs 14 days — the cycle applies to paid plans only.
+            </Text>
+
             {PLAN_OPTIONS.map((opt) => (
               <TouchableOpacity
                 key={opt.key}
@@ -344,6 +390,7 @@ const styles = StyleSheet.create({
   metaRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 5 : 3.75, marginBottom: isDesktopWeb ? 4 : 3 },
   metaText: { fontSize: 12, color: COLORS.muted },
   expiryText: { fontSize: 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 14 : 10.5 },
+  expiryTextExpired: { color: COLORS.dangerAccent, fontWeight: '600' },
   tenantBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -352,8 +399,18 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.divider,
     paddingTop: isDesktopWeb ? 12 : 9,
   },
+  pillRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 6 : 4.5 },
   planPill: { backgroundColor: COLORS.background, paddingHorizontal: isDesktopWeb ? 10 : 7.5, paddingVertical: isDesktopWeb ? 5 : 3.75, borderRadius: 8 },
   planPillText: { fontSize: 11, fontWeight: '600', color: COLORS.muted },
+  cyclePill: {
+    backgroundColor: COLORS.background,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    paddingHorizontal: isDesktopWeb ? 10 : 7.5,
+    paddingVertical: isDesktopWeb ? 4 : 3,
+    borderRadius: 8,
+  },
+  cyclePillText: { fontSize: 11, fontWeight: '700', color: COLORS.superAdmin },
   manageBtn: { backgroundColor: COLORS.button, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingVertical: isDesktopWeb ? 9 : 6.75, borderRadius: 6 },
   manageBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   salesBtn: {
@@ -399,6 +456,19 @@ const styles = StyleSheet.create({
     borderTopColor: COLORS.divider,
   },
   planOptionText: { fontSize: 12, fontWeight: '600', color: COLORS.heading },
+  cycleToggle: {
+    flexDirection: 'row',
+    backgroundColor: COLORS.background,
+    borderRadius: 8,
+    padding: 3,
+    gap: 3,
+    marginBottom: 6,
+  },
+  cycleOption: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 6 },
+  cycleOptionActive: { backgroundColor: COLORS.superAdmin },
+  cycleOptionText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
+  cycleOptionTextActive: { color: '#FFFFFF' },
+  cycleHint: { fontSize: 11, color: COLORS.muted, lineHeight: 15, marginBottom: 3 },
   modalCancelBtn: { marginTop: 9, alignItems: 'center', paddingVertical: 7.5 },
   modalCancelText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
 });

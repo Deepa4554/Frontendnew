@@ -8,14 +8,14 @@ import { useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { useSubscription } from '../../../../../core/api/hooks/useSubscription';
 import { useSubscriptionCheckout } from '../../../../../core/api/hooks/useSubscriptionCheckout';
-import { SubscriptionTier } from '../../../../../core/api/subscriptionApi';
+import { cycleLabel, SubscriptionTier } from '../../../../../core/api/subscriptionApi';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { SkeletonStatRow, SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 
-type BillingCycle = 'MONTHLY' | 'YEARLY';
+import type { BillingCycle } from '../../../../../core/api/subscriptionApi';
 
 interface PlanDef {
   key: SubscriptionTier;
@@ -83,6 +83,12 @@ const TIER_LABEL: Record<SubscriptionTier, string> = {
 // different large sentinel.
 const UNLIMITED_THRESHOLD = 1_000_000_000;
 
+// The free trial is the one plan not sold on a cycle — its stored cycle is a placeholder
+// Monthly, so saying "Billed monthly" under it would be a lie about a plan nobody is billed for.
+const isPaidPlan = (plan: SubscriptionTier) => plan !== 'FREETRIAL';
+
+const fmtDate = (d: Date) => d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' });
+
 /** "Contact to Upgrade" is still the truth wherever Razorpay checkout can't run — the native
  * builds and any login that isn't the Owner (see useSubscriptionCheckout.isCheckoutSupported). */
 const planBtnLabel = (active: boolean, canCheckout: boolean, busy: boolean): string => {
@@ -101,6 +107,17 @@ export const SubscriptionScreen = () => {
   const { data: subscription, isLoading, isError, refetch } = useSubscription();
   const { startCheckout, pendingPlan, isCheckoutSupported } = useSubscriptionCheckout();
   const [billingCycle, setBillingCycle] = React.useState<BillingCycle>('MONTHLY');
+
+  // Open the cycle toggle on whatever the cafe is already paying for, so a yearly customer
+  // sees yearly prices and renews into the same term instead of quietly dropping to a month.
+  // Once only (the ref) — after that the toggle belongs to whoever is tapping it, and a
+  // background refetch must not yank the prices out from under them.
+  const syncedCycleFromPlan = React.useRef(false);
+  React.useEffect(() => {
+    if (syncedCycleFromPlan.current || !subscription) return;
+    syncedCycleFromPlan.current = true;
+    if (isPaidPlan(subscription.plan) && subscription.cycle === 'YEARLY') setBillingCycle('YEARLY');
+  }, [subscription]);
 
   // Basic/Plus are bought here with Razorpay (web + Owner only — see useSubscriptionCheckout);
   // everything else still goes through your PrabandhOS provider by hand. Enterprise is quoted
@@ -126,6 +143,7 @@ export const SubscriptionScreen = () => {
     }));
   };
 
+  const startedAt = subscription?.planStartedAt ? new Date(subscription.planStartedAt) : null;
   const expiresAt = subscription?.planExpiresAt ? new Date(subscription.planExpiresAt) : null;
   const daysLeft = expiresAt ? Math.ceil((expiresAt.getTime() - Date.now()) / 86400000) : null;
   const isExpired = daysLeft !== null && daysLeft < 0;
@@ -196,7 +214,15 @@ export const SubscriptionScreen = () => {
           </View>
           <View style={styles.usageMain}>
             <Text style={styles.usageLabel}>CURRENT PLAN</Text>
-            <Text style={styles.usagePlanName}>{TIER_LABEL[subscription.plan] ?? subscription.plan}</Text>
+            <View style={styles.usagePlanRow}>
+              <Text style={styles.usagePlanName}>{TIER_LABEL[subscription.plan] ?? subscription.plan}</Text>
+              {isPaidPlan(subscription.plan) && (
+                <View style={styles.cycleBadge}>
+                  <Icon name={subscription.cycle === 'YEARLY' ? 'calendar-star' : 'calendar-month-outline'} size={11} color={COLORS.accent} />
+                  <Text style={styles.cycleBadgeText}>Billed {cycleLabel(subscription.cycle).toLowerCase()}</Text>
+                </View>
+              )}
+            </View>
             <View style={styles.usageMetaRow}>
               <View style={[styles.statusPill, isExpired && styles.statusPillDanger]}>
                 <View style={[styles.statusDot, isExpired && styles.statusDotDanger]} />
@@ -205,6 +231,18 @@ export const SubscriptionScreen = () => {
               <Text style={styles.usageMetaSep}>|</Text>
               <Text style={styles.usageMetaText}>Max Branches <Text style={styles.usageMetaTextBold}>{maxBranchesText}</Text></Text>
             </View>
+            {!!expiresAt && (
+              <View style={styles.termRow}>
+                <Icon name="calendar-range-outline" size={12} color={COLORS.muted} />
+                <Text style={styles.termText}>
+                  {startedAt ? `Started ${fmtDate(startedAt)}` : 'Start date not recorded'}
+                  {'  ·  '}
+                  <Text style={[styles.termTextBold, (isExpired || isExpiringSoon) && styles.termTextWarning]}>
+                    {isExpired ? `Expired ${fmtDate(expiresAt)}` : `Ends ${fmtDate(expiresAt)}`}
+                  </Text>
+                </Text>
+              </View>
+            )}
           </View>
           {isWideLayout && (
             <>
@@ -331,6 +369,19 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 12 : 12, paddingBottom: isDesktopWeb ? 9 : 9, gap: isDesktopWeb ? 7 : 7.5 },
   iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.heading },
+
+  usagePlanRow: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: isDesktopWeb ? 8 : 6 },
+  cycleBadge: {
+    flexDirection: 'row', alignItems: 'center', gap: 3,
+    backgroundColor: COLORS.background, borderRadius: 8,
+    borderWidth: 1, borderColor: COLORS.divider,
+    paddingHorizontal: isDesktopWeb ? 8 : 6, paddingVertical: isDesktopWeb ? 3 : 2.5,
+  },
+  cycleBadgeText: { fontSize: 11, fontWeight: '700', color: COLORS.accent },
+  termRow: { flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: isDesktopWeb ? 6 : 4.5 },
+  termText: { fontSize: 11, color: COLORS.muted },
+  termTextBold: { fontWeight: '700', color: COLORS.heading },
+  termTextWarning: { color: COLORS.dangerAccent },
 
   expiryBadge: {
     flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 4 : 3.75,
