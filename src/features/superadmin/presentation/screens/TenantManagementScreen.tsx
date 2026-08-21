@@ -444,7 +444,7 @@ const styles = StyleSheet.create({
   monthOrders: { fontSize: 12, color: COLORS.muted, marginRight: isDesktopWeb ? 12 : 9 },
   monthRevenue: { fontSize: 12, fontWeight: '700', color: COLORS.superAdmin },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 18 },
-  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 12, width: '100%', overflow: 'hidden' },
+  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 12, width: '100%', maxWidth: 520, overflow: 'hidden' },
   modalTitle: { fontSize: 14, fontWeight: '700', color: COLORS.heading, marginBottom: 3, flexShrink: 1 },
   modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: 9 },
   planOptionRow: {

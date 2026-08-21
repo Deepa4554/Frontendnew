@@ -998,7 +998,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   shiftTitle: { fontSize: isDesktopWeb ? 15 : 14, fontWeight: '700', color: COLORS.heading },
   shiftTime: { fontSize: 12, color: COLORS.muted, marginTop: isDesktopWeb ? 1.5 : 1.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 18 : 18 },
-  pickerSheet: { width: '100%', backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 10.5 : 10.5, maxHeight: '80%', overflow: 'hidden' },
+  pickerSheet: { width: '100%', maxWidth: 420, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 10.5 : 10.5, maxHeight: '80%', overflow: 'hidden' },
   pickerHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: 6 },
   pickerTitle: { fontSize: 12, fontWeight: '800', color: COLORS.heading, marginBottom: 6, flexShrink: 1 },
   pickerRow: {

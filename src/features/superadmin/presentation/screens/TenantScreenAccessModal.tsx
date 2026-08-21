@@ -179,7 +179,7 @@ export const TenantScreenAccessModal = ({ tenant, onClose }: { tenant: ApiTenant
 
 const styles = StyleSheet.create({
   modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 18 },
-  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 12, width: '100%', overflow: 'hidden' },
+  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 12, width: '100%', maxWidth: 520, overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 3 },
   modalTitle: { fontSize: 14, fontWeight: '700', color: COLORS.heading, flexShrink: 1 },
   modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: 10, lineHeight: 16 },

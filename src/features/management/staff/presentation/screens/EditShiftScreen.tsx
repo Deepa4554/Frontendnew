@@ -460,7 +460,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   saveText: { fontSize: 15, fontWeight: '700', color: '#FFFFFF', letterSpacing: 0.5 },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 18 : 24 },
-  modalSheet: { width: '100%', backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 12 : 16, overflow: 'hidden' },
+  modalSheet: { width: '100%', maxWidth: 460, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 12 : 16, overflow: 'hidden' },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isDesktopWeb ? 6 : 8 },
   modalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.heading, marginBottom: isDesktopWeb ? 6 : 8, flexShrink: 1 },
   modalCancelBtn: { alignItems: 'center', paddingVertical: isDesktopWeb ? 7.5 : 10, borderRadius: 6, backgroundColor: COLORS.cardAlt, marginTop: isDesktopWeb ? 4.5 : 6 },

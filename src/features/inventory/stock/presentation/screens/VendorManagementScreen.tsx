@@ -307,7 +307,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 6,
   },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 18 : 24 },
-  modalSheet: { width: '100%', maxHeight: '85%', backgroundColor: COLORS.background, borderRadius: isDesktopWeb ? 10 : 12, padding: isDesktopWeb ? 12 : 16, overflow: 'hidden' },
+  modalSheet: { width: '100%', maxWidth: 460, maxHeight: '85%', backgroundColor: COLORS.background, borderRadius: isDesktopWeb ? 10 : 12, padding: isDesktopWeb ? 12 : 16, overflow: 'hidden' },
   modalFieldsScroll: { flexGrow: 0 },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isDesktopWeb ? 6 : 8 },
   modalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.heading, marginBottom: isDesktopWeb ? 4.5 : 6, flexShrink: 1 },

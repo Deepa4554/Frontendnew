@@ -154,9 +154,11 @@ export const GlobalSearchTrigger: React.FC<Props> = ({ navigation, iconColor, ic
 
 const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boolean) => StyleSheet.create({
   iconBtn: { width: 36, height: 36, alignItems: 'center', justifyContent: 'center' },
-  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)' },
+  backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', paddingHorizontal: isDesktopWeb ? 12 : 9 },
   panel: {
-    marginHorizontal: isDesktopWeb ? 12 : 9,
+    width: '100%',
+    maxWidth: 640,
+    alignSelf: 'center',
     backgroundColor: COLORS.background,
     borderRadius: 12,
     padding: isDesktopWeb ? 10 : 7.5,

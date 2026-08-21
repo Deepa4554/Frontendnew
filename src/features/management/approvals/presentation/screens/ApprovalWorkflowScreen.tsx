@@ -282,7 +282,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   approveBtn: { paddingHorizontal: isDesktopWeb ? 11 : 10.5, paddingVertical: isDesktopWeb ? 7 : 6.75, borderRadius: RADIUS.button, backgroundColor: COLORS.button },
   approveText: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '700', color: '#FFFFFF' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43,24,16,0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 17 : 16.5 },
-  modalSheet: { width: '100%', backgroundColor: COLORS.background, borderRadius: RADIUS.modal, padding: isDesktopWeb ? 12 : 12, overflow: 'hidden' },
+  modalSheet: { width: '100%', maxWidth: 440, backgroundColor: COLORS.background, borderRadius: RADIUS.modal, padding: isDesktopWeb ? 12 : 12, overflow: 'hidden' },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isDesktopWeb ? 6 : 6 },
   modalTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: '800', color: COLORS.heading, flexShrink: 1 },
   modalLabel: { fontSize: 12, fontWeight: '700', color: COLORS.muted, marginTop: isDesktopWeb ? 5 : 4.5, marginBottom: isDesktopWeb ? 3 : 3 },

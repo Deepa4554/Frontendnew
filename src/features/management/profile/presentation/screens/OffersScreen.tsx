@@ -459,8 +459,8 @@ export const OffersScreen = ({ navigation }: any) => {
       </ScrollView>
 
       <Modal visible={editorOpen} animationType="slide" transparent onRequestClose={closeEditor}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <View style={[styles.modalBackdrop, isDesktopWeb && styles.modalBackdropDesktop]}>
+          <View style={[styles.modalCard, isDesktopWeb && styles.modalCardDesktop]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>{editingId ? 'Edit offer' : 'New offer'}</Text>
               <TouchableOpacity onPress={closeEditor} style={styles.closeHit}><Icon name="close" size={24} color={COLORS.muted} /></TouchableOpacity>
@@ -688,8 +688,8 @@ export const OffersScreen = ({ navigation }: any) => {
       {/* Item picker — its own sheet so a long menu gets the whole screen and a search box,
           rather than being crammed into the editor as another wrapping chip row. */}
       <Modal visible={itemPickerOpen} animationType="slide" transparent onRequestClose={() => setItemPickerOpen(false)}>
-        <View style={styles.modalBackdrop}>
-          <View style={styles.modalCard}>
+        <View style={[styles.modalBackdrop, isDesktopWeb && styles.modalBackdropDesktop]}>
+          <View style={[styles.modalCard, isDesktopWeb && styles.modalCardDesktop]}>
             <View style={styles.modalHeader}>
               <Text style={styles.modalTitle}>Choose items</Text>
               <TouchableOpacity onPress={() => setItemPickerOpen(false)} style={styles.closeHit}><Icon name="close" size={24} color={COLORS.muted} /></TouchableOpacity>
@@ -874,6 +874,10 @@ const makeStyles = (COLORS: any) => StyleSheet.create({
   offerActions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
   modalBackdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'flex-end' },
   modalCard: { backgroundColor: COLORS.background, borderTopLeftRadius: 18, borderTopRightRadius: 18, maxHeight: '92%' },
+  // A bottom sheet is right on a phone, but on a tablet/desktop browser it has to
+  // become a centred, width-capped dialog like every other modal in the app.
+  modalBackdropDesktop: { justifyContent: 'center', alignItems: 'center', padding: 20 },
+  modalCardDesktop: { width: '100%', maxWidth: 560, borderRadius: 18 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', padding: 16, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
   modalTitle: { color: COLORS.heading, fontSize: 17, fontWeight: '700' },
   closeHit: { padding: 4 },

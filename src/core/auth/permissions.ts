@@ -17,6 +17,14 @@ const FLOOR_STAFF_HIDDEN_ROUTES = new Set([
   'Menu',
   'Inventory',
   'Dashboard',
+  // A management screen end to end: its forecast and shift-optimization panels are
+  // Owner/Manager-only on the backend and its inventory-risk panel is blocked by
+  // Policies.CanReadInventory, so a Waiter opening it just got three errored panels. Worse,
+  // the chat grounds Gemini in this cafe's live revenue/sales figures (see
+  // AIController.BuildSystemPromptAsync) — exactly the data 'Dashboard' and 'Reports' exist
+  // to keep off a floor login. AIController is Owner/Manager on the backend now too, so the
+  // numbers stay unreachable even where the screen itself is visible.
+  'AI',
   // Revenue, cost/variance, and CRM numbers — ReportsController is Owner/Manager-only on
   // the backend (see Policies.OwnerOrManager there), so without this a Waiter could open
   // the Reports hub and every report link in it would just 403.

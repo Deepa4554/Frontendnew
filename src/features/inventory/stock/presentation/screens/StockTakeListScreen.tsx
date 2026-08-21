@@ -155,7 +155,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 6,
   },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 12 : 16 },
-  modalSheet: { width: '100%', backgroundColor: COLORS.background, borderRadius: isDesktopWeb ? 10 : 12, padding: isDesktopWeb ? 9 : 12, overflow: 'hidden' },
+  modalSheet: { width: '100%', maxWidth: 440, backgroundColor: COLORS.background, borderRadius: isDesktopWeb ? 10 : 12, padding: isDesktopWeb ? 9 : 12, overflow: 'hidden' },
   modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isDesktopWeb ? 4.5 : 6 },
   modalTitle: { fontSize: 16, fontWeight: '800', color: COLORS.heading, marginBottom: isDesktopWeb ? 4 : 5, flexShrink: 1 },
   modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 4 : 5, lineHeight: 16 },

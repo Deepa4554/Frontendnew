@@ -214,7 +214,7 @@ const styles = StyleSheet.create({
   metaLabel: { fontSize: 12, opacity: 0.55 },
   metaValue: { fontSize: 12, fontWeight: '600' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 18 : 18 },
-  modalSheet: { width: '100%', borderRadius: 12, padding: isDesktopWeb ? 12 : 12, overflow: 'hidden' },
+  modalSheet: { width: '100%', maxWidth: 420, borderRadius: 12, padding: isDesktopWeb ? 12 : 12, overflow: 'hidden' },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', width: '100%', marginBottom: isDesktopWeb ? 6 : 6 },
   modalTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: '800' },
   modalLabel: { fontSize: 12, fontWeight: '600', marginBottom: isDesktopWeb ? 3 : 3 },

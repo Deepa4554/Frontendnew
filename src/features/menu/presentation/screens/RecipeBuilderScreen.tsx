@@ -391,7 +391,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   saveBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 17 : 18 },
-  pickerSheet: { width: '100%', backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 12 : 12, maxHeight: '85%', overflow: 'hidden' },
+  pickerSheet: { width: '100%', maxWidth: 460, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 12 : 12, maxHeight: '85%', overflow: 'hidden' },
   pickerHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: isDesktopWeb ? 6 : 6, gap: isDesktopWeb ? 6 : 6 },
   pickerTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: '800', color: COLORS.heading, flexShrink: 1 },
   pickerRow: {

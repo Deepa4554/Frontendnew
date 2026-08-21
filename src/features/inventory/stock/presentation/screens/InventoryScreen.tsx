@@ -1541,6 +1541,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   modalSheet: {
     width: '100%',
+    maxWidth: 480,
     maxHeight: '85%',
     backgroundColor: COLORS.background,
     borderRadius: 12,
