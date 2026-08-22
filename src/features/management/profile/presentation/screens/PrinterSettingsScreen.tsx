@@ -5,7 +5,7 @@ import { useDispatch } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { showToast } from '../../../../../core/store/uiSlice';
-import { getPrinterConfig, savePrinterConfig, getStationPrinterConfig, saveStationPrinterConfig, PrinterType } from '../../../../../core/printing/printerConfig';
+import { getPrinterConfig, savePrinterConfig, getStationPrinterConfig, saveStationPrinterConfig, clearStationPrinterConfig, PrinterType } from '../../../../../core/printing/printerConfig';
 import { BluetoothPrinter, BluetoothPrinterDevice } from '../../../../../core/printing/BluetoothPrinter';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
@@ -50,8 +50,22 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
   const stationLabel: string | undefined = route?.params?.stationLabel;
   const initial = stationKey ? getStationPrinterConfig(stationKey) ?? { type: 'none' as const } : getPrinterConfig();
 
-  const persistConfig = (config: Parameters<typeof savePrinterConfig>[0]) =>
-    stationKey ? saveStationPrinterConfig(stationKey, config) : savePrinterConfig(config);
+  /**
+   * "None" on a STATION means "this station has no printer of its own", not "this station must
+   * not print" — its tickets belong on the device's default printer. So the row is CLEARED
+   * rather than written as {type:'none'}: a stored row, even a 'none' one, outranks the device
+   * printer in getEffectivePrinterConfig, and every KOT for that station then failed with "No
+   * printer set up yet" while Test Print — which never consults a station — kept working.
+   *
+   * The rule lives here rather than in save() because testPrint() persists too. Opening a
+   * station's printer screen and pressing Test Print, without ever pressing Save, was enough to
+   * plant the row and break that station's KOTs for good.
+   */
+  const persistConfig = (config: Parameters<typeof savePrinterConfig>[0]) => {
+    if (!stationKey) return savePrinterConfig(config);
+    if (config.type === 'none') return clearStationPrinterConfig(stationKey);
+    return saveStationPrinterConfig(stationKey, config);
+  };
 
   const [type, setType] = useState<PrinterType>(initial.type);
   const [wifiIp, setWifiIp] = useState(initial.wifiIp ?? '');
@@ -91,6 +105,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
       // the browser is what remembers that choice. Only the paper width is ours to store.
       persistConfig({ type, columns });
     } else {
+      // persistConfig turns this into "clear the row" for a station — see its doc comment.
       persistConfig({ type: 'none' });
     }
     setSaved(true);

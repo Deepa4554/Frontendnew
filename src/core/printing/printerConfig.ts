@@ -88,7 +88,16 @@ export const findSavedPrinterName = (address: string): string | undefined => {
 export const getEffectivePrinterConfig = (stationName?: string | null): PrinterConfig => {
   if (stationName) {
     const stationConfig = getStationPrinterConfig(stationName);
-    if (stationConfig) return stationConfig;
+    // A station row of type 'none' is "this station has no printer of its own", which is the
+    // same thing as having no row at all — so it falls through to the device's printer rather
+    // than overriding it. Testing only for the row's existence is what let a station saved as
+    // 'none' silently outrank a perfectly good till printer: the KOT reported "No printer set
+    // up yet" while Test Print, which never consults a station, worked fine.
+    //
+    // Read-side as well as write-side (see PrinterSettingsScreen.save, which now clears the row
+    // instead of writing 'none') because the bad rows are already saved on real tills. Fixing
+    // only the write would leave those stuck until someone thought to clear browser storage.
+    if (stationConfig && stationConfig.type !== 'none') return stationConfig;
   }
   return getPrinterConfig();
 };
