@@ -53,7 +53,7 @@ const TicketThread = ({ id, onClose }: { id: number; onClose: () => void }) => {
           <TouchableOpacity onPress={onClose} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
             <Icon name="arrow-left" size={18} color={COLORS.heading} />
           </TouchableOpacity>
-          <View style={{ flex: 1, marginLeft: 10 }}>
+          <View style={{ flex: 1, marginLeft: 5 }}>
             <Text style={styles.threadTitle} numberOfLines={1}>{ticket?.subject ?? 'Ticket'}</Text>
             <Text style={styles.threadSub}>{ticket?.tenantName} · {ticket?.createdByName}</Text>
           </View>
@@ -69,7 +69,7 @@ const TicketThread = ({ id, onClose }: { id: number; onClose: () => void }) => {
         </View>
 
         {isLoading || !ticket ? (
-          <SkeletonList rows={4} avatar={false} style={{ padding: 16 }} />
+          <SkeletonList rows={4} avatar={false} style={{ padding: 8 }} />
         ) : (
           <ScrollView contentContainerStyle={styles.thread} showsVerticalScrollIndicator={false}>
             {ticket.messages.map((m) => (
@@ -114,12 +114,12 @@ export const SupportTicketsScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <Icon name="lifebuoy" size={20} color={COLORS.superAdmin} />
         <Text style={styles.headerTitle}>Support Tickets</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
         <View style={styles.titleBox}>
           <Text style={styles.title}>Cafe Support Inbox</Text>
           <Text style={styles.subtitle}>Every ticket raised from a cafe's Help Center, across every tenant.</Text>
@@ -138,7 +138,7 @@ export const SupportTicketsScreen = () => {
           />
         ) : (
           <>
-            {isLoading && <SkeletonList rows={6} style={{ paddingHorizontal: 16, marginTop: 4 }} />}
+            {isLoading && <SkeletonList rows={6} style={{ paddingHorizontal: 8, marginTop: 2 }} />}
             {!isLoading && tickets.length === 0 && <Text style={styles.emptyText}>No tickets raised yet.</Text>}
 
             {tickets.map((t) => (
@@ -171,47 +171,47 @@ const isDesktopWeb = Platform.OS === 'web' && Dimensions.get('window').width >= 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 8 : 6, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 12 : 9, paddingBottom: isDesktopWeb ? 12 : 9 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 4 : 3, paddingHorizontal: isDesktopWeb ? 8 : 6, paddingTop: isDesktopWeb ? 6 : 4.5, paddingBottom: isDesktopWeb ? 6 : 4.5 },
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.superAdmin, flex: 1 },
-  titleBox: { paddingHorizontal: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 16 : 12 },
-  title: { fontSize: isDesktopWeb ? 22 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 6 : 4.5 },
+  titleBox: { paddingHorizontal: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 8 : 6 },
+  title: { fontSize: isDesktopWeb ? 22 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 3 : 2.25 },
   subtitle: { fontSize: 13, color: COLORS.muted, lineHeight: 18 },
-  summaryCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 8, padding: isDesktopWeb ? 18 : 13.5, marginBottom: isDesktopWeb ? 16 : 12, alignItems: 'center' },
+  summaryCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 8 : 6, borderRadius: 8, padding: isDesktopWeb ? 9 : 6.75, marginBottom: isDesktopWeb ? 8 : 6, alignItems: 'center' },
   summaryValue: { fontSize: isDesktopWeb ? 32 : 12, fontWeight: 'bold', color: COLORS.superAdmin },
   summaryLabel: { fontSize: 12, color: COLORS.muted },
-  emptyText: { textAlign: 'center', color: COLORS.muted, marginTop: isDesktopWeb ? 20 : 15 },
-  ticketCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 8, padding: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 14 : 10.5 },
-  ticketTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isDesktopWeb ? 6 : 4.5, gap: isDesktopWeb ? 8 : 6 },
+  emptyText: { textAlign: 'center', color: COLORS.muted, marginTop: isDesktopWeb ? 10 : 7.5 },
+  ticketCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 8 : 6, borderRadius: 8, padding: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 7 : 5.25 },
+  ticketTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isDesktopWeb ? 3 : 2.25, gap: isDesktopWeb ? 4 : 3 },
   tenantName: { fontSize: isDesktopWeb ? 13 : 12, fontWeight: '700', color: COLORS.muted, flexShrink: 1 },
-  statusPill: { paddingHorizontal: isDesktopWeb ? 10 : 7.5, paddingVertical: isDesktopWeb ? 4 : 3, borderRadius: 10 },
+  statusPill: { paddingHorizontal: isDesktopWeb ? 5 : 3.75, paddingVertical: isDesktopWeb ? 2 : 1.5, borderRadius: 10 },
   statusPillText: { fontSize: 10, fontWeight: '700' },
-  ticketSubject: { fontSize: isDesktopWeb ? 16 : 12, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 4 : 3 },
+  ticketSubject: { fontSize: isDesktopWeb ? 16 : 12, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 2 : 1.5 },
   ticketMeta: { fontSize: 12, color: COLORS.muted },
 
   modalOverlay: { flex: 1, backgroundColor: COLORS.background },
   threadSheet: { flex: 1 },
-  threadHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 12 : 9, paddingBottom: isDesktopWeb ? 10 : 7.5 },
+  threadHeader: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: isDesktopWeb ? 8 : 6, paddingTop: isDesktopWeb ? 6 : 4.5, paddingBottom: isDesktopWeb ? 5 : 3.75 },
   threadTitle: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
-  threadSub: { fontSize: 11, color: COLORS.muted, marginTop: isDesktopWeb ? 2 : 1.5 },
-  resolveBtn: { backgroundColor: COLORS.superAdmin, paddingHorizontal: isDesktopWeb ? 12 : 9, paddingVertical: isDesktopWeb ? 8 : 6, borderRadius: 6 },
+  threadSub: { fontSize: 11, color: COLORS.muted, marginTop: isDesktopWeb ? 1 : 0.75 },
+  resolveBtn: { backgroundColor: COLORS.superAdmin, paddingHorizontal: isDesktopWeb ? 6 : 4.5, paddingVertical: isDesktopWeb ? 4 : 3, borderRadius: 6 },
   reopenBtn: { backgroundColor: COLORS.muted },
   resolveBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
-  thread: { padding: isDesktopWeb ? 16 : 12, paddingBottom: isDesktopWeb ? 20 : 15, gap: isDesktopWeb ? 8 : 6 },
+  thread: { padding: isDesktopWeb ? 8 : 6, paddingBottom: isDesktopWeb ? 10 : 7.5, gap: isDesktopWeb ? 4 : 3 },
   bubbleRow: { flexDirection: 'row' },
   bubbleRowMine: { justifyContent: 'flex-end' },
-  bubble: { maxWidth: '80%', borderRadius: 8, paddingHorizontal: isDesktopWeb ? 12 : 9, paddingVertical: isDesktopWeb ? 8 : 6 },
+  bubble: { maxWidth: '80%', borderRadius: 8, paddingHorizontal: isDesktopWeb ? 6 : 4.5, paddingVertical: isDesktopWeb ? 4 : 3 },
   bubbleCafe: { backgroundColor: COLORS.cardAlt, borderTopLeftRadius: 4 },
   bubbleMine: { backgroundColor: COLORS.superAdmin, borderTopRightRadius: 4 },
-  bubbleSender: { fontSize: 11, fontWeight: '700', color: COLORS.accent, marginBottom: isDesktopWeb ? 3 : 2.25 },
+  bubbleSender: { fontSize: 11, fontWeight: '700', color: COLORS.accent, marginBottom: isDesktopWeb ? 1.5 : 1.13 },
   bubbleText: { fontSize: 12, color: COLORS.heading, lineHeight: 16 },
   bubbleTextMine: { color: '#FFFFFF' },
   composer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    gap: isDesktopWeb ? 8 : 6,
-    paddingHorizontal: isDesktopWeb ? 16 : 12,
-    paddingTop: isDesktopWeb ? 10 : 7.5,
-    paddingBottom: isDesktopWeb ? 16 : 12,
+    gap: isDesktopWeb ? 4 : 3,
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
+    paddingTop: isDesktopWeb ? 5 : 3.75,
+    paddingBottom: isDesktopWeb ? 8 : 6,
     borderTopWidth: 1,
     borderTopColor: COLORS.divider,
   },
@@ -219,8 +219,8 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: COLORS.cardAlt,
     borderRadius: 8,
-    paddingHorizontal: 7.5,
-    paddingVertical: 6,
+    paddingHorizontal: 3.75,
+    paddingVertical: 3,
     borderWidth: 1,
     borderColor: COLORS.inputBorder,
     maxHeight: 100,

@@ -97,7 +97,7 @@ const TenantCard = React.memo(({ tenant, onViewSales, onManageScreens, onManageS
             </View>
           )}
         </View>
-        <View style={{ flexDirection: 'row', gap: 8 }}>
+        <View style={{ flexDirection: 'row', gap: 4 }}>
           <TouchableOpacity style={styles.salesBtn} onPress={() => onViewSales(tenant)}>
             <Icon name="chart-line" size={13} color={COLORS.heading} />
             <Text style={styles.salesBtnText}>Sales</Text>
@@ -160,7 +160,7 @@ export const TenantManagementScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <Icon name="shield-crown" size={20} color={COLORS.superAdmin} />
         <Text style={styles.headerTitle}>Super Admin</Text>
         <TouchableOpacity onPress={() => confirmLogout(dispatch)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -168,7 +168,7 @@ export const TenantManagementScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
         <View style={styles.titleBox}>
           <Text style={styles.title}>Tenant Management</Text>
           <Text style={styles.subtitle}>Every cafe on the platform — change a tenant's plan here instead of touching the database directly.</Text>
@@ -180,10 +180,10 @@ export const TenantManagementScreen = () => {
         </View>
 
         <View style={styles.searchWrapper}>
-          <Icon name="magnify" size={18} color={COLORS.muted} style={{ marginRight: 8 }} />
+          <Icon name="magnify" size={18} color={COLORS.muted} style={{ marginRight: 4 }} />
           <View style={styles.searchInputWrap}>
             <TextInput
-              style={[styles.searchInput, { paddingRight: 24 }]}
+              style={[styles.searchInput, { paddingRight: 12 }]}
               placeholder="Search by cafe name..."
               placeholderTextColor={COLORS.placeholder}
               value={search}
@@ -201,7 +201,7 @@ export const TenantManagementScreen = () => {
           />
         ) : (
           <>
-            {isLoading && <SkeletonList rows={5} style={{ paddingHorizontal: 16, marginTop: 4 }} />}
+            {isLoading && <SkeletonList rows={5} style={{ paddingHorizontal: 8, marginTop: 2 }} />}
 
             {!isLoading && filtered.length === 0 && <Text style={styles.emptyText}>No tenants found.</Text>}
 
@@ -278,8 +278,8 @@ export const TenantManagementScreen = () => {
             <Text style={styles.modalSubtitle}>Real sales — computed from this cafe's actual paid orders</Text>
 
             {salesLoading || !sales ? (
-              <View style={{ marginTop: 16 }}>
-                <SkeletonStatRow count={4} style={{ marginBottom: 20 }} />
+              <View style={{ marginTop: 8 }}>
+                <SkeletonStatRow count={4} style={{ marginBottom: 10 }} />
                 <SkeletonList rows={3} avatar={false} />
               </View>
             ) : (
@@ -361,12 +361,12 @@ const isDesktopWeb = Platform.OS === 'web' && Dimensions.get('window').width >= 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 8 : 6, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 12 : 9, paddingBottom: isDesktopWeb ? 12 : 9 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 4 : 3, paddingHorizontal: isDesktopWeb ? 8 : 6, paddingTop: isDesktopWeb ? 6 : 4.5, paddingBottom: isDesktopWeb ? 6 : 4.5 },
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.superAdmin, flex: 1 },
-  titleBox: { paddingHorizontal: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 16 : 12 },
-  title: { fontSize: isDesktopWeb ? 22 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 6 : 4.5 },
+  titleBox: { paddingHorizontal: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 8 : 6 },
+  title: { fontSize: isDesktopWeb ? 22 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 3 : 2.25 },
   subtitle: { fontSize: 13, color: COLORS.muted, lineHeight: 18 },
-  summaryCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 8, padding: isDesktopWeb ? 18 : 13.5, marginBottom: isDesktopWeb ? 16 : 12, alignItems: 'center' },
+  summaryCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 8 : 6, borderRadius: 8, padding: isDesktopWeb ? 9 : 6.75, marginBottom: isDesktopWeb ? 8 : 6, alignItems: 'center' },
   summaryValue: { fontSize: isDesktopWeb ? 32 : 12, fontWeight: 'bold', color: COLORS.superAdmin },
   summaryLabel: { fontSize: 12, color: COLORS.muted },
   searchWrapper: {
@@ -374,22 +374,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     backgroundColor: COLORS.cardAlt,
     borderRadius: 8,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
-    paddingHorizontal: isDesktopWeb ? 14 : 10.5,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
+    paddingHorizontal: isDesktopWeb ? 7 : 5.25,
     height: 46,
-    marginBottom: isDesktopWeb ? 16 : 12,
+    marginBottom: isDesktopWeb ? 8 : 6,
   },
   searchInputWrap: { flex: 1, borderRadius: 8 },
   searchInput: { width: '100%', fontSize: 16, color: COLORS.heading },
-  emptyText: { textAlign: 'center', color: COLORS.muted, marginTop: isDesktopWeb ? 20 : 15 },
-  tenantCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 8, padding: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 14 : 10.5 },
-  tenantTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isDesktopWeb ? 8 : 6 },
-  statusPill: { paddingHorizontal: isDesktopWeb ? 10 : 7.5, paddingVertical: isDesktopWeb ? 4 : 3, borderRadius: 10 },
+  emptyText: { textAlign: 'center', color: COLORS.muted, marginTop: isDesktopWeb ? 10 : 7.5 },
+  tenantCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 8 : 6, borderRadius: 8, padding: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 7 : 5.25 },
+  tenantTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isDesktopWeb ? 4 : 3 },
+  statusPill: { paddingHorizontal: isDesktopWeb ? 5 : 3.75, paddingVertical: isDesktopWeb ? 2 : 1.5, borderRadius: 10 },
   statusPillText: { fontSize: 10, fontWeight: '700' },
   tenantName: { fontSize: isDesktopWeb ? 17 : 12, fontWeight: 'bold', color: COLORS.heading, flexShrink: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 5 : 3.75, marginBottom: isDesktopWeb ? 4 : 3 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 2.5 : 1.88, marginBottom: isDesktopWeb ? 2 : 1.5 },
   metaText: { fontSize: 12, color: COLORS.muted },
-  expiryText: { fontSize: 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 14 : 10.5 },
+  expiryText: { fontSize: 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 7 : 5.25 },
   expiryTextExpired: { color: COLORS.dangerAccent, fontWeight: '600' },
   tenantBottomRow: {
     flexDirection: 'row',
@@ -397,61 +397,61 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     borderTopWidth: 1,
     borderTopColor: COLORS.divider,
-    paddingTop: isDesktopWeb ? 12 : 9,
+    paddingTop: isDesktopWeb ? 6 : 4.5,
   },
-  pillRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 6 : 4.5 },
-  planPill: { backgroundColor: COLORS.background, paddingHorizontal: isDesktopWeb ? 10 : 7.5, paddingVertical: isDesktopWeb ? 5 : 3.75, borderRadius: 8 },
+  pillRow: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 3 : 2.25 },
+  planPill: { backgroundColor: COLORS.background, paddingHorizontal: isDesktopWeb ? 5 : 3.75, paddingVertical: isDesktopWeb ? 2.5 : 1.88, borderRadius: 8 },
   planPillText: { fontSize: 11, fontWeight: '600', color: COLORS.muted },
   cyclePill: {
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.divider,
-    paddingHorizontal: isDesktopWeb ? 10 : 7.5,
-    paddingVertical: isDesktopWeb ? 4 : 3,
+    paddingHorizontal: isDesktopWeb ? 5 : 3.75,
+    paddingVertical: isDesktopWeb ? 2 : 1.5,
     borderRadius: 8,
   },
   cyclePillText: { fontSize: 11, fontWeight: '700', color: COLORS.superAdmin },
-  manageBtn: { backgroundColor: COLORS.button, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingVertical: isDesktopWeb ? 9 : 6.75, borderRadius: 6 },
+  manageBtn: { backgroundColor: COLORS.button, paddingHorizontal: isDesktopWeb ? 8 : 6, paddingVertical: isDesktopWeb ? 4.5 : 3.38, borderRadius: 6 },
   manageBtnText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   salesBtn: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: isDesktopWeb ? 4 : 3,
+    gap: isDesktopWeb ? 2 : 1.5,
     backgroundColor: COLORS.background,
     borderWidth: 1,
     borderColor: COLORS.divider,
-    paddingHorizontal: isDesktopWeb ? 12 : 9,
-    paddingVertical: isDesktopWeb ? 9 : 6.75,
+    paddingHorizontal: isDesktopWeb ? 6 : 4.5,
+    paddingVertical: isDesktopWeb ? 4.5 : 3.38,
     borderRadius: 6,
   },
   salesBtnText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
-  salesModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: isDesktopWeb ? 8 : 6 },
-  salesKpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 12 : 9 },
-  salesKpiCard: { flexBasis: '47%', backgroundColor: COLORS.background, borderRadius: 8, padding: isDesktopWeb ? 10 : 7.5 },
-  salesKpiLabel: { fontSize: 10, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5, marginBottom: isDesktopWeb ? 4 : 3 },
+  salesModalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: isDesktopWeb ? 4 : 3 },
+  salesKpiGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: isDesktopWeb ? 4 : 3, marginBottom: isDesktopWeb ? 6 : 4.5 },
+  salesKpiCard: { flexBasis: '47%', backgroundColor: COLORS.background, borderRadius: 8, padding: isDesktopWeb ? 5 : 3.75 },
+  salesKpiLabel: { fontSize: 10, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5, marginBottom: isDesktopWeb ? 2 : 1.5 },
   salesKpiValue: { fontSize: 12, fontWeight: 'bold', color: COLORS.heading },
-  salesSectionTitle: { fontSize: 12, fontWeight: '700', color: COLORS.heading, marginBottom: isDesktopWeb ? 8 : 6, marginTop: isDesktopWeb ? 4 : 3 },
-  salesChartCard: { backgroundColor: COLORS.background, borderRadius: 8, padding: isDesktopWeb ? 12 : 9, marginBottom: isDesktopWeb ? 12 : 9, alignItems: 'center' },
+  salesSectionTitle: { fontSize: 12, fontWeight: '700', color: COLORS.heading, marginBottom: isDesktopWeb ? 4 : 3, marginTop: isDesktopWeb ? 2 : 1.5 },
+  salesChartCard: { backgroundColor: COLORS.background, borderRadius: 8, padding: isDesktopWeb ? 6 : 4.5, marginBottom: isDesktopWeb ? 6 : 4.5, alignItems: 'center' },
   monthRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: isDesktopWeb ? 8 : 6,
+    paddingVertical: isDesktopWeb ? 4 : 3,
     borderTopWidth: 1,
     borderTopColor: COLORS.divider,
   },
   monthLabel: { fontSize: 12, fontWeight: '600', color: COLORS.heading, flex: 1 },
-  monthOrders: { fontSize: 12, color: COLORS.muted, marginRight: isDesktopWeb ? 12 : 9 },
+  monthOrders: { fontSize: 12, color: COLORS.muted, marginRight: isDesktopWeb ? 6 : 4.5 },
   monthRevenue: { fontSize: 12, fontWeight: '700', color: COLORS.superAdmin },
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 18 },
-  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 12, width: '100%', maxWidth: 520, overflow: 'hidden' },
-  modalTitle: { fontSize: 14, fontWeight: '700', color: COLORS.heading, marginBottom: 3, flexShrink: 1 },
-  modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: 9 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 9 },
+  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 6, width: '100%', maxWidth: 520, overflow: 'hidden' },
+  modalTitle: { fontSize: 14, fontWeight: '700', color: COLORS.heading, marginBottom: 1.5, flexShrink: 1 },
+  modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: 4.5 },
   planOptionRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    paddingVertical: 3,
     borderTopWidth: 1,
     borderTopColor: COLORS.divider,
   },
@@ -460,15 +460,15 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     backgroundColor: COLORS.background,
     borderRadius: 8,
-    padding: 3,
-    gap: 3,
-    marginBottom: 6,
+    padding: 1.5,
+    gap: 1.5,
+    marginBottom: 3,
   },
-  cycleOption: { flex: 1, alignItems: 'center', paddingVertical: 7, borderRadius: 6 },
+  cycleOption: { flex: 1, alignItems: 'center', paddingVertical: 3.5, borderRadius: 6 },
   cycleOptionActive: { backgroundColor: COLORS.superAdmin },
   cycleOptionText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
   cycleOptionTextActive: { color: '#FFFFFF' },
-  cycleHint: { fontSize: 11, color: COLORS.muted, lineHeight: 15, marginBottom: 3 },
-  modalCancelBtn: { marginTop: 9, alignItems: 'center', paddingVertical: 7.5 },
+  cycleHint: { fontSize: 11, color: COLORS.muted, lineHeight: 15, marginBottom: 1.5 },
+  modalCancelBtn: { marginTop: 4.5, alignItems: 'center', paddingVertical: 3.75 },
   modalCancelText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
 });

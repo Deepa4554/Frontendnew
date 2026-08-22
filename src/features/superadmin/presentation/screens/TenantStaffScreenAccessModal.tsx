@@ -148,7 +148,7 @@ export const TenantStaffScreenAccessModal = ({ tenant, onClose }: { tenant: ApiT
             <>
               <Text style={styles.modalSubtitle}>Pick a login to change which screens it can see.</Text>
               {rosterLoading ? (
-                <View style={{ paddingVertical: 30, alignItems: 'center' }}>
+                <View style={{ paddingVertical: 15, alignItems: 'center' }}>
                   <ActivityIndicator size="small" color={COLORS.superAdmin} />
                 </View>
               ) : loginRoster.length === 0 ? (
@@ -173,7 +173,7 @@ export const TenantStaffScreenAccessModal = ({ tenant, onClose }: { tenant: ApiT
               )}
             </>
           ) : isLoading || !data ? (
-            <View style={{ paddingVertical: 30, alignItems: 'center' }}>
+            <View style={{ paddingVertical: 15, alignItems: 'center' }}>
               <ActivityIndicator size="small" color={COLORS.superAdmin} />
             </View>
           ) : (
@@ -226,27 +226,27 @@ export const TenantStaffScreenAccessModal = ({ tenant, onClose }: { tenant: ApiT
 };
 
 const styles = StyleSheet.create({
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 18 },
-  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 12, width: '100%', maxWidth: 520, overflow: 'hidden' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 8, marginBottom: 3 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.4)', alignItems: 'center', justifyContent: 'center', padding: 9 },
+  modalCard: { backgroundColor: COLORS.cardAlt, borderRadius: 12, padding: 6, width: '100%', maxWidth: 520, overflow: 'hidden' },
+  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', gap: 4, marginBottom: 1.5 },
   modalTitle: { fontSize: 14, fontWeight: '700', color: COLORS.heading, flexShrink: 1 },
-  modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: 10, lineHeight: 16 },
-  emptyText: { textAlign: 'center', color: COLORS.muted, paddingVertical: 24 },
-  backRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 9 },
+  modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: 5, lineHeight: 16 },
+  emptyText: { textAlign: 'center', color: COLORS.muted, paddingVertical: 12 },
+  backRow: { flexDirection: 'row', alignItems: 'center', gap: 3, marginBottom: 4.5 },
   backText: { fontSize: 12, fontWeight: '600', color: COLORS.muted },
-  staffRow: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  staffRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 5, paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
   staffName: { fontSize: 13, fontWeight: '700', color: COLORS.heading },
-  staffRole: { fontSize: 11, color: COLORS.muted, marginTop: 1 },
-  modeCard: { flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: 8, padding: 4, gap: 4, marginBottom: 10 },
-  modeOption: { flex: 1, borderRadius: 8, paddingVertical: 8, alignItems: 'center' },
+  staffRole: { fontSize: 11, color: COLORS.muted, marginTop: 0.5 },
+  modeCard: { flexDirection: 'row', backgroundColor: COLORS.background, borderRadius: 8, padding: 2, gap: 2, marginBottom: 5 },
+  modeOption: { flex: 1, borderRadius: 8, paddingVertical: 4, alignItems: 'center' },
   modeOptionActive: { backgroundColor: COLORS.accent },
   modeOptionText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
   modeOptionTextActive: { color: '#FFFFFF' },
-  modeOptionHint: { fontSize: 10, color: COLORS.muted, marginTop: 1.5 },
+  modeOptionHint: { fontSize: 10, color: COLORS.muted, marginTop: 0.75 },
   modeOptionHintActive: { color: 'rgba(255,255,255,0.85)' },
   listCard: { backgroundColor: COLORS.background, borderRadius: 8, overflow: 'hidden' },
-  row: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
-  rowIndent: { paddingLeft: 26 },
+  row: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 5, paddingVertical: 4, borderBottomWidth: 1, borderBottomColor: COLORS.divider },
+  rowIndent: { paddingLeft: 13 },
   checkbox: { width: 18, height: 18, borderRadius: 5, borderWidth: 1.5, borderColor: COLORS.inputBorder, alignItems: 'center', justifyContent: 'center' },
   checkboxChecked: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
   checkboxReadOnly: { backgroundColor: COLORS.muted, borderColor: COLORS.muted },
@@ -254,8 +254,8 @@ const styles = StyleSheet.create({
   rowIconBox: { width: 20, alignItems: 'center' },
   rowLabel: { flex: 1, fontSize: 12, fontWeight: '600', color: COLORS.heading },
   rowLabelDisabled: { color: COLORS.muted },
-  planBadge: { backgroundColor: COLORS.chipBg, borderRadius: 8, paddingHorizontal: 6, paddingVertical: 2 },
+  planBadge: { backgroundColor: COLORS.chipBg, borderRadius: 8, paddingHorizontal: 3, paddingVertical: 1 },
   planBadgeText: { fontSize: 9, fontWeight: '700', color: COLORS.muted },
-  saveBtn: { backgroundColor: COLORS.accent, borderRadius: 6, paddingVertical: 10, alignItems: 'center', marginTop: 10 },
+  saveBtn: { backgroundColor: COLORS.accent, borderRadius: 6, paddingVertical: 5, alignItems: 'center', marginTop: 5 },
   saveBtnText: { color: '#FFFFFF', fontSize: 12, fontWeight: '700' },
 });

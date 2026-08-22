@@ -68,7 +68,7 @@ export const AuditLogScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <Icon name="shield-crown" size={20} color={COLORS.superAdmin} />
         <Text style={[styles.headerTitle, { flex: 1 }]}>Audit Logs</Text>
         <TouchableOpacity onPress={() => confirmLogout(dispatch)} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
@@ -76,7 +76,7 @@ export const AuditLogScreen = () => {
         </TouchableOpacity>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
         <View style={styles.titleBox}>
           <Text style={styles.title}>Activity Log</Text>
           <Text style={styles.subtitle}>Real-time record of every action taken across this cafe's account.</Text>
@@ -101,10 +101,10 @@ export const AuditLogScreen = () => {
         </View>
 
         <View style={styles.searchWrapper}>
-          <Icon name="magnify" size={18} color={COLORS.muted} style={{ marginRight: 8 }} />
+          <Icon name="magnify" size={18} color={COLORS.muted} style={{ marginRight: 4 }} />
           <View style={styles.searchInputWrap}>
             <TextInput
-              style={[styles.searchInput, { paddingRight: 24 }]}
+              style={[styles.searchInput, { paddingRight: 12 }]}
               placeholder="Search target or user..."
               placeholderTextColor={COLORS.placeholder}
               value={search}
@@ -129,13 +129,13 @@ export const AuditLogScreen = () => {
           </View>
 
           {isLoading && (
-            <View style={{ padding: 14 }}>
+            <View style={{ padding: 7 }}>
               <SkeletonList rows={6} />
             </View>
           )}
 
           {!isLoading && filtered.length === 0 && (
-            <Text style={{ padding: 16, color: COLORS.muted, fontSize: 13 }}>No matching activity found.</Text>
+            <Text style={{ padding: 8, color: COLORS.muted, fontSize: 13 }}>No matching activity found.</Text>
           )}
 
           {filtered.map((entry, index) => {
@@ -191,10 +191,10 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: isDesktopWeb ? 8 : 6,
-    paddingHorizontal: isDesktopWeb ? 16 : 12,
-    paddingTop: isDesktopWeb ? 12 : 9,
-    paddingBottom: isDesktopWeb ? 12 : 9,
+    gap: isDesktopWeb ? 4 : 3,
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
+    paddingTop: isDesktopWeb ? 6 : 4.5,
+    paddingBottom: isDesktopWeb ? 6 : 4.5,
   },
   headerTitle: {
     fontSize: isDesktopWeb ? 18 : 14,
@@ -203,16 +203,16 @@ const styles = StyleSheet.create({
   },
   titleBox: {
     backgroundColor: COLORS.cardAlt,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
     borderRadius: 8,
-    padding: isDesktopWeb ? 18 : 13.5,
-    marginBottom: isDesktopWeb ? 16 : 12,
+    padding: isDesktopWeb ? 9 : 6.75,
+    marginBottom: isDesktopWeb ? 8 : 6,
   },
   title: {
     fontSize: isDesktopWeb ? 24 : 14,
     fontWeight: 'bold',
     color: COLORS.heading,
-    marginBottom: isDesktopWeb ? 6 : 4.5,
+    marginBottom: isDesktopWeb ? 3 : 2.25,
   },
   subtitle: {
     fontSize: 13,
@@ -221,27 +221,27 @@ const styles = StyleSheet.create({
   },
   filterBox: {
     backgroundColor: COLORS.cardAlt,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
     borderRadius: 8,
-    padding: isDesktopWeb ? 16 : 12,
-    marginBottom: isDesktopWeb ? 16 : 12,
+    padding: isDesktopWeb ? 8 : 6,
+    marginBottom: isDesktopWeb ? 8 : 6,
   },
   filterLabel: {
     fontSize: 11,
     fontWeight: '700',
     color: COLORS.muted,
     letterSpacing: 0.5,
-    marginBottom: isDesktopWeb ? 10 : 7.5,
+    marginBottom: isDesktopWeb ? 5 : 3.75,
   },
   searchWrapper: {
     flexDirection: 'row',
     alignItems: 'center',
     backgroundColor: COLORS.cardAlt,
     borderRadius: 8,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
-    paddingHorizontal: isDesktopWeb ? 14 : 10.5,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
+    paddingHorizontal: isDesktopWeb ? 7 : 5.25,
     height: 46,
-    marginBottom: isDesktopWeb ? 16 : 12,
+    marginBottom: isDesktopWeb ? 8 : 6,
   },
   searchInputWrap: {
     flex: 1,
@@ -254,15 +254,15 @@ const styles = StyleSheet.create({
   },
   tableCard: {
     backgroundColor: COLORS.cardAlt,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
     borderRadius: 8,
     overflow: 'hidden',
   },
   tableHeaderRow: {
     flexDirection: 'row',
     backgroundColor: COLORS.background,
-    paddingHorizontal: isDesktopWeb ? 14 : 10.5,
-    paddingVertical: isDesktopWeb ? 10 : 7.5,
+    paddingHorizontal: isDesktopWeb ? 7 : 5.25,
+    paddingVertical: isDesktopWeb ? 5 : 3.75,
   },
   tableHeaderText: {
     fontSize: 12,
@@ -273,8 +273,8 @@ const styles = StyleSheet.create({
   tableRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: isDesktopWeb ? 14 : 10.5,
-    paddingVertical: isDesktopWeb ? 14 : 10.5,
+    paddingHorizontal: isDesktopWeb ? 7 : 5.25,
+    paddingVertical: isDesktopWeb ? 7 : 5.25,
   },
   tableRowDivider: {
     borderBottomWidth: 1,
@@ -288,12 +288,12 @@ const styles = StyleSheet.create({
   timestampTime: {
     fontSize: 10,
     color: COLORS.muted,
-    marginTop: isDesktopWeb ? 2 : 1.5,
+    marginTop: isDesktopWeb ? 1 : 0.75,
   },
   userCell: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: isDesktopWeb ? 8 : 6,
+    gap: isDesktopWeb ? 4 : 3,
   },
   avatarCircle: {
     width: 30,
@@ -314,8 +314,8 @@ const styles = StyleSheet.create({
     flexShrink: 1,
   },
   actionBadge: {
-    paddingHorizontal: 6,
-    paddingVertical: 3.75,
+    paddingHorizontal: 3,
+    paddingVertical: 1.88,
     borderRadius: 8,
     alignSelf: 'flex-start',
   },
@@ -324,7 +324,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
   },
   paginationRow: {
-    padding: 10.5,
+    padding: 5.25,
     backgroundColor: COLORS.background,
   },
   paginationText: {

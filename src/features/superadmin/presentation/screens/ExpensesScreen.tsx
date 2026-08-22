@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Modal, ActivityIndicator, Platform, Dimensions } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -17,6 +17,10 @@ import { useResponsive } from '../../../../core/utils/useResponsive';
 const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) : undefined;
 const money = (n: number) => `₹${n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
+// Founders whose individual spend gets its own summary card. "Spent By" is free text,
+// so match loosely — "aashish", "Aashish Verma" and " AASHISH " all count as the same person.
+const FOUNDERS = ['Aashish', 'Deepali'];
+
 export const ExpensesScreen = () => {
   const { isDesktopWeb } = useResponsive();
   const insets = useSafeAreaInsets();
@@ -24,6 +28,20 @@ export const ExpensesScreen = () => {
   const { data, isLoading, isError, refetch } = usePlatformExpenses();
   const addExpense = useAddPlatformExpense();
   const removeExpense = useRemovePlatformExpense();
+
+  // `recent` is the whole ledger (the API hands back every expense, not a slice), so these
+  // per-founder sums line up with the all-time total rather than a truncated view of it.
+  const founderTotals = useMemo(
+    () =>
+      FOUNDERS.map((name) => ({
+        name,
+        total: (data?.recent ?? []).reduce(
+          (sum, e) => (e.spentBy.trim().toLowerCase().includes(name.toLowerCase()) ? sum + e.amount : sum),
+          0,
+        ),
+      })),
+    [data?.recent],
+  );
 
   const [modalVisible, setModalVisible] = useState(false);
   const [amount, setAmount] = useState('');
@@ -79,12 +97,12 @@ export const ExpensesScreen = () => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <Icon name="cash-multiple" size={20} color={COLORS.superAdmin} />
         <Text style={styles.headerTitle}>Expenses</Text>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 100 }}>
+      <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 50 }}>
         <View style={styles.titleBox}>
           <Text style={styles.title}>Running the Business</Text>
           <Text style={styles.subtitle}>PrabandhOS's own expenses — not any cafe's. Track what the founders have put in and spent on.</Text>
@@ -99,6 +117,12 @@ export const ExpensesScreen = () => {
             <Text style={styles.summaryLabel}>THIS MONTH</Text>
             <Text style={styles.summaryValue}>{money(data?.totalThisMonth ?? 0)}</Text>
           </View>
+          {founderTotals.map((f) => (
+            <View key={f.name} style={styles.summaryCard}>
+              <Text style={styles.summaryLabel}>{f.name.toUpperCase()}</Text>
+              <Text style={styles.summaryValue}>{money(f.total)}</Text>
+            </View>
+          ))}
         </View>
 
         <TouchableOpacity style={styles.addBtn} onPress={openModal}>
@@ -114,7 +138,7 @@ export const ExpensesScreen = () => {
           />
         ) : (
           <>
-            {isLoading && <SkeletonList rows={5} style={{ marginTop: 8 }} />}
+            {isLoading && <SkeletonList rows={5} style={{ marginTop: 4 }} />}
             {!isLoading && (data?.recent.length ?? 0) === 0 && <Text style={styles.emptyText}>No expenses logged yet.</Text>}
 
             {data?.recent.map((e) => (
@@ -205,44 +229,46 @@ const isDesktopWeb = Platform.OS === 'web' && Dimensions.get('window').width >= 
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: COLORS.background },
-  header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 8 : 6, paddingHorizontal: isDesktopWeb ? 16 : 12, paddingTop: isDesktopWeb ? 12 : 9, paddingBottom: isDesktopWeb ? 12 : 9 },
+  header: { flexDirection: 'row', alignItems: 'center', gap: isDesktopWeb ? 4 : 3, paddingHorizontal: isDesktopWeb ? 8 : 6, paddingTop: isDesktopWeb ? 6 : 4.5, paddingBottom: isDesktopWeb ? 6 : 4.5 },
   headerTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.superAdmin, flex: 1 },
-  titleBox: { paddingHorizontal: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 16 : 12 },
-  title: { fontSize: isDesktopWeb ? 22 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 6 : 4.5 },
+  titleBox: { paddingHorizontal: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 8 : 6 },
+  title: { fontSize: isDesktopWeb ? 22 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 3 : 2.25 },
   subtitle: { fontSize: 13, color: COLORS.muted, lineHeight: 18 },
-  summaryRow: { flexDirection: 'row', gap: isDesktopWeb ? 12 : 9, paddingHorizontal: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 16 : 12 },
-  summaryCard: { flex: 1, backgroundColor: COLORS.cardAlt, borderRadius: 8, padding: isDesktopWeb ? 16 : 12, alignItems: 'center' },
-  summaryLabel: { fontSize: 10, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5, marginBottom: isDesktopWeb ? 6 : 4.5 },
+  summaryRow: { flexDirection: 'row', flexWrap: 'wrap', gap: isDesktopWeb ? 6 : 4.5, paddingHorizontal: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 8 : 6 },
+  // Four cards across on desktop; on a phone they wrap two-per-row instead of squeezing
+  // the amounts into a quarter of the screen.
+  summaryCard: { flexGrow: 1, flexBasis: isDesktopWeb ? 0 : '45%', backgroundColor: COLORS.cardAlt, borderRadius: 8, padding: isDesktopWeb ? 8 : 6, alignItems: 'center' },
+  summaryLabel: { fontSize: 10, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5, marginBottom: isDesktopWeb ? 3 : 2.25 },
   summaryValue: { fontSize: isDesktopWeb ? 20 : 12, fontWeight: 'bold', color: COLORS.superAdmin },
   addBtn: {
-    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 8 : 6,
-    backgroundColor: COLORS.superAdmin, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 6, paddingVertical: isDesktopWeb ? 13 : 9.75, marginBottom: isDesktopWeb ? 18 : 13.5,
+    flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 3,
+    backgroundColor: COLORS.superAdmin, marginHorizontal: isDesktopWeb ? 8 : 6, borderRadius: 6, paddingVertical: isDesktopWeb ? 6.5 : 4.88, marginBottom: isDesktopWeb ? 9 : 6.75,
   },
   addBtnText: { fontSize: isDesktopWeb ? 14 : 12, fontWeight: '700', color: '#FFFFFF' },
-  emptyText: { textAlign: 'center', color: COLORS.muted, marginTop: isDesktopWeb ? 20 : 15 },
-  expenseCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 8, padding: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 14 : 10.5, position: 'relative' },
-  expenseTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isDesktopWeb ? 4 : 3, gap: isDesktopWeb ? 8 : 6, paddingRight: isDesktopWeb ? 28 : 21 },
+  emptyText: { textAlign: 'center', color: COLORS.muted, marginTop: isDesktopWeb ? 10 : 7.5 },
+  expenseCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 8 : 6, borderRadius: 8, padding: isDesktopWeb ? 8 : 6, marginBottom: isDesktopWeb ? 7 : 5.25, position: 'relative' },
+  expenseTopRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: isDesktopWeb ? 2 : 1.5, gap: isDesktopWeb ? 4 : 3, paddingRight: isDesktopWeb ? 14 : 10.5 },
   expensePurpose: { fontSize: isDesktopWeb ? 16 : 12, fontWeight: 'bold', color: COLORS.heading, flexShrink: 1 },
   expenseAmount: { fontSize: isDesktopWeb ? 16 : 12, fontWeight: '700', color: COLORS.superAdmin },
   expenseMeta: { fontSize: 12, color: COLORS.muted },
-  deleteBtn: { position: 'absolute', top: 16, right: 16 },
+  deleteBtn: { position: 'absolute', top: 8, right: 8 },
 
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 24 : 18 },
-  modalSheet: { width: '100%', maxWidth: 420, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 16 : 12, overflow: 'hidden' },
-  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isDesktopWeb ? 8 : 6 },
-  modalTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 4 : 3, flexShrink: 1 },
-  modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 12 : 9, lineHeight: 16 },
-  fieldLabel: { fontSize: 12, fontWeight: '700', color: COLORS.muted, marginBottom: isDesktopWeb ? 4 : 3, marginTop: isDesktopWeb ? 4 : 3 },
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(43, 24, 16, 0.5)', justifyContent: 'center', alignItems: 'center', padding: isDesktopWeb ? 12 : 9 },
+  modalSheet: { width: '100%', maxWidth: 420, backgroundColor: COLORS.background, borderRadius: 12, padding: isDesktopWeb ? 8 : 6, overflow: 'hidden' },
+  modalHeaderRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', gap: isDesktopWeb ? 4 : 3 },
+  modalTitle: { fontSize: isDesktopWeb ? 16 : 14, fontWeight: 'bold', color: COLORS.heading, marginBottom: isDesktopWeb ? 2 : 1.5, flexShrink: 1 },
+  modalSubtitle: { fontSize: 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 6 : 4.5, lineHeight: 16 },
+  fieldLabel: { fontSize: 12, fontWeight: '700', color: COLORS.muted, marginBottom: isDesktopWeb ? 2 : 1.5, marginTop: isDesktopWeb ? 2 : 1.5 },
   formInput: {
     backgroundColor: COLORS.cardAlt, borderRadius: 8, borderWidth: 1, borderColor: COLORS.inputBorder,
-    paddingHorizontal: 10, height: 34, fontSize: 12, color: COLORS.heading, marginBottom: isDesktopWeb ? 4 : 3,
+    paddingHorizontal: 5, height: 34, fontSize: 12, color: COLORS.heading, marginBottom: isDesktopWeb ? 2 : 1.5,
   },
-  modalActions: { flexDirection: 'row', gap: 6, marginTop: 9 },
-  modalCancelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 7.5, borderRadius: 6, backgroundColor: COLORS.cardAlt },
+  modalActions: { flexDirection: 'row', gap: 3, marginTop: 4.5 },
+  modalCancelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 3.75, borderRadius: 6, backgroundColor: COLORS.cardAlt },
   modalCancelText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
   modalSaveBtn: {
-    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4.5,
-    paddingVertical: 7.5, borderRadius: 6, backgroundColor: COLORS.superAdmin,
+    flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 2.25,
+    paddingVertical: 3.75, borderRadius: 6, backgroundColor: COLORS.superAdmin,
   },
   modalSaveText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
 });

@@ -86,7 +86,7 @@ export const SuperAdminDashboard = ({ navigation }: any) => {
 
   return (
     <View style={styles.container}>
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 6 }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Icon name="arrow-left" size={22} color={COLORS.heading} />
         </TouchableOpacity>
@@ -105,12 +105,12 @@ export const SuperAdminDashboard = ({ navigation }: any) => {
           onRetry={() => { refetchTenants(); refetchTickets(); }}
         />
       ) : isLoading ? (
-        <View style={{ padding: 16 }}>
-          <SkeletonStatRow count={2} style={{ marginBottom: 20 }} />
+        <View style={{ padding: 8 }}>
+          <SkeletonStatRow count={2} style={{ marginBottom: 10 }} />
           <SkeletonList rows={4} />
         </View>
       ) : (
-        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 40 }}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingBottom: 20 }}>
           <View style={styles.pulseCard}>
             <Text style={styles.pulseTitle}>Ecosystem Pulse</Text>
             <Text style={styles.pulseSubtitle}>
@@ -139,7 +139,7 @@ export const SuperAdminDashboard = ({ navigation }: any) => {
               <Text style={styles.statSub}>{activeTenants} active</Text>
             </View>
             <View style={styles.statCard}>
-              <Icon name="lifebuoy" size={18} color={COLORS.muted} style={{ marginBottom: 8 }} />
+              <Icon name="lifebuoy" size={18} color={COLORS.muted} style={{ marginBottom: 4 }} />
               <Text style={styles.statLabel}>SUPPORT</Text>
               <Text style={styles.statValue}>{openTickets}</Text>
               <Text style={styles.statSub}>Open tickets</Text>
@@ -175,7 +175,7 @@ export const SuperAdminDashboard = ({ navigation }: any) => {
           <Text style={styles.sectionTitle}>Recent Signups</Text>
           <View style={styles.signupsCard}>
             {recentSignups.length === 0 ? (
-              <Text style={[styles.emptyText, { padding: 12 }]}>No tenants yet.</Text>
+              <Text style={[styles.emptyText, { padding: 6 }]}>No tenants yet.</Text>
             ) : (
               recentSignups.map((t, index) => (
                 <View key={t.id} style={[styles.signupRow, index !== recentSignups.length - 1 && styles.signupDivider]}>
@@ -228,10 +228,10 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: isDesktopWeb ? 10 : 7.5,
-    paddingHorizontal: isDesktopWeb ? 16 : 12,
-    paddingTop: isDesktopWeb ? 12 : 9,
-    paddingBottom: isDesktopWeb ? 12 : 9,
+    gap: isDesktopWeb ? 5 : 3.75,
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
+    paddingTop: isDesktopWeb ? 6 : 4.5,
+    paddingBottom: isDesktopWeb ? 6 : 4.5,
   },
   headerTitle: {
     fontSize: isDesktopWeb ? 20 : 14,
@@ -239,14 +239,14 @@ const styles = StyleSheet.create({
     color: COLORS.superAdmin,
   },
   pulseCard: {
-    paddingHorizontal: isDesktopWeb ? 16 : 12,
-    marginBottom: isDesktopWeb ? 16 : 12,
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
+    marginBottom: isDesktopWeb ? 8 : 6,
   },
   pulseTitle: {
     fontSize: isDesktopWeb ? 22 : 14,
     fontWeight: 'bold',
     color: COLORS.heading,
-    marginBottom: isDesktopWeb ? 6 : 4.5,
+    marginBottom: isDesktopWeb ? 3 : 2.25,
   },
   pulseSubtitle: {
     fontSize: 13,
@@ -255,17 +255,17 @@ const styles = StyleSheet.create({
   },
   revenueCard: {
     backgroundColor: COLORS.cardAlt,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
     borderRadius: 8,
-    padding: isDesktopWeb ? 18 : 13.5,
-    marginBottom: isDesktopWeb ? 12 : 9,
+    padding: isDesktopWeb ? 9 : 6.75,
+    marginBottom: isDesktopWeb ? 6 : 4.5,
   },
   cardLabel: {
     fontSize: 10,
     fontWeight: '700',
     color: COLORS.muted,
     letterSpacing: 0.5,
-    marginBottom: isDesktopWeb ? 6 : 4.5,
+    marginBottom: isDesktopWeb ? 3 : 2.25,
   },
   revenueValue: {
     fontSize: isDesktopWeb ? 30 : 12,
@@ -275,31 +275,31 @@ const styles = StyleSheet.create({
   revenueHint: {
     fontSize: 11,
     color: COLORS.muted,
-    marginTop: isDesktopWeb ? 6 : 4.5,
+    marginTop: isDesktopWeb ? 3 : 2.25,
     lineHeight: 15,
   },
   statsGrid: {
     flexDirection: 'row',
-    paddingHorizontal: isDesktopWeb ? 16 : 12,
-    gap: isDesktopWeb ? 12 : 9,
-    marginBottom: isDesktopWeb ? 20 : 15,
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
+    gap: isDesktopWeb ? 6 : 4.5,
+    marginBottom: isDesktopWeb ? 10 : 7.5,
   },
   statCard: {
     flex: 1,
     backgroundColor: COLORS.cardAlt,
     borderRadius: 8,
-    padding: isDesktopWeb ? 14 : 10.5,
+    padding: isDesktopWeb ? 7 : 5.25,
   },
   statTopRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: isDesktopWeb ? 8 : 6,
+    marginBottom: isDesktopWeb ? 4 : 3,
   },
   newPill: {
     backgroundColor: COLORS.superAdminBg,
-    paddingHorizontal: isDesktopWeb ? 7 : 5.25,
-    paddingVertical: isDesktopWeb ? 2 : 1.5,
+    paddingHorizontal: isDesktopWeb ? 3.5 : 2.63,
+    paddingVertical: isDesktopWeb ? 1 : 0.75,
     borderRadius: 6,
   },
   newPillText: {
@@ -312,7 +312,7 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: COLORS.muted,
     letterSpacing: 0.5,
-    marginBottom: isDesktopWeb ? 4 : 3,
+    marginBottom: isDesktopWeb ? 2 : 1.5,
   },
   statValue: {
     fontSize: isDesktopWeb ? 22 : 12,
@@ -322,21 +322,21 @@ const styles = StyleSheet.create({
   statSub: {
     fontSize: 11,
     color: COLORS.muted,
-    marginTop: isDesktopWeb ? 2 : 1.5,
+    marginTop: isDesktopWeb ? 1 : 0.75,
   },
   sectionTitle: {
     fontSize: isDesktopWeb ? 17 : 14,
     fontWeight: 'bold',
     color: COLORS.heading,
-    paddingHorizontal: isDesktopWeb ? 16 : 12,
-    marginBottom: isDesktopWeb ? 12 : 9,
+    paddingHorizontal: isDesktopWeb ? 8 : 6,
+    marginBottom: isDesktopWeb ? 6 : 4.5,
   },
   chartCard: {
     backgroundColor: COLORS.cardAlt,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
     borderRadius: 8,
-    padding: isDesktopWeb ? 16 : 12,
-    marginBottom: isDesktopWeb ? 24 : 18,
+    padding: isDesktopWeb ? 8 : 6,
+    marginBottom: isDesktopWeb ? 12 : 9,
     alignItems: 'center',
     justifyContent: 'center',
     minHeight: 110,
@@ -347,16 +347,16 @@ const styles = StyleSheet.create({
   },
   signupsCard: {
     backgroundColor: COLORS.cardAlt,
-    marginHorizontal: isDesktopWeb ? 16 : 12,
+    marginHorizontal: isDesktopWeb ? 8 : 6,
     borderRadius: 8,
-    padding: isDesktopWeb ? 8 : 6,
-    marginBottom: isDesktopWeb ? 20 : 15,
+    padding: isDesktopWeb ? 4 : 3,
+    marginBottom: isDesktopWeb ? 10 : 7.5,
   },
   signupRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: isDesktopWeb ? 12 : 9,
-    padding: isDesktopWeb ? 10 : 7.5,
+    gap: isDesktopWeb ? 6 : 4.5,
+    padding: isDesktopWeb ? 5 : 3.75,
   },
   signupDivider: {
     borderBottomWidth: 1,
@@ -382,15 +382,15 @@ const styles = StyleSheet.create({
   signupPlan: {
     fontSize: 12,
     color: COLORS.muted,
-    marginTop: isDesktopWeb ? 1 : 0.75,
+    marginTop: isDesktopWeb ? 0.5 : 0.38,
   },
   viewAllBtn: {
     borderWidth: 1,
     borderColor: COLORS.divider,
     borderRadius: 6,
-    paddingVertical: isDesktopWeb ? 12 : 9,
+    paddingVertical: isDesktopWeb ? 6 : 4.5,
     alignItems: 'center',
-    margin: isDesktopWeb ? 8 : 6,
+    margin: isDesktopWeb ? 4 : 3,
   },
   viewAllText: {
     fontSize: isDesktopWeb ? 13 : 12,
@@ -401,20 +401,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginHorizontal: 12,
+    marginHorizontal: 6,
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 9,
+    padding: 6,
+    marginBottom: 4.5,
   },
   quickCardLight: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     backgroundColor: COLORS.cardAlt,
-    marginHorizontal: 12,
+    marginHorizontal: 6,
     borderRadius: 8,
-    padding: 12,
-    marginBottom: 9,
+    padding: 6,
+    marginBottom: 4.5,
   },
   quickTitleLight: {
     fontSize: 14,
@@ -424,7 +424,7 @@ const styles = StyleSheet.create({
   quickSubLight: {
     fontSize: 12,
     color: 'rgba(255,255,255,0.7)',
-    marginTop: 1.5,
+    marginTop: 0.75,
   },
   quickTitleDark: {
     fontSize: 14,
@@ -434,6 +434,6 @@ const styles = StyleSheet.create({
   quickSubDark: {
     fontSize: 12,
     color: COLORS.muted,
-    marginTop: 1.5,
+    marginTop: 0.75,
   },
 });
