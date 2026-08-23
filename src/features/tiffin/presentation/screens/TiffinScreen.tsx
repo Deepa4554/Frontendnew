@@ -67,11 +67,10 @@ const fmtRange = (start: string, end: string) => {
 
 /** Builds and sends a tiffin bill to the same thermal printer the POS uses (PrinterService),
  * as a one-line receipt: the plan + period + days, the plate count as quantity, the per-plate
- * rate as price. `amountDue` drives the scan-to-pay UPI QR — 0 once it's been paid, so a
- * printed paid receipt doesn't ask for money again. */
+ * rate as price. */
 async function printTiffinBill(
   settings: any,
-  r: { orderNumber: string; name: string; planName: string; periodStart: string; periodEnd: string; deliveredDays: number; totalQty: number; rate: number; total: number; amountDue: number },
+  r: { orderNumber: string; name: string; planName: string; periodStart: string; periodEnd: string; deliveredDays: number; totalQty: number; rate: number; total: number },
 ) {
   return PrinterService.printReceipt({
     businessName: settings?.businessName ?? 'PrabandhOS',
@@ -81,8 +80,6 @@ async function printTiffinBill(
     title: r.name,
     orderTypeLabel: 'Tiffin',
     gstNumber: settings?.gstNumber,
-    upiVpa: settings?.upiVpa,
-    amountDue: r.amountDue,
     items: [{ name: `${r.planName} - ${fmtRange(r.periodStart, r.periodEnd)} (${r.deliveredDays}d)`, qty: r.totalQty, price: r.rate }],
     subtotal: r.total,
     taxRatePct: 0,
@@ -895,7 +892,7 @@ const BillingTab: React.FC<{ COLORS: ReturnType<typeof useThemeColors>; styles: 
         name: line.name, planName: line.planName,
         periodStart: period.start, periodEnd: period.end,
         deliveredDays: line.deliveredDays, totalQty: line.totalQty, rate: line.rate,
-        total: line.amount, amountDue: line.amount - line.invoiceAmountPaid,
+        total: line.amount,
       });
       dispatch(showToast({ message: res.message, icon: res.ok ? 'printer-check' : 'alert-circle-outline', tone: res.ok ? 'success' : 'danger' }));
     } finally {
@@ -1067,7 +1064,7 @@ const SettleInvoiceModal: React.FC<{
   React.useEffect(() => { setMethod('Cash'); setNote(''); }, [invoiceId]);
   React.useEffect(() => { if (outstanding > 0) setAmount(String(Math.round(outstanding * 100) / 100)); }, [invoiceId, outstanding]);
 
-  const printBill = async (amountDue: number) => {
+  const printBill = async () => {
     if (!inv) return;
     setPrinting(true);
     try {
@@ -1075,7 +1072,7 @@ const SettleInvoiceModal: React.FC<{
         orderNumber: `T${inv.id}`, name: inv.name, planName: inv.planName,
         periodStart: inv.periodStart, periodEnd: inv.periodEnd,
         deliveredDays: inv.deliveredDays, totalQty: inv.totalQty, rate: inv.rate,
-        total: inv.totalAmount, amountDue,
+        total: inv.totalAmount,
       });
       dispatch(showToast({ message: res.message, icon: res.ok ? 'printer-check' : 'alert-circle-outline', tone: res.ok ? 'success' : 'danger' }));
     } finally {
@@ -1102,7 +1099,7 @@ const SettleInvoiceModal: React.FC<{
         icon: 'check-circle', tone: 'success',
       }));
       setNote('');
-      if (thenPrint) await printBill(left);
+      if (thenPrint) await printBill();
       if (left <= 0.005) onClose();
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not record the payment'), icon: 'alert-circle-outline', tone: 'danger' }));
@@ -1175,7 +1172,7 @@ const SettleInvoiceModal: React.FC<{
           )}
 
           {outstanding <= 0.005 && !isLoading && (
-            <TouchableOpacity style={[styles.settleBtn, printing && { opacity: 0.6 }, webNoOutline]} onPress={() => printBill(0)} disabled={printing}>
+            <TouchableOpacity style={[styles.settleBtn, printing && { opacity: 0.6 }, webNoOutline]} onPress={() => printBill()} disabled={printing}>
               {printing ? <ActivityIndicator size="small" color="#FFFFFF" /> : <Icon name="printer-outline" size={16} color="#FFFFFF" />}
               <Text style={styles.settleBtnText}>Print receipt</Text>
             </TouchableOpacity>

@@ -6,8 +6,6 @@
  * the exact same receipt content from this one shared source.
  */
 
-import { buildUpiPaymentUri } from '../payments/upi';
-
 /** Veg/non-veg tag as it travels to a printer. Mirrors the API's VegNonVegType enum. */
 export type PrintableVegNonVegType = 'Veg' | 'NonVeg' | 'Jain' | 'Eggetarian';
 
@@ -142,18 +140,6 @@ export interface PrintableReceipt {
   showGuestPhone?: boolean;
   showItemNotes?: boolean;
   showFooter?: boolean;
-  /** The cafe's UPI address (see CafeSettings.UpiVpa). Set it and the bill gets a
-   * scan-to-pay QR addressed to this VPA; leave it blank/undefined (the cafe hasn't set one
-   * up) and the bill prints exactly as it always did. */
-  upiVpa?: string | null;
-  /** What the scan-to-pay QR should charge — the order's outstanding balance, which is the
-   * whole total only until something has been collected. Omit it and the QR falls back to
-   * `total`, which is right for a fresh bill and wrong for every other case: reprinting a
-   * settled bill would hand the guest a QR for the full amount a second time, and a
-   * part-paid one would ask for money already taken. The bill screen and the WhatsApp PDF
-   * both charge the balance (see OrderBillActions and ReceiptPdfBuilder) — this keeps the
-   * printed copy saying the same thing. Zero means nothing is owed and no QR prints. */
-  amountDue?: number;
 }
 
 export type ReceiptLine =
@@ -350,28 +336,6 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
   }
   pushAmountRow(push, 'TOTAL', money(receipt.total), columns, true);
   push({ kind: 'dashes' });
-
-  // Scan-to-pay block, printed only once the cafe has a UPI address configured. Sits
-  // directly under the total and above the footer, so the amount a guest just read is the
-  // last thing on the slip before the code that charges it. buildUpiPaymentUri returns null
-  // for a zero/comped bill, which drops the whole block rather than printing a QR that every
-  // UPI app would reject. Nothing here confirms payment — see buildUpiPaymentUri's note.
-  const amountDue = receipt.amountDue ?? receipt.total;
-  const upiUri = receipt.upiVpa
-    ? buildUpiPaymentUri({
-        vpa: receipt.upiVpa,
-        payeeName: receipt.businessName,
-        amount: amountDue,
-        note: `Bill ${receipt.orderNumber}`,
-      })
-    : null;
-  if (upiUri) {
-    push({ kind: 'text', text: 'SCAN TO PAY', align: 'center', bold: true });
-    push({ kind: 'text', text: money(amountDue), align: 'center' });
-    push({ kind: 'qr', data: upiUri, size: 6, fallbackText: `Pay by UPI to ${receipt.upiVpa}` });
-    push({ kind: 'text', text: receipt.upiVpa ?? '', align: 'center' });
-    push({ kind: 'dashes' });
-  }
 
   if (receipt.showFooter !== false) push({ kind: 'text', text: receipt.footer, align: 'center' });
   push({ kind: 'feed' });

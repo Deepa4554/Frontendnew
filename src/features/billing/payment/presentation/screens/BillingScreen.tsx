@@ -82,8 +82,6 @@ export const BillingScreen = () => {
       gstNumber: settings?.gstNumber,
       licenceNumber: settings?.licenceNumber,
       logoUrl: settings?.logoUrl,
-      upiVpa: settings?.upiVpa,
-      amountDue: openOrder.balanceDue ?? openOrder.total,
       items: openOrder.items,
       subtotal: openOrder.subtotal,
       discountPct: openOrder.discountPct || undefined,

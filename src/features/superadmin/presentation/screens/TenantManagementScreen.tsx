@@ -67,10 +67,22 @@ const TenantCard = React.memo(({ tenant, onViewSales, onManageScreens, onManageS
 }) => {
   const style = STATUS_STYLES[tenant.status] ?? STATUS_STYLES.TRIAL;
   const expired = !!tenant.planExpiresAt && new Date(tenant.planExpiresAt) < new Date();
+  // The list arrives soonest-expiry-first, so the card says how soon in words. A date range on
+  // its own leaves the reader doing the arithmetic the ordering is already based on.
+  const daysLeft = tenant.planExpiresAt
+    ? Math.ceil((new Date(tenant.planExpiresAt).getTime() - Date.now()) / 86_400_000)
+    : null;
+  const expiringSoon = !expired && daysLeft !== null && daysLeft <= 7;
+  const countdown = expired
+    ? 'Expired'
+    : daysLeft === null ? null
+    : daysLeft <= 0 ? 'Expires today'
+    : daysLeft === 1 ? '1 day left'
+    : `${daysLeft} days left`;
   // Both ends of the term, not just the far one — "Expires 12/09" on its own never said which
   // plan period you were looking at, and can't distinguish a monthly from a yearly grant.
   const termText = tenant.planExpiresAt
-    ? `${fmtDate(tenant.planStartedAt)} → ${fmtDate(tenant.planExpiresAt)}${expired ? ' · Expired' : ''}`
+    ? `${fmtDate(tenant.planStartedAt)} → ${fmtDate(tenant.planExpiresAt)}${countdown ? ` · ${countdown}` : ''}`
     : 'No expiry';
   return (
     <View style={styles.tenantCard}>
@@ -84,7 +96,7 @@ const TenantCard = React.memo(({ tenant, onViewSales, onManageScreens, onManageS
         <Icon name="domain" size={14} color={COLORS.muted} />
         <Text style={styles.metaText}>{tenant.branchCount} branches · {tenant.staffCount} staff</Text>
       </View>
-      <Text style={[styles.expiryText, expired && styles.expiryTextExpired]}>{termText}</Text>
+      <Text style={[styles.expiryText, expiringSoon && styles.expiryTextSoon, expired && styles.expiryTextExpired]}>{termText}</Text>
 
       <View style={styles.tenantBottomRow}>
         <View style={styles.pillRow}>
@@ -391,6 +403,7 @@ const styles = StyleSheet.create({
   metaText: { fontSize: 12, color: COLORS.muted },
   expiryText: { fontSize: 12, color: COLORS.muted, marginBottom: isDesktopWeb ? 7 : 5.25 },
   expiryTextExpired: { color: COLORS.dangerAccent, fontWeight: '600' },
+  expiryTextSoon: { color: COLORS.accent, fontWeight: '600' },
   tenantBottomRow: {
     flexDirection: 'row',
     alignItems: 'center',

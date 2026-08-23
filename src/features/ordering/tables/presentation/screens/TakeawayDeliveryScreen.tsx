@@ -187,8 +187,6 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
       guestPhone: order.guestPhone ?? undefined,
       waiterName: order.servedByName ?? order.createdByName,
       gstNumber: settings?.gstNumber,
-      upiVpa: settings?.upiVpa,
-      amountDue: order.balanceDue ?? order.total,
       items: order.items,
       subtotal: order.subtotal,
       discountPct: order.discountPct || undefined,

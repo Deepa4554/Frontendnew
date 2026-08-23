@@ -416,8 +416,6 @@ export const TableManagementScreen = ({ navigation }: any) => {
       guestPhone: occupiedOrder.guestPhone ?? undefined,
       waiterName: occupiedOrder.servedByName ?? occupiedOrder.createdByName,
       gstNumber: settings?.gstNumber,
-      upiVpa: settings?.upiVpa,
-      amountDue: occupiedOrder.balanceDue ?? occupiedOrder.total,
       items: occupiedOrder.items,
       subtotal: occupiedOrder.subtotal,
       discountPct: occupiedOrder.discountPct || undefined,
