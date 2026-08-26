@@ -25,6 +25,14 @@ export interface PrintResult {
  */
 const columnsFor = (config: PrinterConfig): number => config.columns ?? 32;
 
+/** Whether this config's print will actually go out as raw ESC/POS bytes rather than an HTML
+ * page — true for WiFi/Bluetooth always, and for 'browser' only when a PrintAgent printer name
+ * is set (see UsbAgentPrinter.web.ts). Drives whether the pre-dithered logo raster is worth
+ * fetching (see printReceipt) — a 'browser' config with no agent printer name never sends
+ * ESC/POS at all, so fetching one for it would be pure waste. */
+const usesEscPos = (config: PrinterConfig): boolean =>
+  config.type === 'wifi' || config.type === 'bluetooth' || (config.type === 'browser' && !!config.usbAgentPrinterName);
+
 /**
  * Every print on this device runs through here, one at a time, tail to tail.
  *
@@ -153,12 +161,15 @@ export const PrinterService = {
   async printReceipt(receipt: PrintableReceipt, configOverride?: PrinterConfig): Promise<PrintResult> {
     const config = configOverride ?? getPrinterConfig();
     const columns = columnsFor(config);
-    // Only the two transports that speak raw ESC/POS can use a pre-dithered raster (see
-    // logoRaster.ts) — fetching it for 'browser' (which wants the real image, via
-    // receipt.logoUrl instead — see buildReceiptLines) or 'none' (which prints nothing at
-    // all) would just be a wasted request on the way to a bill that was never going to carry
-    // the raster bytes anyway.
-    const logoRaster = config.type === 'wifi' || config.type === 'bluetooth' ? await getLogoRaster(columns) : null;
+    // Only a config that actually speaks raw ESC/POS can use a pre-dithered raster (see
+    // logoRaster.ts and usesEscPos above) — fetching it for a plain 'browser' config (which
+    // wants the real image, via receipt.logoUrl instead — see buildReceiptLines) or 'none'
+    // (which prints nothing at all) would just be a wasted request on the way to a bill that
+    // was never going to carry the raster bytes anyway. A 'browser' config WITH a PrintAgent
+    // printer name does send ESC/POS (when the agent is reachable), so it needs the raster too
+    // — without this, PrintAgent prints picked up every 'browser' bill's logo missing, because
+    // buildReceiptLines only fills escposBytes when the caller pre-fetched one.
+    const logoRaster = usesEscPos(config) ? await getLogoRaster(columns) : null;
     return printLines(buildReceiptLines(withCafeLogo(receipt), columns, logoRaster), config);
   },
   /** Kitchen ticket — items only, no prices. See Token Dashboard's "Print KOT". When the
