@@ -89,6 +89,9 @@ export interface SalesReport {
   itemWise: SalesItemLine[];
   categoryWise: SalesCategoryLine[];
   paymentModeWise: SalesPaymentLine[];
+  /** Written off on the Complimentary tender — already excluded from netSales above (see
+   * ReportsController.Sales), broken out here so the report can show it as its own line. */
+  complimentaryTotal: number;
 }
 
 export interface TaxRateLine {

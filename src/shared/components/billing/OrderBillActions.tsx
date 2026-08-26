@@ -8,7 +8,7 @@ import { useResponsive } from '../../../core/utils/useResponsive';
 import { ApiOrder } from '../../../core/api/ordersApi';
 import { showToast } from '../../../core/store/uiSlice';
 import { getApiErrorMessage } from '../../../core/network/api';
-import { canApplyBillDiscount } from '../../../core/auth/permissions';
+import { canApplyBillDiscount, canMarkComplimentary } from '../../../core/auth/permissions';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
 import { LoadingOverlay } from '../atoms/LoadingOverlay';
 import { useApplyBillDiscount, useBillCoupon, useBillGiftCard, useBillCharges, useBillLoyalty, useCloseOrder, useUpdateOrderGuest, useServeAll, useFireOrder, useRemoveOrderItem } from '../../../core/api/hooks/useOrders';
@@ -59,7 +59,11 @@ interface Props {
    *  `unfiredItems` is 'keep' only when this bill still carries a line the kitchen never saw and
    *  the cashier chose to charge it anyway — the server refuses the settle without it (see
    *  PayOptions.unfiredItems), so it must be passed straight through to ordersApi.pay. Undefined
-   *  for every ordinary settle, which has nothing unfired on it. */
+   *  for every ordinary settle, which has nothing unfired on it.
+   *  `complimentaryReason` carries the reason typed into the payment picker when the settle
+   *  includes a Complimentary leg — the caller must pass it through to ordersApi.pay's
+   *  PayOptions.complimentaryReason, which the server rejects the settle without. Undefined for
+   *  every ordinary settle. */
   onMarkPaid: (
     payments: PaymentSplit[],
     allowPartial?: boolean,
@@ -67,6 +71,7 @@ interface Props {
     phoneOverride?: string,
     guest?: { name: string; phone: string },
     unfiredItems?: 'keep',
+    complimentaryReason?: string,
   ) => void;
   onPrintBill: () => void;
   /** phoneOverride: see onMarkPaid. Every implementation is already async (it mints a
@@ -201,7 +206,7 @@ export const OrderBillActions: React.FC<Props> = ({
   // What PaymentMethodPicker currently has picked — see its onChange doc. Defaults to
   // nothing settleable; the picker reports its real starting value (Cash covering the
   // full owed amount) on mount, before any button press is possible.
-  const [paymentResult, setPaymentResult] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true, dueAmount: 0, guestName: '', guestPhone: '' });
+  const [paymentResult, setPaymentResult] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true, dueAmount: 0, guestName: '', guestPhone: '', compAmount: 0, complimentaryReason: '' });
   const [openAdjustment, setOpenAdjustment] = useState<AdjustmentKey | null>(null);
   // Lets the Service/Packing/Delivery Switches flip the instant they're tapped instead of
   // waiting on the bill-charges round trip + orders refetch — a Switch reads as "broken" if
@@ -311,7 +316,10 @@ export const OrderBillActions: React.FC<Props> = ({
     const guest = paymentResult.dueAmount > 0
       ? { name: paymentResult.guestName, phone: paymentResult.guestPhone }
       : undefined;
-    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride, guest, unfiredChoice);
+    // Only forwarded when there's actually a write-off in play — the picker won't report
+    // canSettle for a Complimentary leg without a reason, so by here it's real.
+    const complimentaryReason = paymentResult.compAmount > 0 ? paymentResult.complimentaryReason : undefined;
+    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride, guest, unfiredChoice, complimentaryReason);
   };
 
   // Which action the unfired-items prompt is standing in front of, so it can be resumed with the
@@ -784,6 +792,7 @@ export const OrderBillActions: React.FC<Props> = ({
               owed={owed}
               guestName={order.guestName}
               guestPhone={order.guestPhone}
+              allowComplimentary={canMarkComplimentary(role)}
               onChange={setPaymentResult}
             />
           )}

@@ -55,6 +55,7 @@ export const SalesReportScreen = () => {
             rows: [
               { metric: 'Gross sales', value: data.grossSales },
               { metric: 'Total discounts', value: data.totalDiscounts },
+              { metric: 'Complimentary', value: data.complimentaryTotal },
               { metric: 'Net sales', value: data.netSales },
               { metric: 'Refunds', value: data.refundsTotal },
               { metric: 'Orders', value: data.orderCount },
@@ -119,6 +120,7 @@ export const SalesReportScreen = () => {
               {[
                 ['Gross sales', data.grossSales],
                 ['Total discounts', -data.totalDiscounts],
+                ['Complimentary', -data.complimentaryTotal],
                 ['Net sales', data.netSales],
                 ['Refunds', -data.refundsTotal],
               ].map(([label, value], i, arr) => (

@@ -225,6 +225,14 @@ export function canOverrideItemPrice(role: AppRole | undefined): boolean {
   return isOwnerOrManager(role);
 }
 
+/// Settling a bill on the "Complimentary" tender (₹0 collected, the whole amount written off)
+/// is the same discretionary call as a bill discount, just taken to 100% — Manager-level for
+/// the same leakage-control reason, and gated identically on the backend (see
+/// OrdersController.Pay's IsOwnerOrManager check on a Complimentary leg).
+export function canMarkComplimentary(role: AppRole | undefined): boolean {
+  return isOwnerOrManager(role);
+}
+
 export function canAccessSuperAdmin(isPlatformAdmin: boolean | undefined): boolean {
   return isPlatformAdmin === true;
 }

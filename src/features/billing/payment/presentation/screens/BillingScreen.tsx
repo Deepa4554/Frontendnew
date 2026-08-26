@@ -59,8 +59,8 @@ export const BillingScreen = () => {
   // Payment-method filter — client-side only (the backend has no such query param, and
   // this screen already pulls every one of today's paid orders in one shot). Answers
   // "how much came in via Cash today" directly instead of making someone add it up.
-  const [methodFilter, setMethodFilter] = useState<'All' | 'Cash' | 'Card' | 'UPI' | 'Multiple'>('All');
-  const METHOD_FILTERS: Array<'All' | 'Cash' | 'Card' | 'UPI' | 'Multiple'> = ['All', 'Cash', 'Card', 'UPI', 'Multiple'];
+  const [methodFilter, setMethodFilter] = useState<'All' | 'Cash' | 'Card' | 'UPI' | 'Due' | 'Complimentary' | 'Multiple'>('All');
+  const METHOD_FILTERS: Array<'All' | 'Cash' | 'Card' | 'UPI' | 'Due' | 'Complimentary' | 'Multiple'> = ['All', 'Cash', 'Card', 'UPI', 'Due', 'Complimentary', 'Multiple'];
   const [methodPickerVisible, setMethodPickerVisible] = useState(false);
 
   const businessName = settings?.businessName ?? 'PrabandhOS';
@@ -157,7 +157,10 @@ export const BillingScreen = () => {
     return acc;
   }, {});
 
-  const todayRevenue = orders.reduce((sum, o) => sum + o.total, 0);
+  // o.total still carries the written-off portion (see ordersApi.ApiOrder.complimentaryAmount)
+  // — subtract it so a comp'd bill doesn't inflate revenue, same treatment as the Sales report
+  // (ReportsController.Sales).
+  const todayRevenue = orders.reduce((sum, o) => sum + o.total - o.complimentaryAmount, 0);
   const txnCount = orders.length;
 
   return (
@@ -205,7 +208,7 @@ export const BillingScreen = () => {
           categories={METHOD_FILTERS}
           activeCategory={methodFilter}
           counts={methodFilterCounts}
-          onSelect={(label) => setMethodFilter(label as 'All' | 'Cash' | 'Card' | 'UPI' | 'Multiple')}
+          onSelect={(label) => setMethodFilter(label as 'All' | 'Cash' | 'Card' | 'UPI' | 'Due' | 'Complimentary' | 'Multiple')}
         />
 
         <Text style={styles.sectionTitle}>Recent Transactions</Text>
@@ -233,7 +236,7 @@ export const BillingScreen = () => {
               // redundant/misleading as the headline badge; what's actually useful at a
               // glance in Billing is HOW it was paid.
               const method = order.paymentMethod ?? 'Multiple';
-              const methodIcon = method === 'Cash' ? 'cash' : method === 'Card' ? 'credit-card-outline' : method === 'UPI' ? 'qrcode-scan' : 'call-split';
+              const methodIcon = method === 'Cash' ? 'cash' : method === 'Card' ? 'credit-card-outline' : method === 'UPI' ? 'qrcode-scan' : method === 'Due' ? 'notebook-outline' : method === 'Complimentary' ? 'gift-outline' : 'call-split';
               return (
                 <TouchableOpacity key={order.id} style={styles.txnCard} activeOpacity={0.85} onPress={() => setOpenOrder(order)}>
                   <View style={styles.txnIcon}>

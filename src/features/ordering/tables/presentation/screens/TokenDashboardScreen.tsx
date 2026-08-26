@@ -141,14 +141,22 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
     );
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep') => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep', complimentaryReason?: string) => {
     if (!order) return;
     try {
       // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
       // server needs them to open the customer's khata and rejects the settle without.
       // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
       // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
-      await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems });
+      // complimentaryReason: only set on a settle carrying a Complimentary leg — the server
+      // rejects that settle without it too.
+      const result = await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems, complimentaryReason });
+      // A Complimentary write-off above the auto-approve threshold doesn't settle at all —
+      // nothing applied, order untouched — it just goes to the Owner's Approvals queue.
+      if ('pendingApproval' in result) {
+        dispatch(showToast({ message: result.message, icon: 'clock-outline', tone: 'info' }));
+        return;
+      }
       // Chained straight off the settle tap (see OrderBillActions' split-button menu) —
       // neither of these depends on order.paid/payments having refreshed yet, they just
       // read the bill's items/prices, which settling never changes.

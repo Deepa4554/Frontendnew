@@ -137,9 +137,13 @@ export interface OrderPayment {
  *  khatabookApi). It's what makes "₹200 cash now, ₹250 udhaar" a single settle. Sending it
  *  requires a customer name + 10-digit mobile (see PayOptions) and is rejected alongside
  *  allowPartial/keepOpen, both of which would leave the order open with the same rupees
- *  owed in two places. */
+ *  owed in two places.
+ *
+ *  'Complimentary' is Due's sibling: it also settles without any money changing hands, but
+ *  instead of parking the amount on a khata it's simply written off. Owner/Manager-only on
+ *  the backend and requires a reason (see PayOptions.complimentaryReason). */
 export interface PaymentSplit {
-  method: 'Cash' | 'Card' | 'UPI' | 'Due';
+  method: 'Cash' | 'Card' | 'UPI' | 'Due' | 'Complimentary';
   amount: number;
 }
 
@@ -153,6 +157,10 @@ export interface PayOptions {
   keepOpen?: boolean;
   guestName?: string;
   guestPhone?: string;
+  /** Compulsory whenever a 'Complimentary' tender/split is in play — why the bill is being
+   *  written off (e.g. "Owner's guest", "Staff meal"). Rejected with a 400 if blank while a
+   *  Complimentary leg is present (see OrdersController.Pay). */
+  complimentaryReason?: string;
   /** An explicit "yes, bill the lines that never went to the kitchen (fireBatch === 0)". The
    *  server REQUIRES it whenever such a line exists and the call would close the bill, refusing
    *  the settle with a 409 otherwise (see backend EnsureUnfiredItemsResolved) — the bill charges
@@ -241,6 +249,10 @@ export interface ApiOrder {
    * Zero on an ordinary bill; non-zero means this much moved onto the customer's khatabook
    * at settle time and is collected there, not here. */
   dueAmount: number;
+  /** How much of `amountPaid` was written off on the 'Complimentary' tender rather than
+   * collected. Zero on an ordinary bill. Paired with `complimentaryReason`. */
+  complimentaryAmount: number;
+  complimentaryReason: string | null;
   /** True once at least one tender has been collected but the bill isn't fully settled yet.
    * Never true at the same time as `paid`. */
   partiallyPaid: boolean;
@@ -410,9 +422,13 @@ export const ordersApi = {
    * keepOpen is the opposite case: the payment fully covers the balance but the order should
    * stay open anyway (Pay First, more items still expected) — order stays partiallyPaid
    * instead of paid even at 100% covered; call close() later once nothing more will be added.
-   * A 'Due' split settles the bill on credit instead — see PaymentSplit and PayOptions. */
+   * A 'Due' split settles the bill on credit instead — see PaymentSplit and PayOptions.
+   * A 'Complimentary' leg above the Manager auto-approve threshold doesn't settle at all —
+   * nothing on the call is applied, even a Cash/Card leg bundled alongside it — and comes
+   * back as a PendingApprovalResponse instead, same as billDiscount/refund above their own
+   * thresholds. An Owner's Complimentary always goes straight through regardless of amount. */
   pay: (id: number, paymentMethod?: string, splits?: PaymentSplit[], opts?: PayOptions) =>
-    apiClient.patch<ApiOrder>(`/orders/${id}/pay`, { paymentMethod, splits, ...opts }).then((r) => r.data),
+    apiClient.patch<ApiOrder | PendingApprovalResponse>(`/orders/${id}/pay`, { paymentMethod, splits, ...opts }).then((r) => r.data),
   /** Finalizes a keepOpen (Pay First) order once no more items are going to be added — the
    * balance is already fully covered, so this just flips it to paid with no new payment.
    * unfiredItems: see PayOptions — this closes the bill too, so it asks the same question. */

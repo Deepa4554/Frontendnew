@@ -70,7 +70,7 @@ import { getPrinterConfig } from '../../../../../core/printing/printerConfig';
 import { buildTaxBreakdown } from '../../../../../core/printing/receiptFormat';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
-import { canManageTables } from '../../../../../core/auth/permissions';
+import { canManageTables, canMarkComplimentary } from '../../../../../core/auth/permissions';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { useKeyboardInsetWeb } from '../../../../../core/utils/useVisualViewportHeight';
 import { ScreenContainer } from '../../../../../core/components/ScreenContainer';
@@ -640,6 +640,8 @@ export const POSCheckoutScreen = () => {
     dueAmount: 0,
     guestName: '',
     guestPhone: '',
+    compAmount: 0,
+    complimentaryReason: '',
   });
   const [pfPickerKey, setPfPickerKey] = useState(0);
   const [settlingMode, setSettlingMode] = useState<
@@ -1939,14 +1941,28 @@ export const POSCheckoutScreen = () => {
       // have the same rupees owed in two places (the server rejects the combination outright —
       // see OrdersController.Pay). guestName/guestPhone come from the picker's own compulsory
       // khata fields and are ignored on an ordinary settle.
-      order = await payOrderMutation.mutateAsync({
+      const payResult = await payOrderMutation.mutateAsync({
         id: order.id,
         splits,
         allowPartial: pfPayment.isPartial,
-        keepOpen: orderType !== 'CASH' && pfPayment.dueAmount <= 0,
+        // A Complimentary leg forces the bill closed here too, same as Due — it's a real
+        // write-off, not an advance against a table that's expected to keep growing.
+        keepOpen: orderType !== 'CASH' && pfPayment.dueAmount <= 0 && pfPayment.compAmount <= 0,
         guestName: pfPayment.dueAmount > 0 ? pfPayment.guestName : undefined,
         guestPhone: pfPayment.dueAmount > 0 ? pfPayment.guestPhone : undefined,
+        complimentaryReason: pfPayment.compAmount > 0 ? pfPayment.complimentaryReason : undefined,
       });
+      // A Complimentary write-off above the auto-approve threshold doesn't settle at all —
+      // the order above was already created (and fired) though, so it's not lost: it just
+      // sits unpaid on its usual dashboard (Tables/Token Dashboard/Takeaway) until the Owner
+      // approves the request from Approvals, same as any other bill still waiting to be paid.
+      if ('pendingApproval' in payResult) {
+        setPayFirstVisible(false);
+        clearCart();
+        dispatch(showToast({ message: payResult.message, icon: 'clock-outline', tone: 'info' }));
+        return;
+      }
+      order = payResult;
 
       setPayFirstVisible(false);
       clearCart();
@@ -2223,6 +2239,7 @@ export const POSCheckoutScreen = () => {
     phoneOverride?: string,
     guest?: { name: string; phone: string },
     unfiredItems?: 'keep',
+    complimentaryReason?: string,
   ) => {
     if (!receipt) return;
     try {
@@ -2230,14 +2247,23 @@ export const POSCheckoutScreen = () => {
       // server needs them to open the customer's khata and rejects the settle without.
       // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
       // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
-      await payOrderMutation.mutateAsync({
+      // complimentaryReason: only set on a settle carrying a Complimentary leg — the server
+      // rejects that settle without it too.
+      const result = await payOrderMutation.mutateAsync({
         id: receipt.orderId,
         splits: payments,
         allowPartial,
         guestName: guest?.name,
         guestPhone: guest?.phone,
         unfiredItems,
+        complimentaryReason,
       });
+      // A Complimentary write-off above the auto-approve threshold doesn't settle at all —
+      // nothing applied, order untouched — it just goes to the Owner's Approvals queue.
+      if ('pendingApproval' in result) {
+        dispatch(showToast({ message: result.message, icon: 'clock-outline', tone: 'info' }));
+        return;
+      }
       dispatch(
         showToast({
           message: 'Bill settled.',
@@ -3668,6 +3694,7 @@ export const POSCheckoutScreen = () => {
                 owed={total}
                 guestName={guestDraft || guestName}
                 guestPhone={guestPhoneDraft || guestPhone}
+                allowComplimentary={canMarkComplimentary(role)}
                 onChange={setPfPayment}
               />
 

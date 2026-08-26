@@ -6,11 +6,12 @@ import { useResponsive } from '../../../core/utils/useResponsive';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
 import { CustomerLookupBadge } from './CustomerLookupBadge';
 
-export type PaymentMethod = 'Cash' | 'Card' | 'UPI' | 'Due';
+export type PaymentMethod = 'Cash' | 'Card' | 'UPI' | 'Due' | 'Complimentary';
 // UPI before Card — the far more common tender at an Indian counter, so it reads first.
-// Due last: it's the exception, not one of the everyday tenders.
-export const METHODS: PaymentMethod[] = ['Cash', 'UPI', 'Card', 'Due'];
-export const METHOD_ICON: Record<PaymentMethod, string> = { Cash: 'cash', Card: 'credit-card-outline', UPI: 'qrcode-scan', Due: 'notebook-outline' };
+// Due next-to-last, Complimentary last: both are exceptions, not everyday tenders — and
+// Complimentary is the rarer, more deliberate one of the two.
+export const METHODS: PaymentMethod[] = ['Cash', 'UPI', 'Card', 'Due', 'Complimentary'];
+export const METHOD_ICON: Record<PaymentMethod, string> = { Cash: 'cash', Card: 'credit-card-outline', UPI: 'qrcode-scan', Due: 'notebook-outline', Complimentary: 'gift-outline' };
 
 export interface PaymentSplit {
   method: PaymentMethod;
@@ -34,6 +35,13 @@ export interface PaymentMethodPickerResult {
    *  dueAmount > 0. */
   guestName: string;
   guestPhone: string;
+  /** How much of the settle is being written off on the "Complimentary" tender — real
+   *  revenue, zero. Zero on an ordinary bill. */
+  compAmount: number;
+  /** The mandatory reason typed in while a Complimentary leg is in play, passed straight to
+   *  ordersApi.pay's PayOptions.complimentaryReason. Trimmed; guaranteed non-empty whenever
+   *  canSettle is true and compAmount > 0. */
+  complimentaryReason: string;
 }
 
 interface Props {
@@ -44,6 +52,11 @@ interface Props {
    *  already has on file, so a bill rung up under a real name doesn't ask for it twice. */
   guestName?: string | null;
   guestPhone?: string | null;
+  /** Shows the Complimentary chip at all — Owner/Manager only (see
+   *  permissions.canMarkComplimentary), since it writes the bill off for zero. A Waiter/
+   *  Cashier never sees the option, same as the Bill Discount action. Defaults to false so a
+   *  caller that forgets to pass it fails closed rather than open. */
+  allowComplimentary?: boolean;
   /** Fires on mount and on every change — both callers (an existing order's Settle
    *  button in OrderBillActions, Pay First's Settle button in POSCheckoutScreen) read
    *  the latest result at settle time instead of re-deriving this split/partial/
@@ -76,19 +89,20 @@ const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) :
  * is capped at what's needed, never the raw handed-over figure — the excess is just change,
  * not part of the recorded payment.
  *
- * Due (udhaar) is the fourth tender and the odd one out: it settles the bill without any
- * money changing hands and parks the amount on the customer's khata instead, to be collected
- * later from the Khatabook screen. Because that debt has to be attached to someone the cafe
- * can actually come back to, ticking Due reveals a name + mobile pair right underneath it and
- * blocks canSettle until both are filled — the only tender here that gates settling on
- * anything beyond an amount. Unlike the other three, Due is never auto-filled (nothing should
- * quietly land on a customer's khata); the "Rest on khata" button next to its field is the
- * one-tap way to put whatever hasn't been tendered onto it.
+ * Due (udhaar) and Complimentary are the odd ones out: both settle the bill without any money
+ * changing hands. Due parks the amount on the customer's khata instead, to be collected later
+ * from the Khatabook screen — because that debt has to be attached to someone the cafe can
+ * actually come back to, ticking Due reveals a name + mobile pair right underneath it and
+ * blocks canSettle until both are filled. Complimentary simply writes the amount off — Owner/
+ * Manager only (see `allowComplimentary`), and blocks canSettle until a reason is typed.
+ * Neither is ever auto-filled (nothing should quietly land on a customer's khata or get
+ * written off); each has its own one-tap "Rest"/"Waive Rest" button to put whatever hasn't
+ * been tendered onto it.
  *
  * Owns all of its own state; reports the current split/partial/canSettle via onChange rather
  * than being a controlled input, since neither caller needs to drive its state from outside.
  */
-export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPhone, onChange }) => {
+export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPhone, allowComplimentary = false, onChange }) => {
   const COLORS = useThemeColors();
   const { isDesktopWeb } = useResponsive();
   const styles = makeStyles(COLORS, isDesktopWeb);
@@ -97,13 +111,19 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
   // settles without touching the picker at all.
   const [selectedMethods, setSelectedMethods] = useState<PaymentMethod[]>(['UPI']);
   const [multiAmounts, setMultiAmounts] = useState<Record<PaymentMethod, string>>({
-    Cash: '', Card: '', UPI: owed > 0 ? owed.toFixed(2) : '', Due: '',
+    Cash: '', Card: '', UPI: owed > 0 ? owed.toFixed(2) : '', Due: '', Complimentary: '',
   });
   // Who the khata belongs to, seeded from whatever the order already knows. Kept here rather
   // than in the caller so both entry points (an existing order's bill panel, POS's Pay First
   // sheet, which has no server order yet) get the identical compulsory-fields behaviour.
   const [khataName, setKhataName] = useState(guestName ?? '');
   const [khataPhone, setKhataPhone] = useState(guestPhone ?? '');
+  // Why this bill is being written off — compulsory whenever Complimentary is ticked (see
+  // reasonReady below), mirroring khataName/khataPhone's role for Due.
+  const [complimentaryReason, setComplimentaryReason] = useState('');
+  // Chips actually offered — Complimentary is filtered out entirely for anyone without the
+  // permission, rather than shown-but-disabled, so a Waiter never even learns it exists.
+  const visibleMethods = allowComplimentary ? METHODS : METHODS.filter((m) => m !== 'Complimentary');
   // Cash's tick state is auto-managed (see the effect below) — auto-ticked when Card/UPI
   // stop covering the whole bill, auto-unticked when they cover it fully — right up until
   // the cashier clicks Cash's own checkbox themselves, in either direction. From that click
@@ -124,7 +144,7 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
   // What's still left for Cash to cover, based on every other tender — the reference value
   // both the auto-fill and the Return/Short label compare against. Deliberately independent
   // of whatever's actually typed into Cash's own field.
-  const cashNeeded = Math.max(0, Math.round((owed - parsedAmount('Card') - parsedAmount('UPI') - parsedAmount('Due')) * 100) / 100);
+  const cashNeeded = Math.max(0, Math.round((owed - parsedAmount('Card') - parsedAmount('UPI') - parsedAmount('Due') - parsedAmount('Complimentary')) * 100) / 100);
 
   // Keeps Cash's field in sync with cashNeeded (and ticks/unticks it) as Card/UPI change,
   // right up until the cashier types their own number into Cash — then it's theirs to control.
@@ -148,9 +168,10 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
   // of the bill. UPI takes over first (if ticked), Card next; whichever it is recomputes the
   // exact same way Cash used to.
   //
-  // Due is deliberately absent from this chain: a tender that auto-grows to swallow whatever
-  // hasn't been paid is exactly the wrong behaviour for one that puts a customer in debt.
-  // It only ever holds what the cashier typed, or what "Rest on khata" put there.
+  // Due and Complimentary are deliberately absent from this chain: a tender that auto-grows
+  // to swallow whatever hasn't been paid is exactly the wrong behaviour for one that puts a
+  // customer in debt, or one that writes real food off for free. Each only ever holds what
+  // the cashier typed, or what its own "Rest"/"Waive Rest" shortcut put there.
   const flexMethod: PaymentMethod | null = (!cashTouched && selectedMethods.includes('Cash'))
     ? null
     : selectedMethods.includes('UPI') ? 'UPI'
@@ -191,6 +212,13 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
   // cashier finds out here rather than via a rejected settle.
   const khataReady = trimmedName.length > 0 && digitsPhone.length === 10;
 
+  const compOn = selectedMethods.includes('Complimentary');
+  const compAmount = compOn ? parsedAmount('Complimentary') : 0;
+  const trimmedReason = complimentaryReason.trim();
+  // The compulsory half of a write-off: the server rejects a Complimentary leg with no reason
+  // outright (see OrdersController.Pay), so a cashier finds out here instead.
+  const reasonReady = trimmedReason.length > 0;
+
   const canSettle =
     selectedMethods.length > 0 &&
     total > 0 &&
@@ -199,7 +227,8 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
     // moved onto the khata, so leaving the order short as well would owe the same rupees in
     // two places. The server rejects this combination outright (see OrdersController.Pay).
     !(dueAmount > 0 && isPartial) &&
-    (dueAmount <= 0 || khataReady);
+    (dueAmount <= 0 || khataReady) &&
+    (compAmount <= 0 || reasonReady);
 
   // What "Rest on khata" fills Due with — everything the cashier has actually committed to
   // collecting, subtracted from the bill. The auto-absorbing leg is excluded on purpose: its
@@ -209,6 +238,11 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
     !cashTouched && selectedMethods.includes('Cash') ? 'Cash' : flexMethod;
   const restForKhata = Math.max(0, Math.round((owed - selectedMethods
     .filter((m) => m !== 'Due' && m !== absorbingMethod)
+    .reduce((sum, m) => sum + effectiveAmount(m), 0)) * 100) / 100);
+  // Same shortcut for Complimentary's "Waive Rest" — everything not yet covered by another
+  // ticked tender, excluding Complimentary's own placeholder amount.
+  const restForComplimentary = Math.max(0, Math.round((owed - selectedMethods
+    .filter((m) => m !== 'Complimentary' && m !== absorbingMethod)
     .reduce((sum, m) => sum + effectiveAmount(m), 0)) * 100) / 100);
 
   const toggleMethod = (m: PaymentMethod) => {
@@ -241,18 +275,21 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
     const splits: PaymentSplit[] = selectedMethods
       .filter((m) => effectiveAmount(m) > 0)
       .map((m) => ({ method: m, amount: effectiveAmount(m) }));
-    onChangeRef.current({ splits, isPartial, canSettle, dueAmount, guestName: trimmedName, guestPhone: digitsPhone });
-    // khataName/khataPhone are in here (unlike a plain amount change) because canSettle itself
-    // flips on them — without that the Settle button stays disabled until some unrelated edit
-    // happens to re-report.
+    onChangeRef.current({
+      splits, isPartial, canSettle, dueAmount, guestName: trimmedName, guestPhone: digitsPhone,
+      compAmount, complimentaryReason: trimmedReason,
+    });
+    // khataName/khataPhone/complimentaryReason are in here (unlike a plain amount change)
+    // because canSettle itself flips on them — without that the Settle button stays disabled
+    // until some unrelated edit happens to re-report.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMethods, multiAmounts, owed, khataName, khataPhone]);
+  }, [selectedMethods, multiAmounts, owed, khataName, khataPhone, complimentaryReason]);
 
   return (
     <>
       <Text style={styles.sectionLabel}>Payment Method</Text>
       <View style={styles.methodCheckRow}>
-        {METHODS.map((m) => {
+        {visibleMethods.map((m) => {
           const checked = selectedMethods.includes(m);
           return (
             <TouchableOpacity
@@ -272,7 +309,7 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
         {selectedMethods.length === 0 ? (
           <Text style={styles.adjustmentHint}>Tick at least one payment method above.</Text>
         ) : (
-          METHODS.filter((m) => selectedMethods.includes(m)).map((m) => (
+          visibleMethods.filter((m) => selectedMethods.includes(m)).map((m) => (
             <View key={m}>
               <View style={styles.multiRow}>
                 <View style={styles.multiMethodBadge}>
@@ -300,6 +337,16 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
                     onPress={() => updateMethodAmount('Due', restForKhata.toFixed(2))}
                   >
                     <Text style={styles.restBtnText}>Rest</Text>
+                  </TouchableOpacity>
+                )}
+                {/* Complimentary never fills itself in either, for the same reason Due
+                    doesn't — nothing should quietly get written off. */}
+                {m === 'Complimentary' && restForComplimentary > 0 && (
+                  <TouchableOpacity
+                    style={[styles.restBtn, webNoOutline]}
+                    onPress={() => updateMethodAmount('Complimentary', restForComplimentary.toFixed(2))}
+                  >
+                    <Text style={styles.restBtnText}>Waive Rest</Text>
                   </TouchableOpacity>
                 )}
               </View>
@@ -347,6 +394,27 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
                   <CustomerLookupBadge phone={khataPhone} />
                 </View>
               )}
+              {/* Why this bill is being written off. Compulsory, shown right under the
+                  Complimentary amount for the same reason Due's khata fields sit under its —
+                  it reads as part of choosing the tender, not a hurdle that shows up later. */}
+              {m === 'Complimentary' && (
+                <View style={styles.khataBox}>
+                  <Text style={styles.khataHint}>
+                    {reasonReady
+                      ? 'This much is written off — it never counts as revenue in reports.'
+                      : 'A reason is required — e.g. "Owner\'s guest", "Staff meal", "Complaint".'}
+                  </Text>
+                  <TextInput
+                    style={[styles.khataInput, focusedField === 'complimentary-reason' && styles.inputFocused, webNoOutline]}
+                    placeholder="Reason"
+                    placeholderTextColor={COLORS.placeholder}
+                    value={complimentaryReason}
+                    onChangeText={setComplimentaryReason}
+                    onFocus={() => setFocusedField('complimentary-reason')}
+                    onBlur={() => setFocusedField(null)}
+                  />
+                </View>
+              )}
             </View>
           ))
         )}
@@ -356,10 +424,10 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
             <View style={styles.divider} />
             <View style={styles.billRow}>
               <Text style={[styles.billLabel, styles.positive]}>Paid Amount</Text>
-              {/* Money actually collected — a Due leg is deliberately NOT part of this, it's
-                  broken out on its own row below. That split is the whole point of the tender:
-                  what goes on the khata never counts as paid. */}
-              <Text style={[styles.billVal, styles.positive]}>{money(Math.max(0, Math.min(total, owed) - dueAmount))}</Text>
+              {/* Money actually collected — a Due leg and a Complimentary leg are deliberately
+                  NOT part of this, they're each broken out on their own row below. That split
+                  is the whole point of both tenders: neither one ever counts as paid. */}
+              <Text style={[styles.billVal, styles.positive]}>{money(Math.max(0, Math.min(total, owed) - dueAmount - compAmount))}</Text>
             </View>
             {dueAmount > 0 && (
               <View style={styles.billRow}>
@@ -368,6 +436,15 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
                   <Text style={[styles.billLabel, styles.warning]}>On Khata</Text>
                 </View>
                 <Text style={[styles.billVal, styles.warning]}>{money(dueAmount)}</Text>
+              </View>
+            )}
+            {compAmount > 0 && (
+              <View style={styles.billRow}>
+                <View style={styles.billLabelRow}>
+                  <Icon name="gift-outline" size={13} color={COLORS.accent} />
+                  <Text style={[styles.billLabel, styles.warning]}>Complimentary</Text>
+                </View>
+                <Text style={[styles.billVal, styles.warning]}>{money(compAmount)}</Text>
               </View>
             )}
             <View style={styles.billRow}>
