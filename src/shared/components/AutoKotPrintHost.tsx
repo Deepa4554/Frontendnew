@@ -4,24 +4,37 @@ import { useOrders } from '../../core/api/hooks/useOrders';
 import { ApiOrder, FireBatch } from '../../core/api/ordersApi';
 import { PrinterService } from '../../core/printing/PrinterService';
 import { isKotPrinted, markKotPrinted } from '../../core/printing/printedKots';
+import { hasAnyPrinterConfigured, isAutoPrintHost } from '../../core/printing/printerConfig';
 import { serverNow } from '../../core/network/serverClock';
 import { showToast } from '../../core/store/uiSlice';
 
 /**
- * Safety-net auto-print for kitchen tickets nothing else prints.
+ * Auto-prints kitchen tickets this device didn't fire itself.
  *
- * Every staff-initiated fire (POS, Table, Takeaway/Delivery, Token Dashboard screens) already
- * prints its own KOT right after firing, and PendingOrdersHost prints a guest's very first
- * round the moment staff taps Confirm. What none of those cover: a guest adding MORE items via
- * "Add more items" once the order is already past its first round — GuestSessionController.
- * PlaceOrder fires that round straight to the kitchen with no staff confirmation at all (see
- * needsConfirmation there, gated on CurrentFireBatch == 0), so nothing staff-side ever runs to
- * trigger a print for it. The kitchen still got the order, just no paper for it.
+ * Two things it covers, gated separately because their blast radius is different:
  *
- * Mounted once at the AppNavigator level (same as PendingOrdersHost), this polls active
- * kitchen-relevant orders and prints any fired batch that isn't already marked printed (see
- * printedKots.ts) — every explicit print path above marks its own batch there, so this only
- * ever ends up printing the ones nothing else claimed.
+ * 1. A guest's own later round ("Add more items" past the first round) — nothing staff-side
+ *    ever runs for that (see GuestSessionController.PlaceOrder's needsConfirmation, gated on
+ *    CurrentFireBatch == 0), so SOME device has to catch it. Safe to run on every device with a
+ *    printer, gated only on hasAnyPrinterConfigured(): it's rare enough that two printers both
+ *    firing on the same guest round is not a real-world problem.
+ *
+ * 2. Every OTHER fired batch (POS/Table/Takeaway/Token) — these already print on the device
+ *    that fired them, so this is purely about reaching a DIFFERENT device's printer (a waiter's
+ *    phone took the order, the till's printer is what's actually plugged in). Gated additionally
+ *    on isAutoPrintHost(): unlike case 1, every order in the cafe qualifies, so if more than one
+ *    device had this on it'd double-print constantly. Off by default; a cafe turns it on for
+ *    exactly the device(s) meant to be "the" printer (see PrinterSettingsScreen).
+ *
+ * Either way: polls active kitchen-relevant orders and prints any fired batch this device hasn't
+ * already marked printed (see printedKots.ts) — every explicit print path marks its own batch
+ * there, so a device that fired an order itself never reprints it here.
+ *
+ * Gated on hasAnyPrinterConfigured() before anything else: a device with nothing plugged in has
+ * no business claiming a batch or popping a "no printer set up" toast for every order fired
+ * anywhere in the cafe. Skipping (not just failing silently) also means a device configured
+ * mid-shift baselines against whatever's active at that moment instead of dumping the day's
+ * backlog — same reasoning as the baseline guard below.
  */
 
 /** Sanity ceiling on one poll tick's worth of auto-prints — see where it's applied below. */
@@ -58,21 +71,19 @@ export const AutoKotPrintHost = () => {
     // That is exactly how connecting a printer once dumped a whole roll of old tickets at
     // once: the baseline had been consumed by the empty loading render seconds earlier.
     if (!data) return;
+    if (!hasAnyPrinterConfigured()) return;
     if (!baselined.current) {
       orders.forEach((o) => o.fireBatches.forEach((b) => markKotPrinted(b.kotNumber)));
       baselined.current = true;
       return;
     }
 
+    const autoPrintHost = isAutoPrintHost();
     const unprinted: { order: ApiOrder; batch: FireBatch }[] = [];
     orders.forEach((order) => {
-      // The scope this host exists for is narrow: a guest firing a later round from their own
-      // phone, which nothing staff-side ever runs for. Enforce that on the ORDER itself rather
-      // than leaning on printedKots to be correctly populated — createdByName is null for
-      // exactly the guest self-orders (OrderBuildingService only fills it for an authenticated
-      // staff request), so a staff-rung POS/Table/Token ticket can never be printed from here
-      // even when the marks Set is empty, which is precisely when this last went wrong.
-      if (order.createdByName !== null) return;
+      // Case 1 (guest's own later round) always qualifies; case 2 (everything else) only on a
+      // device the cafe has opted in as an auto-print host — see the header comment.
+      if (order.createdByName !== null && !autoPrintHost) return;
       order.fireBatches.forEach((batch) => {
         if (isKotPrinted(batch.kotNumber)) return;
         // Claim it before the print resolves — printKot is async, and the next poll tick
@@ -89,10 +100,10 @@ export const AutoKotPrintHost = () => {
     });
     if (unprinted.length === 0) return;
 
-    // This host only ever legitimately covers guests firing a later round themselves (see the
-    // header comment) — a handful of those inside one 10s poll tick is a busy rush, a dozen is
-    // a bug feeding it stale history. Refuse to print the pile rather than empty the roll, and
-    // say so, since the kitchen still has every one of these tickets on the KDS board.
+    // A handful of unclaimed batches inside one 10s poll tick is a busy rush; a dozen is a bug
+    // feeding it stale history (e.g. a printer coming back online to a day's backlog). Refuse
+    // to print the pile rather than empty the roll, and say so, since the kitchen still has
+    // every one of these tickets on the KDS board.
     if (unprinted.length > MAX_BATCHES_PER_TICK) {
       dispatch(showToast({
         message: `Skipped auto-printing ${unprinted.length} kitchen tickets at once — check the KDS board.`,

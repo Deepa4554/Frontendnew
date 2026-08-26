@@ -2,15 +2,22 @@ import React from 'react';
 import { renderWithProviders, act, waitFor } from '../../test-utils';
 import { useOrders } from '../../core/api/hooks/useOrders';
 import { PrinterService } from '../../core/printing/PrinterService';
+import { hasAnyPrinterConfigured, isAutoPrintHost } from '../../core/printing/printerConfig';
 import { AutoKotPrintHost } from './AutoKotPrintHost';
 
 jest.mock('../../core/api/hooks/useOrders', () => ({ useOrders: jest.fn() }));
 jest.mock('../../core/printing/PrinterService', () => ({
   PrinterService: { printKot: jest.fn() },
 }));
+jest.mock('../../core/printing/printerConfig', () => ({
+  hasAnyPrinterConfigured: jest.fn(),
+  isAutoPrintHost: jest.fn(),
+}));
 
 const mockUseOrders = useOrders as jest.MockedFunction<typeof useOrders>;
 const mockPrintKot = PrinterService.printKot as jest.MockedFunction<typeof PrinterService.printKot>;
+const mockHasAnyPrinterConfigured = hasAnyPrinterConfigured as jest.MockedFunction<typeof hasAnyPrinterConfigured>;
+const mockIsAutoPrintHost = isAutoPrintHost as jest.MockedFunction<typeof isAutoPrintHost>;
 
 /**
  * printedKots is a module-level Set with no reset (deliberately — see printedKots.ts), and
@@ -59,6 +66,8 @@ const flush = async () => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockPrintKot.mockResolvedValue({ ok: true, message: 'Sent to printer.' });
+  mockHasAnyPrinterConfigured.mockReturnValue(true);
+  mockIsAutoPrintHost.mockReturnValue(true);
 });
 
 describe('AutoKotPrintHost', () => {
@@ -100,16 +109,55 @@ describe('AutoKotPrintHost', () => {
     expect(mockPrintKot).toHaveBeenCalledWith(expect.objectContaining({ kotNumber: laterRound }));
   });
 
-  it('never prints a staff-rung order, even with nothing marked as printed', async () => {
-    // Scope is enforced on the order itself (createdByName is null only for guest self-orders)
-    // rather than on printedKots being correctly populated — so a POS/Table/Token ticket staff
-    // already printed at the till cannot come out of here a second time.
+  it('prints a staff-rung order on a device opted in as an auto-print host', async () => {
+    // Printer setup is per-device — the waiter's phone that fired this and the till with the
+    // actual printer are frequently not the same device. A staff-rung order (createdByName
+    // set) now qualifies too, but only once this device has turned on "auto-print host" in
+    // Printer Settings (isAutoPrintHost) — see the next test for why that's opt-in.
+    const kot = nextKot();
     mockUseOrders.mockReturnValue(loaded());
     const { rerender } = await renderWithProviders(<AutoKotPrintHost />);
     await flush();
 
     mockUseOrders.mockReturnValue(
-      loaded(makeOrder({ createdByName: 'Deepali', kotNumbers: [nextKot(), nextKot()] })),
+      loaded(makeOrder({ createdByName: 'Deepali', kotNumbers: [kot] })),
+    );
+    await rerender(<AutoKotPrintHost />);
+
+    await waitFor(() => expect(mockPrintKot).toHaveBeenCalledTimes(1));
+    expect(mockPrintKot).toHaveBeenCalledWith(expect.objectContaining({ kotNumber: kot }));
+  });
+
+  it('leaves a staff-rung order alone on a device that is not an auto-print host', async () => {
+    // The fix for the multi-device problem: if every device with a printer auto-printed every
+    // staff order, a cafe with printers on two tills would double-print constantly. Opting a
+    // device out (the default) means it only ever prints what it fires itself, plus a guest's
+    // own later round — never someone else's staff-rung ticket.
+    mockIsAutoPrintHost.mockReturnValue(false);
+    mockUseOrders.mockReturnValue(loaded());
+    const { rerender } = await renderWithProviders(<AutoKotPrintHost />);
+    await flush();
+
+    mockUseOrders.mockReturnValue(
+      loaded(makeOrder({ createdByName: 'Deepali', kotNumbers: [nextKot()] })),
+    );
+    await rerender(<AutoKotPrintHost />);
+    await flush();
+
+    expect(mockPrintKot).not.toHaveBeenCalled();
+  });
+
+  it('stays silent on a device with no printer configured, instead of toasting for every order in the cafe', async () => {
+    // Broadening scope to every order (not just a guest's own later round) means this now runs
+    // on every device's screen, all day. Skip entirely rather than surface "No printer set up
+    // yet" for orders this device was never going to print.
+    mockHasAnyPrinterConfigured.mockReturnValue(false);
+    mockUseOrders.mockReturnValue(loaded());
+    const { rerender } = await renderWithProviders(<AutoKotPrintHost />);
+    await flush();
+
+    mockUseOrders.mockReturnValue(
+      loaded(makeOrder({ createdByName: 'Deepali', kotNumbers: [nextKot()] })),
     );
     await rerender(<AutoKotPrintHost />);
     await flush();

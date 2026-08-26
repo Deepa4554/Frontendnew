@@ -1,4 +1,4 @@
-import { getEffectivePrinterConfig, savePrinterConfig, saveStationPrinterConfig, clearStationPrinterConfig } from './printerConfig';
+import { getEffectivePrinterConfig, savePrinterConfig, saveStationPrinterConfig, clearStationPrinterConfig, isAutoPrintHost, setAutoPrintHost } from './printerConfig';
 
 // The real module is MMKV, which needs a native/browser storage this suite has neither of.
 // A plain Map is enough: everything under test is about which config WINS, not about storage.
@@ -66,5 +66,19 @@ describe('getEffectivePrinterConfig', () => {
 
   it('reports none only when the device itself has no printer', () => {
     expect(getEffectivePrinterConfig('Kitchen').type).toBe('none');
+  });
+});
+
+describe('isAutoPrintHost', () => {
+  it('defaults to off', () => {
+    expect(isAutoPrintHost()).toBe(false);
+  });
+
+  it('reflects what was last saved', () => {
+    setAutoPrintHost(true);
+    expect(isAutoPrintHost()).toBe(true);
+
+    setAutoPrintHost(false);
+    expect(isAutoPrintHost()).toBe(false);
   });
 });

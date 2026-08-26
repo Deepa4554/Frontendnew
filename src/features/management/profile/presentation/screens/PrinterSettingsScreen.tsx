@@ -1,11 +1,11 @@
 import React, { useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Platform } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, ActivityIndicator, Platform, Switch } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { showToast } from '../../../../../core/store/uiSlice';
-import { getPrinterConfig, savePrinterConfig, getStationPrinterConfig, saveStationPrinterConfig, clearStationPrinterConfig, PrinterType } from '../../../../../core/printing/printerConfig';
+import { getPrinterConfig, savePrinterConfig, getStationPrinterConfig, saveStationPrinterConfig, clearStationPrinterConfig, isAutoPrintHost, setAutoPrintHost, PrinterType } from '../../../../../core/printing/printerConfig';
 import { BluetoothPrinter, BluetoothPrinterDevice } from '../../../../../core/printing/BluetoothPrinter';
 import { UsbAgentPrinter } from '../../../../../core/printing/UsbAgentPrinter';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
@@ -85,6 +85,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
   // on a till where Bluetooth is simply working.
   const [diagnostic, setDiagnostic] = useState<string | null>(null);
   const [checking, setChecking] = useState(false);
+  const [autoPrintHost, setAutoPrintHostState] = useState(isAutoPrintHost());
 
   const save = () => {
     if (type === 'wifi') {
@@ -191,6 +192,16 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
     } finally {
       setDetectingAgent(false);
     }
+  };
+
+  const toggleAutoPrintHost = (value: boolean) => {
+    setAutoPrintHost(value);
+    setAutoPrintHostState(value);
+    dispatch(showToast({
+      message: value ? 'This device will now auto-print every fired KOT, even ones taken on another phone.' : 'Auto-print host turned off for this device.',
+      icon: value ? 'printer-check' : 'printer-off-outline',
+      tone: 'info',
+    }));
   };
 
   const selectDevice = (d: BluetoothPrinterDevice) => {
@@ -397,6 +408,25 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
           </View>
         )}
 
+        {!stationKey && (
+          <View style={[styles.card, styles.toggleRow]}>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.fieldLabel}>Auto-print host</Text>
+              <Text style={styles.hint}>
+                Also print every kitchen ticket fired from ANY device, not just this one — turn this on for the
+                one till whose printer is the cafe's main one, so an order a waiter takes on their own phone still
+                comes out here. Leave off on every other device, or the same ticket prints more than once.
+              </Text>
+            </View>
+            <Switch
+              value={autoPrintHost}
+              onValueChange={toggleAutoPrintHost}
+              trackColor={{ false: '#DDD1C6', true: COLORS.accent }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+        )}
+
         <TouchableOpacity style={styles.testBtn} onPress={testPrint} disabled={testing || type === 'none'}>
           {testing ? <ActivityIndicator size="small" color={COLORS.heading} /> : <Icon name="printer-check" size={18} color={COLORS.heading} />}
           <Text style={styles.testBtnText}>{testing ? 'Printing…' : 'Test Print'}</Text>
@@ -430,6 +460,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   typeText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
   typeTextActive: { color: '#FFFFFF' },
   card: { backgroundColor: COLORS.cardAlt, borderRadius: 8, padding: isDesktopWeb ? 12 : 12, marginBottom: isDesktopWeb ? 12 : 12 },
+  toggleRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
   fieldInput: {
     backgroundColor: COLORS.background, borderRadius: 8, paddingHorizontal: isDesktopWeb ? 10.5 : 10.5, height: 46,
     fontSize: 16, color: COLORS.heading, borderWidth: 1, borderColor: COLORS.inputBorder, marginBottom: isDesktopWeb ? 9 : 9,
