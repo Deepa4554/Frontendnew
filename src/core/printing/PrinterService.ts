@@ -4,7 +4,10 @@ import { PrintableKot, PrintableKotItem, PrintableReceipt, PrintableTokenSlip, R
 import { printApi } from '../api/printApi';
 import { BluetoothPrinter } from './BluetoothPrinter';
 import { BrowserPrinter } from './BrowserPrinter';
+import { UsbAgentPrinter } from './UsbAgentPrinter';
 import { getLogoRaster } from './logoRaster';
+import { queryClient } from '../query';
+import { queryKeys } from '../api/hooks/queryKeys';
 
 export interface PrintResult {
   ok: boolean;
@@ -83,6 +86,19 @@ async function printLinesNow(lines: ReceiptLine[], config: PrinterConfig): Promi
   }
 
   if (config.type === 'browser') {
+    // A Windows printer name means PrintAgent (see PrabandhOS/PrintAgent) is meant to be set up
+    // on this till — try it first, since it prints crisp (raw ESC/POS, no HTML anti-aliasing)
+    // and with no dialog. If the agent isn't actually running right now (stopped, not yet
+    // installed, machine just rebooted), fall through to the HTML dialog below rather than
+    // failing the print outright: a cashier mid-rush needs SOME receipt to come out.
+    if (config.usbAgentPrinterName) {
+      try {
+        await UsbAgentPrinter.printLines(lines, columns, config.usbAgentPrinterName);
+        return { ok: true, message: 'Sent to printer.' };
+      } catch {
+        // Fall through.
+      }
+    }
     try {
       await BrowserPrinter.printLines(lines, columns);
       // Deliberately not "Sent to printer" like the other two: this only got as far as opening
@@ -107,6 +123,28 @@ async function printLinesNow(lines: ReceiptLine[], config: PrinterConfig): Promi
   }
 }
 
+/**
+ * Fills in the cafe's logo when the caller didn't.
+ *
+ * The 'browser' transport is the only one that prints from `logoUrl` — the ESC/POS pair use a
+ * server-dithered raster instead (see logoRaster.ts), which printReceipt fetches for them
+ * whatever the caller passed. That asymmetry meant a bill's logo depended on the SCREEN it was
+ * printed from: POS and Billing set logoUrl, while Tables, Takeaway, Token Dashboard and Tiffin
+ * never did — so switching a till to USB printing silently dropped the logo from four of the six
+ * places a bill can be printed.
+ *
+ * Read from React Query's cache rather than threaded through eight call sites, because that is
+ * the shape of the bug: one more argument to remember at one more call site is exactly what went
+ * wrong. Settings are already loaded on every screen that can print (useSettings feeds the
+ * business name on the same receipt), so this is a cache read, not a fetch. An explicit logoUrl
+ * from the caller always wins; a cache miss leaves it unset, exactly as before.
+ */
+function withCafeLogo(receipt: PrintableReceipt): PrintableReceipt {
+  if (receipt.logoUrl !== undefined) return receipt;
+  const settings = queryClient.getQueryData<{ logoUrl?: string | null }>(queryKeys.settings);
+  return { ...receipt, logoUrl: settings?.logoUrl ?? null };
+}
+
 export const PrinterService = {
   /** Customer-facing bill — items with prices, subtotal/tax/total. Generate this once
    * the order's ready to be paid (see Token Dashboard's "Generate Bill"). `configOverride`
@@ -121,7 +159,7 @@ export const PrinterService = {
     // all) would just be a wasted request on the way to a bill that was never going to carry
     // the raster bytes anyway.
     const logoRaster = config.type === 'wifi' || config.type === 'bluetooth' ? await getLogoRaster(columns) : null;
-    return printLines(buildReceiptLines(receipt, columns, logoRaster), config);
+    return printLines(buildReceiptLines(withCafeLogo(receipt), columns, logoRaster), config);
   },
   /** Kitchen ticket — items only, no prices. See Token Dashboard's "Print KOT". When the
    * order's items span more than one kitchen station (see PrintableKotItem.stationName),

@@ -13,6 +13,12 @@ export interface PrinterConfig {
   bluetoothName?: string;
   /** 32 for 58mm printers (most common in small cafes), 48 for 80mm. */
   columns?: number;
+  /** Windows printer name (as it appears in Devices and Printers, e.g. "POS-58") to send raw
+   * ESC/POS bytes to via PrintAgent (see UsbAgentPrinter.web.ts) instead of opening the HTML
+   * print dialog. Only meaningful when type is 'browser'; unset means "no local agent set up,
+   * use the dialog" — PrinterService tries the agent first when this is set and falls back to
+   * the dialog if the agent isn't reachable, so a till with the agent stopped still prints. */
+  usbAgentPrinterName?: string;
 }
 
 const STORAGE_KEY = 'printer_config';
@@ -80,6 +86,26 @@ export const findSavedPrinterName = (address: string): string | undefined => {
   const all: PrinterConfig[] = [getPrinterConfig(), ...Object.values(readStationConfigs())];
   return all.find((c) => c.bluetoothAddress === address)?.bluetoothName;
 };
+
+/** Whether this device has anything to print to at all — its own default printer, or at
+ * least one station's. Used to decide whether this device should even look at auto-print
+ * work (see AutoKotPrintHost): a till with nothing configured has no business claiming a
+ * batch or surfacing a "no printer set up" toast for an order it was never going to print. */
+export const hasAnyPrinterConfigured = (): boolean => {
+  if (getPrinterConfig().type !== 'none') return true;
+  return Object.values(readStationConfigs()).some((c) => c.type !== 'none');
+};
+
+const AUTO_PRINT_HOST_KEY = 'auto_print_host';
+
+/** Whether THIS device should auto-print every fired kitchen ticket it sees, not just its own
+ * (see AutoKotPrintHost). Off by default: a cafe with printers set up on more than one device
+ * would otherwise get every order printed on all of them at once. Turn it on for exactly the
+ * device(s) meant to catch orders fired from elsewhere — a phone that never leaves the counter
+ * next to the printer, for instance. */
+export const isAutoPrintHost = (): boolean => getItem(AUTO_PRINT_HOST_KEY) === 'true';
+
+export const setAutoPrintHost = (enabled: boolean) => setItem(AUTO_PRINT_HOST_KEY, String(enabled));
 
 /** Resolves which printer a KOT line for `stationName` should route to: that station's
  * own printer if this device has one configured, otherwise this device's default

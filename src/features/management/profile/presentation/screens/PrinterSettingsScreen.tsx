@@ -7,6 +7,7 @@ import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { getPrinterConfig, savePrinterConfig, getStationPrinterConfig, saveStationPrinterConfig, clearStationPrinterConfig, PrinterType } from '../../../../../core/printing/printerConfig';
 import { BluetoothPrinter, BluetoothPrinterDevice } from '../../../../../core/printing/BluetoothPrinter';
+import { UsbAgentPrinter } from '../../../../../core/printing/UsbAgentPrinter';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
@@ -73,6 +74,9 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
   const [columns, setColumns] = useState(initial.columns ?? 32);
   const [bluetoothAddress, setBluetoothAddress] = useState(initial.bluetoothAddress);
   const [bluetoothName, setBluetoothName] = useState(initial.bluetoothName);
+  const [usbAgentPrinterName, setUsbAgentPrinterName] = useState(initial.usbAgentPrinterName ?? '');
+  const [agentPrinters, setAgentPrinters] = useState<string[] | null>(null);
+  const [detectingAgent, setDetectingAgent] = useState(false);
   const [scanning, setScanning] = useState(false);
   const [devices, setDevices] = useState<BluetoothPrinterDevice[]>([]);
   const [testing, setTesting] = useState(false);
@@ -101,9 +105,11 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
       }
       persistConfig({ type, bluetoothAddress, bluetoothName, columns });
     } else if (type === 'browser') {
-      // Nothing to point at — the printer is whichever one the person picks in the dialog, and
-      // the browser is what remembers that choice. Only the paper width is ours to store.
-      persistConfig({ type, columns });
+      // Without a local agent, there's nothing to point at — the printer is whichever one the
+      // person picks in the dialog, and the browser is what remembers that choice. With one
+      // (usbAgentPrinterName set), that name is exactly what PrintAgent needs to route the raw
+      // bytes to the right Windows print queue.
+      persistConfig({ type, columns, usbAgentPrinterName: usbAgentPrinterName.trim() || undefined });
     } else {
       // persistConfig turns this into "clear the row" for a station — see its doc comment.
       persistConfig({ type: 'none' });
@@ -164,6 +170,29 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
     }
   };
 
+  /** Asks PrintAgent (if it's running on this machine) which Windows printers it can see, so
+   * the cashier can tap one instead of typing it exactly as Devices and Printers spells it. */
+  const detectAgentPrinters = async () => {
+    setDetectingAgent(true);
+    setAgentPrinters(null);
+    try {
+      const found = await UsbAgentPrinter.listPrinters();
+      setAgentPrinters(found);
+      if (found.length === 0) {
+        dispatch(showToast({ message: 'PrintAgent is running but Windows has no printers installed.', icon: 'information-outline', tone: 'info' }));
+      }
+    } catch (err) {
+      setAgentPrinters([]);
+      dispatch(showToast({
+        message: 'Could not reach PrintAgent on this machine. Install and run it first, or leave this blank to keep using the print dialog.',
+        icon: 'alert-circle-outline',
+        tone: 'warning',
+      }));
+    } finally {
+      setDetectingAgent(false);
+    }
+  };
+
   const selectDevice = (d: BluetoothPrinterDevice) => {
     setBluetoothAddress(d.address);
     setBluetoothName(d.name);
@@ -178,7 +207,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
         : type === 'bluetooth'
         ? { type, bluetoothAddress, bluetoothName, columns }
         : type === 'browser'
-        ? { type, columns }
+        ? { type, columns, usbAgentPrinterName: usbAgentPrinterName.trim() || undefined }
         : { type: 'none' as const };
     persistConfig(draftConfig);
 
@@ -329,6 +358,42 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
                 ? 'Prints through the browser’s print dialog, so it can use a printer plugged into this computer over USB — the one kind Bluetooth and WiFi printing can’t reach. Plug the printer in and let Windows install it (it usually does that by itself), then pick it once in the dialog; the browser offers it by default after that.\n\nA dialog opens on every print and someone has to confirm it — that’s a browser rule, not a setting. In Chrome’s dialog, set Margins to None and switch Headers and footers off the first time, or the slip prints with page numbers and wide white edges.'
                 : 'This only works in the web app — the mobile app has no print dialog to hand the receipt to. Use Bluetooth or WiFi on this device instead.'}
             </Text>
+
+            {isWeb && (
+              <>
+                <Text style={[styles.fieldLabel, { marginTop: 12 }]}>Local print agent (optional — no dialog, no blur)</Text>
+                <TouchableOpacity style={styles.scanBtn} onPress={detectAgentPrinters} disabled={detectingAgent}>
+                  {detectingAgent ? <ActivityIndicator size="small" color={COLORS.accent} /> : <Icon name="magnify" size={16} color={COLORS.accent} />}
+                  <Text style={styles.scanBtnText}>{detectingAgent ? 'Checking…' : 'Detect installed printers'}</Text>
+                </TouchableOpacity>
+
+                {agentPrinters !== null && agentPrinters.length > 0 && agentPrinters.map((name) => (
+                  <TouchableOpacity
+                    key={name}
+                    style={[styles.deviceRow, usbAgentPrinterName === name && styles.deviceRowActive]}
+                    onPress={() => setUsbAgentPrinterName(name)}
+                  >
+                    <Icon name="printer-outline" size={18} color={usbAgentPrinterName === name ? '#FFFFFF' : COLORS.heading} />
+                    <Text style={[styles.deviceName, usbAgentPrinterName === name && styles.deviceTextActive]}>{name}</Text>
+                    {usbAgentPrinterName === name && <Icon name="check-circle" size={18} color="#FFFFFF" />}
+                  </TouchableOpacity>
+                ))}
+
+                <View style={{ borderRadius: 8, marginTop: 6 }}>
+                  <TextInput
+                    style={styles.fieldInput}
+                    placeholder="Windows printer name, e.g. POS-58"
+                    placeholderTextColor={COLORS.placeholder}
+                    value={usbAgentPrinterName}
+                    onChangeText={setUsbAgentPrinterName}
+                    autoCapitalize="none"
+                  />
+                </View>
+                <Text style={styles.hint}>
+                  Set this and printing skips the dialog entirely and comes out as crisp as the printer's own self-test page — PrintAgent sends the exact same raw bytes the WiFi/Bluetooth transports use, instead of Chrome rendering an HTML page (which is what causes faded, patchy-looking text on a thermal head). Needs the PrintAgent program installed and running on this till first. Leave this blank and printing works exactly as before, through the dialog.
+                </Text>
+              </>
+            )}
           </View>
         )}
 
