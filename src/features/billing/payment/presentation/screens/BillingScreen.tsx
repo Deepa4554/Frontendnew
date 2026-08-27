@@ -9,7 +9,8 @@ import { useOrders } from '../../../../../core/api/hooks/useOrders';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { ApiOrder, OrderStatus } from '../../../../../core/api/ordersApi';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
-import { splitGst } from '../../../../../core/printing/receiptFormat';
+import { billAdjustmentsOf, inferTaxRatePct, splitGst } from '../../../../../core/printing/receiptFormat';
+import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { ordersApi } from '../../../../../core/api/ordersApi';
@@ -74,7 +75,7 @@ export const BillingScreen = () => {
       businessName,
       addressLine: businessAddress ?? undefined,
       orderNumber: openOrder.number,
-      time: new Date(openOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: formatIstReceiptTime(new Date(openOrder.createdAt)),
       title: openOrder.title,
       orderTypeLabel: STATUS_STYLES[openOrder.status].label,
       guestPhone: openOrder.guestPhone ?? undefined,
@@ -86,16 +87,12 @@ export const BillingScreen = () => {
       subtotal: openOrder.subtotal,
       discountPct: openOrder.discountPct || undefined,
       discountAmount: openOrder.discountAmount || undefined,
-      offerDiscountAmount: openOrder.offerDiscountAmount || undefined,
-      appliedOfferTitle: openOrder.appliedOfferTitle,
-      // Order doesn't store the tax rate directly — back-derive it from the taxable
-      // base (subtotal minus discount) for an accurate "Tax (n%)" label on the print.
-      taxRatePct: (() => {
-        const taxable = openOrder.subtotal - openOrder.discountAmount;
-        return taxable > 0 ? Math.round((openOrder.tax / taxable) * 1000) / 10 : 0;
-      })(),
+      ...billAdjustmentsOf(openOrder),
+      taxRatePct: inferTaxRatePct(openOrder),
       tax: openOrder.tax,
       total: openOrder.total,
+      refunded: openOrder.refunded,
+      refundedAmount: openOrder.refundedAmount,
       footer: receiptFooter,
       showAddress: settings?.receiptShowAddress,
       showWaiterName: settings?.receiptShowWaiterName,

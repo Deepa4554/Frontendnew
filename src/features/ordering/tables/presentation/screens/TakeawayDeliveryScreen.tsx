@@ -23,6 +23,8 @@ import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { markKotPrinted } from '../../../../../core/printing/printedKots';
+import { billAdjustmentsOf, inferTaxRatePct } from '../../../../../core/printing/receiptFormat';
+import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
 import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
 import { useItemQtyEditor, QtyReasonPrompt } from '../../../../../shared/components/billing/useItemQtyEditor';
@@ -189,19 +191,24 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
       businessName: settings?.businessName ?? 'PrabandhOS',
       addressLine: settings?.address?.trim() || undefined,
       orderNumber: order.number,
-      time: new Date(order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: formatIstReceiptTime(new Date(order.createdAt)),
       title: order.title,
       orderTypeLabel: KIND_LABEL[order.orderType === 'DELIVERY' ? 'DELIVERY' : 'TAKEAWAY'],
       guestPhone: order.guestPhone ?? undefined,
       waiterName: order.servedByName ?? order.createdByName,
       gstNumber: settings?.gstNumber,
+      licenceNumber: settings?.licenceNumber,
+      logoUrl: settings?.logoUrl,
       items: order.items,
       subtotal: order.subtotal,
       discountPct: order.discountPct || undefined,
       discountAmount: order.discountAmount || undefined,
-      taxRatePct: settings?.taxRatePct ?? 8,
+      ...billAdjustmentsOf(order),
+      taxRatePct: inferTaxRatePct(order),
       tax: order.tax,
       total: order.total,
+      refunded: order.refunded,
+      refundedAmount: order.refundedAmount,
       footer: settings?.receiptFooter ?? 'Thank you for your visit!',
       showAddress: settings?.receiptShowAddress,
       showWaiterName: settings?.receiptShowWaiterName,

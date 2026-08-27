@@ -103,7 +103,103 @@ export const buildTaxBreakdown = (
     });
 };
 
-export interface PrintableReceipt {
+/**
+ * Every billing-time reduction and charge a bill has to state, in one place.
+ *
+ * Split out of PrintableReceipt so it can be lifted off an order wholesale (see
+ * billAdjustmentsOf) instead of each screen listing the fields by hand. It was the
+ * hand-listing that broke: RecomputeTotals folds all of these into Order.Total, but only the
+ * Billing screen ever passed even the offer fields, so the same order printed from Tables or
+ * Token came out with a TOTAL its own itemised lines could not add up to — and a service
+ * charge the customer was paying never appeared on the invoice at all.
+ *
+ * All optional, and every one prints only when it actually fired, so a bill with nothing
+ * applied is byte-for-byte the slip it was before any of this existed.
+ */
+export interface PrintableBillAdjustments {
+  /** Total taken off by auto-applied offers (BOGO, happy hour, category/item). */
+  offerDiscountAmount?: number;
+  /** Names of the offers that fired — the offer line's label. */
+  appliedOfferTitle?: string | null;
+  /** Manager markdown applied at billing time. */
+  billDiscountAmount?: number;
+  couponDiscountAmount?: number;
+  /** Coupon code, when one was used — printed beside the coupon amount. */
+  couponCode?: string | null;
+  giftCardAmountApplied?: number;
+  /** Gift card code, when one was used — printed beside the gift card amount. */
+  giftCardCode?: string | null;
+  loyaltyDiscountAmount?: number;
+  /** Points redeemed (1 point = Rs.1) — printed beside the loyalty amount. */
+  loyaltyPointsRedeemed?: number;
+  /** Billing-time charges. Added on top of tax rather than taxed themselves (see
+   * RecomputeTotals), which is why they print below the GST rows and not above them. */
+  serviceChargeAmount?: number;
+  packingChargeAmount?: number;
+  deliveryChargeAmount?: number;
+  tipAmount?: number;
+  /** Final rounding nudge — either sign, negative rounds the total down. Zero prints nothing. */
+  roundOffAmount?: number;
+}
+
+/**
+ * Lifts the block above off an order. Every field name matches ordersApi's Order exactly, so
+ * a caller spreads `...billAdjustmentsOf(order)` into its PrintableReceipt and cannot leave
+ * one out — which is the whole point, since leaving one out is what made the printed slip
+ * disagree with the Bill Summary on screen.
+ *
+ * Typed structurally rather than against Order so core/printing stays independent of
+ * core/api, the way the rest of this module already is.
+ */
+export const billAdjustmentsOf = (order: PrintableBillAdjustments): PrintableBillAdjustments => ({
+  offerDiscountAmount: order.offerDiscountAmount,
+  appliedOfferTitle: order.appliedOfferTitle,
+  billDiscountAmount: order.billDiscountAmount,
+  couponDiscountAmount: order.couponDiscountAmount,
+  couponCode: order.couponCode,
+  giftCardAmountApplied: order.giftCardAmountApplied,
+  giftCardCode: order.giftCardCode,
+  loyaltyDiscountAmount: order.loyaltyDiscountAmount,
+  loyaltyPointsRedeemed: order.loyaltyPointsRedeemed,
+  serviceChargeAmount: order.serviceChargeAmount,
+  packingChargeAmount: order.packingChargeAmount,
+  deliveryChargeAmount: order.deliveryChargeAmount,
+  tipAmount: order.tipAmount,
+  roundOffAmount: order.roundOffAmount,
+});
+
+/**
+ * The blended GST rate an order was actually billed at — for the receipt's "CGST (n%)"
+ * LABEL only. The amounts it labels never come from this: they're either `receipt.tax`
+ * split in half (see splitGst) or, whenever items carry their own taxRatePct/taxableAmount/
+ * taxAmount, read straight off them (see buildTaxBreakdown), so a wrong rate here cannot make
+ * a bill charge the wrong tax — only mislabel a correctly-charged one.
+ *
+ * Needed because Order carries no single stored rate: a bill can mix 5%/12% lines, and even
+ * a flat-rate one has its tax computed after every reduction below is carved out of the
+ * taxable base first (see RecomputeTotals's `afterOfferGross`/`pool`) — so `subtotal` alone,
+ * or `subtotal - discountAmount` alone, is not the base tax was actually charged on.
+ *
+ * Falls back to 0 — not a guessed rate like a hardcoded "8" — when the taxable base is
+ * non-positive (an unregistered/composition-scheme bill, or one discounted to nothing).
+ */
+export const inferTaxRatePct = (order: {
+  subtotal: number;
+  tax: number;
+  discountAmount?: number;
+} & PrintableBillAdjustments): number => {
+  const reductions =
+    (order.discountAmount ?? 0) +
+    (order.offerDiscountAmount ?? 0) +
+    (order.billDiscountAmount ?? 0) +
+    (order.couponDiscountAmount ?? 0) +
+    (order.giftCardAmountApplied ?? 0) +
+    (order.loyaltyDiscountAmount ?? 0);
+  const taxable = order.subtotal - reductions;
+  return taxable > 0 ? Math.round((order.tax / taxable) * 1000) / 10 : 0;
+};
+
+export interface PrintableReceipt extends PrintableBillAdjustments {
   businessName: string;
   addressLine?: string;
   orderNumber: string;
@@ -125,13 +221,17 @@ export interface PrintableReceipt {
   subtotal: number;
   discountPct?: number;
   discountAmount?: number;
-  /** Total taken off by auto-applied offers (BOGO, happy hour, category/item). */
-  offerDiscountAmount?: number;
-  /** Names of the offers that fired — the offer line's label. */
-  appliedOfferTitle?: string | null;
   taxRatePct: number;
   tax: number;
   total: number;
+  /** Whether this bill has since been refunded — printed as a banner under TOTAL so a
+   * reprint of a refunded bill can never be mistaken for a live one. Mirrors the WhatsApp
+   * PDF's own banner (see ReceiptPdfBuilder), which this brings the thermal slip in line
+   * with. */
+  refunded?: boolean;
+  /** Amount refunded, when known — appended to the banner. Omit (or a full refund with no
+   * amount tracked) prints the banner with no figure. */
+  refundedAmount?: number | null;
   footer: string;
   /** Receipt Builder toggles (see Cafe Settings → Receipt Builder) — every one defaults
    * to true so an existing caller that doesn't pass them keeps today's behavior. */
@@ -302,18 +402,32 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
   }
   push({ kind: 'dashes' });
 
+  // Every row below is gated on having actually fired, so a bill with no coupon prints no
+  // coupon row and a bill with nothing applied prints exactly what it always did. The order
+  // matches the Bill Summary the cashier reads off the screen (OrderBillActions, and
+  // BillingScreen's slip) — paper and screen state the same bill, so they state it the same way.
+  const pushReduction = (label: string, amount?: number) => {
+    if (!amount || amount <= 0) return;
+    pushAmountRow(push, label, `-${money(amount)}`, columns);
+  };
+  const pushCharge = (label: string, amount?: number) => {
+    if (!amount || amount <= 0) return;
+    pushAmountRow(push, label, money(amount), columns);
+  };
+
   pushAmountRow(push, 'Subtotal', money(receipt.subtotal), columns);
-  if (receipt.discountAmount && receipt.discountAmount > 0) {
-    // Gated on the amount, not the percentage, so a flat "₹50 off" (which carries no pct) still
-    // prints. Label keeps the rate when there is one.
-    const label = receipt.discountPct ? `Discount (${receipt.discountPct}%)` : 'Discount';
-    pushAmountRow(push, label, `-${money(receipt.discountAmount)}`, columns);
-  }
-  if (receipt.offerDiscountAmount && receipt.offerDiscountAmount > 0) {
-    // Name the offer so the drop is explained on the slip, not a bare "Offer".
-    const label = receipt.appliedOfferTitle?.trim() || 'Offer';
-    pushAmountRow(push, label, `-${money(receipt.offerDiscountAmount)}`, columns);
-  }
+  // Gated on the amount, not the percentage, so a flat "₹50 off" (which carries no pct) still
+  // prints. Label keeps the rate when there is one.
+  pushReduction(receipt.discountPct ? `Discount (${receipt.discountPct}%)` : 'Discount', receipt.discountAmount);
+  pushReduction('Bill Discount', receipt.billDiscountAmount);
+  pushReduction(receipt.couponCode ? `Coupon (${receipt.couponCode})` : 'Coupon', receipt.couponDiscountAmount);
+  // Name the offer so the drop is explained on the slip, not a bare "Offer".
+  pushReduction(receipt.appliedOfferTitle?.trim() || 'Offer', receipt.offerDiscountAmount);
+  pushReduction(receipt.giftCardCode ? `Gift Card (${receipt.giftCardCode})` : 'Gift Card', receipt.giftCardAmountApplied);
+  pushReduction(
+    receipt.loyaltyPointsRedeemed ? `Loyalty Points (${receipt.loyaltyPointsRedeemed})` : 'Loyalty Points',
+    receipt.loyaltyDiscountAmount,
+  );
   // One pair of rows per slab when the bill mixes rates, each slab shown as its CGST and
   // SGST halves — a tax invoice has to state the two components separately (see splitGst).
   const taxBreakdown = buildTaxBreakdown(billedItems, receipt.taxRatePct);
@@ -334,8 +448,30 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
     pushAmountRow(push, `CGST (${ratePct / 2}%)`, money(cgst), columns);
     pushAmountRow(push, `SGST (${ratePct / 2}%)`, money(sgst), columns);
   }
+  // Charges sit below the GST rows because that is where RecomputeTotals adds them — on top
+  // of the tax, not inside the taxable base. Printing them above the tax rows would state on
+  // the invoice that they had been taxed.
+  pushCharge('Service Charge', receipt.serviceChargeAmount);
+  pushCharge('Packing Charge', receipt.packingChargeAmount);
+  pushCharge('Delivery Charge', receipt.deliveryChargeAmount);
+  pushCharge('Tip', receipt.tipAmount);
+  if (receipt.roundOffAmount) {
+    // The sign is the whole point of this row — a bare "Rs.0.40" printed against a total that
+    // went down reads as a charge. Exactly zero prints nothing at all.
+    const sign = receipt.roundOffAmount > 0 ? '+' : '-';
+    pushAmountRow(push, 'Round Off', `${sign}${money(Math.abs(receipt.roundOffAmount))}`, columns);
+  }
   pushAmountRow(push, 'TOTAL', money(receipt.total), columns, true);
   push({ kind: 'dashes' });
+
+  if (receipt.refunded) {
+    push({
+      kind: 'text',
+      text: `REFUNDED${receipt.refundedAmount != null ? ` - ${money(receipt.refundedAmount)}` : ''}`,
+      align: 'center',
+      bold: true,
+    });
+  }
 
   if (receipt.showFooter !== false) push({ kind: 'text', text: receipt.footer, align: 'center' });
   push({ kind: 'feed' });

@@ -10,6 +10,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { RootState } from '../../../../core/store/rootReducer';
 import { useThemeColors } from '../../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../../core/utils/useResponsive';
+import { formatIstReceiptTime } from '../../../../core/utils/istDate';
 import { showToast } from '../../../../core/store/uiSlice';
 import { getApiErrorMessage } from '../../../../core/network/api';
 import { useSettings } from '../../../../core/api/hooks/useSettings';
@@ -76,10 +77,12 @@ async function printTiffinBill(
     businessName: settings?.businessName ?? 'PrabandhOS',
     addressLine: settings?.address?.trim() || undefined,
     orderNumber: r.orderNumber,
-    time: new Date().toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }),
+    time: formatIstReceiptTime(new Date()),
     title: r.name,
     orderTypeLabel: 'Tiffin',
     gstNumber: settings?.gstNumber,
+    licenceNumber: settings?.licenceNumber,
+    logoUrl: settings?.logoUrl,
     items: [{ name: `${r.planName} - ${fmtRange(r.periodStart, r.periodEnd)} (${r.deliveredDays}d)`, qty: r.totalQty, price: r.rate }],
     subtotal: r.total,
     taxRatePct: 0,

@@ -37,3 +37,31 @@ export const istToday = (): string => istDateOf(new Date());
  */
 export const istDatePlusDays = (days: number): string =>
   istDateOf(new Date(Date.now() + days * 24 * 60 * 60 * 1000));
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/**
+ * "26 Aug, 02:07 PM" — cafe wall-clock, for a printed bill/receipt.
+ *
+ * Deliberately not `toLocaleTimeString`/`toLocaleDateString` on the raw instant: those read
+ * the DEVICE's timezone, not the cafe's. A tablet left on the wrong TZ (or a web build opened
+ * from anywhere else) printed a time that didn't match the kitchen's clock or the till — the
+ * WhatsApp PDF of the very same order already avoids this by shifting server-side (see
+ * backend IstClock.ToIst); this is the client-side counterpart so the printed slip agrees
+ * with it. Reads UTC-getters on an IST-shifted instant (see nowIst) rather than calling
+ * Intl with a named timeZone, matching every other date helper in this file — no year, since
+ * a receipt is read the day it's printed.
+ */
+export const formatIstReceiptTime = (instant: Date): string => {
+  const d = new Date(instant.getTime() + IST_OFFSET_MS);
+  const day = d.getUTCDate();
+  const month = MONTHS[d.getUTCMonth()];
+  let hour = d.getUTCHours();
+  const minute = d.getUTCMinutes().toString().padStart(2, '0');
+  const ampm = hour >= 12 ? 'PM' : 'AM';
+  hour = hour % 12 || 12;
+  // Zero-padded to match toLocaleTimeString's own 'hour: 2-digit' output — every screen this
+  // replaces used that option, and a bill printed the moment before this change and the
+  // moment after must read the same width ("01:00 AM", not "1:00 AM").
+  return `${day} ${month}, ${hour.toString().padStart(2, '0')}:${minute} ${ampm}`;
+};

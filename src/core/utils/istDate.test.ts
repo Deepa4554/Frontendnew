@@ -1,4 +1,4 @@
-import { istToday, istDateOf, istDatePlusDays, nowIst } from './istDate';
+import { istToday, istDateOf, istDatePlusDays, nowIst, formatIstReceiptTime } from './istDate';
 
 /** Freezes wall-clock time at a given IST moment, whatever timezone the test host runs in. */
 const atIst = (istWallClock: string, run: () => void) => {
@@ -68,6 +68,23 @@ describe('istDate', () => {
         // Shifted instant, so the UTC-rendered fields spell out IST wall clock.
         expect(nowIst().toISOString()).toBe('2026-08-05T01:00:00.000Z');
       });
+    });
+  });
+
+  describe('formatIstReceiptTime', () => {
+    it('renders the cafe wall-clock date and time, not the UTC one', () => {
+      // 19:30Z on Aug 4 is 01:00 IST on Aug 5 — a bill settled just after midnight has to
+      // print the 5th, not the 4th its stored UTC instant would suggest.
+      expect(formatIstReceiptTime(new Date('2026-08-04T19:30:00Z'))).toBe('5 Aug, 01:00 AM');
+    });
+
+    it('formats noon and midnight correctly (the 12-hour wraparound)', () => {
+      expect(formatIstReceiptTime(new Date('2026-08-05T06:30:00Z'))).toBe('5 Aug, 12:00 PM'); // noon IST
+      expect(formatIstReceiptTime(new Date('2026-08-04T18:30:00Z'))).toBe('5 Aug, 12:00 AM'); // midnight IST
+    });
+
+    it('pads single-digit minutes', () => {
+      expect(formatIstReceiptTime(new Date('2026-08-05T08:35:05Z'))).toBe('5 Aug, 02:05 PM');
     });
   });
 });

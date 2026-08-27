@@ -29,6 +29,8 @@ import { ordersApi } from '../../../../../core/api/ordersApi';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { markKotPrinted } from '../../../../../core/printing/printedKots';
+import { billAdjustmentsOf, inferTaxRatePct } from '../../../../../core/printing/receiptFormat';
+import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
 import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
@@ -418,19 +420,24 @@ export const TableManagementScreen = ({ navigation }: any) => {
       businessName: settings?.businessName ?? 'PrabandhOS',
       addressLine: settings?.address?.trim() || undefined,
       orderNumber: occupiedOrder.number,
-      time: new Date(occupiedOrder.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
+      time: formatIstReceiptTime(new Date(occupiedOrder.createdAt)),
       title: occupiedOrder.title,
       orderTypeLabel: 'Dine In',
       guestPhone: occupiedOrder.guestPhone ?? undefined,
       waiterName: occupiedOrder.servedByName ?? occupiedOrder.createdByName,
       gstNumber: settings?.gstNumber,
+      licenceNumber: settings?.licenceNumber,
+      logoUrl: settings?.logoUrl,
       items: occupiedOrder.items,
       subtotal: occupiedOrder.subtotal,
       discountPct: occupiedOrder.discountPct || undefined,
       discountAmount: occupiedOrder.discountAmount || undefined,
-      taxRatePct: settings?.taxRatePct ?? 8,
+      ...billAdjustmentsOf(occupiedOrder),
+      taxRatePct: inferTaxRatePct(occupiedOrder),
       tax: occupiedOrder.tax,
       total: occupiedOrder.total,
+      refunded: occupiedOrder.refunded,
+      refundedAmount: occupiedOrder.refundedAmount,
       footer: settings?.receiptFooter ?? 'Thank you for your visit!',
       showAddress: settings?.receiptShowAddress,
       showWaiterName: settings?.receiptShowWaiterName,

@@ -67,7 +67,8 @@ import {
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { markKotPrinted } from '../../../../../core/printing/printedKots';
 import { getPrinterConfig } from '../../../../../core/printing/printerConfig';
-import { buildTaxBreakdown } from '../../../../../core/printing/receiptFormat';
+import { PrintableBillAdjustments, billAdjustmentsOf, buildTaxBreakdown, inferTaxRatePct } from '../../../../../core/printing/receiptFormat';
+import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { canManageTables, canMarkComplimentary } from '../../../../../core/auth/permissions';
@@ -111,7 +112,7 @@ import {
 } from '../../data/orderDrafts';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
 
-interface ReceiptSnapshot {
+interface ReceiptSnapshot extends PrintableBillAdjustments {
   id: string;
   orderId: number;
   title: string;
@@ -129,6 +130,8 @@ interface ReceiptSnapshot {
    * Tables/Token Dashboard once served, not from this modal. */
   isCashSale?: boolean;
   paid?: boolean;
+  refunded?: boolean;
+  refundedAmount?: number | null;
 }
 
 interface CartLine {
@@ -1402,12 +1405,12 @@ export const POSCheckoutScreen = () => {
           subtotal: order.subtotal,
           discountPct: order.discountPct,
           discountAmount: order.discountAmount,
+          ...billAdjustmentsOf(order),
           tax: order.tax,
           total: order.total,
-          time: new Date(order.createdAt).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          time: formatIstReceiptTime(new Date(order.createdAt)),
+          refunded: order.refunded,
+          refundedAmount: order.refundedAmount,
           guestPhone: effectiveGuestPhone.trim() || undefined,
           isCashSale: true,
           paid: order.paid,
@@ -1999,12 +2002,12 @@ export const POSCheckoutScreen = () => {
           subtotal: order.subtotal,
           discountPct: order.discountPct,
           discountAmount: order.discountAmount,
+          ...billAdjustmentsOf(order),
           tax: order.tax,
           total: order.total,
-          time: new Date(order.createdAt).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          time: formatIstReceiptTime(new Date(order.createdAt)),
+          refunded: order.refunded,
+          refundedAmount: order.refundedAmount,
           guestPhone: effectivePhone || undefined,
           isCashSale: orderType === 'CASH',
           paid: order.paid,
@@ -2020,10 +2023,7 @@ export const POSCheckoutScreen = () => {
           businessName,
           addressLine: businessAddress ?? undefined,
           orderNumber: order.number,
-          time: new Date(order.createdAt).toLocaleTimeString([], {
-            hour: '2-digit',
-            minute: '2-digit',
-          }),
+          time: formatIstReceiptTime(new Date(order.createdAt)),
           title: order.title,
           orderTypeLabel:
             ORDER_TYPES.find(t => t.key === orderType)?.label ?? '',
@@ -2036,9 +2036,12 @@ export const POSCheckoutScreen = () => {
           subtotal: order.subtotal,
           discountPct: order.discountPct || undefined,
           discountAmount: order.discountAmount || undefined,
-          taxRatePct,
+          ...billAdjustmentsOf(order),
+          taxRatePct: inferTaxRatePct(order),
           tax: order.tax,
           total: order.total,
+          refunded: order.refunded,
+          refundedAmount: order.refundedAmount,
           footer: receiptFooter,
           showAddress: settings?.receiptShowAddress,
           showWaiterName: settings?.receiptShowWaiterName,
@@ -2074,10 +2077,7 @@ export const POSCheckoutScreen = () => {
       businessName,
       addressLine: businessAddress ?? undefined,
       orderNumber: 'PROVISIONAL',
-      time: new Date().toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
+      time: formatIstReceiptTime(new Date()),
       title:
         orderType === 'DINE_IN' && selectedTable
           ? `Table ${selectedTable}`
@@ -2476,9 +2476,15 @@ export const POSCheckoutScreen = () => {
       subtotal: receipt.subtotal,
       discountPct: receipt.discountPct || undefined,
       discountAmount: receipt.discountAmount || undefined,
-      taxRatePct,
+      // receiptOrder is the live row and so has any charge/discount added at settle time,
+      // after this snapshot was taken; the snapshot is the fallback while that query
+      // refetches (see sendBillViaWhatsAppFor's note on the same lag).
+      ...billAdjustmentsOf(receiptOrder ?? receipt),
+      taxRatePct: inferTaxRatePct(receiptOrder ?? receipt),
       tax: receipt.tax,
       total: receipt.total,
+      refunded: (receiptOrder ?? receipt).refunded,
+      refundedAmount: (receiptOrder ?? receipt).refundedAmount,
       footer: receiptFooter,
       showAddress: settings?.receiptShowAddress,
       showWaiterName: settings?.receiptShowWaiterName,
