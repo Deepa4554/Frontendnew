@@ -1,7 +1,8 @@
 {
   "name": "frontendnew",
   "compatibility_date": "2026-08-01",
+  "main": "worker.js",
   "assets": {
-    "directory": "./dist-web"
+    "directory": "./dist-web",
+    "binding": "ASSETS"
   }
-}
