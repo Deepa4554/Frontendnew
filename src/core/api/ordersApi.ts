@@ -189,6 +189,9 @@ export interface ApiOrder {
    *  RiderBookingCard, which only covers the Borzo-booking half of a delivery. */
   deliveryAddress: string | null;
   hasDeliveryLocation: boolean;
+  /** The customer's shared pin — null unless hasDeliveryLocation is true. */
+  deliveryLatitude: number | null;
+  deliveryLongitude: number | null;
   items: OrderItem[];
   subtotal: number;
   discountPct: number;

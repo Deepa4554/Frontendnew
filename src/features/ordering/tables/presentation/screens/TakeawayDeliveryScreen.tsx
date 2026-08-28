@@ -279,6 +279,18 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
     Linking.openURL(url);
   };
 
+  // Prefers the customer's actual shared pin over the typed address — a pin routes straight
+  // there, while the address text is only as good as what the customer typed (flat number,
+  // landmark spelling, autocorrect). Falls back to the address as a Maps search when no pin
+  // was shared, which still beats making the rider type it in themselves.
+  const handleNavigate = (o: ApiOrder) => {
+    const destination = o.hasDeliveryLocation && o.deliveryLatitude != null && o.deliveryLongitude != null
+      ? `${o.deliveryLatitude},${o.deliveryLongitude}`
+      : o.deliveryAddress;
+    if (!destination) return;
+    Linking.openURL(`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(destination)}`);
+  };
+
   return (
     <View style={styles.container}>
       {!isDesktopWeb && (
@@ -402,7 +414,13 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
                 a cafe doing its own deliveries has nowhere else to see where it's going, since
                 RiderBookingCard (the Borzo half of this) hides itself entirely when Borzo is off. */}
             {order?.orderType === 'DELIVERY' && !!order?.deliveryAddress && (
-              <Text style={styles.modalLine}>📍 {order.deliveryAddress}</Text>
+              <View style={styles.deliveryAddressRow}>
+                <Text style={[styles.modalLine, styles.deliveryAddressText]}>📍 {order.deliveryAddress}</Text>
+                <TouchableOpacity style={styles.headerPill} onPress={() => handleNavigate(order)}>
+                  <Icon name="navigation-variant-outline" size={13} color={COLORS.accent} />
+                  <Text style={styles.headerPillTextAccent}>Navigate</Text>
+                </TouchableOpacity>
+              </View>
             )}
 
             {!order ? (
@@ -603,6 +621,8 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isTablet: boolean
   headerPillText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
   headerPillTextAccent: { fontSize: 12, fontWeight: '700', color: COLORS.accent },
   modalLine: { fontSize: 13, color: COLORS.muted, marginBottom: 8 },
+  deliveryAddressRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 8 },
+  deliveryAddressText: { flex: 1 },
   reasonInputWrap: { borderRadius: 8 },
   reasonInput: { borderWidth: 1, borderColor: COLORS.divider, borderRadius: 8, paddingHorizontal: 14, paddingVertical: 12, fontSize: 14, color: COLORS.heading, marginBottom: 16 },
   itemsScroll: { flex: 1, minHeight: 0, marginBottom: 8 },
