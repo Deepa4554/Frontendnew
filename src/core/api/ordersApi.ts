@@ -185,6 +185,10 @@ export interface ApiOrder {
   guestName: string | null;
   guestPhone: string | null;
   customerId: number | null;
+  /** DELIVERY orders only. Present regardless of whether a courier is configured — see
+   *  RiderBookingCard, which only covers the Borzo-booking half of a delivery. */
+  deliveryAddress: string | null;
+  hasDeliveryLocation: boolean;
   items: OrderItem[];
   subtotal: number;
   discountPct: number;

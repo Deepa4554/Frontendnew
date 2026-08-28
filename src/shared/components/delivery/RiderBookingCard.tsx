@@ -60,10 +60,6 @@ export const RiderBookingCard = ({ orderId }: { orderId: number }) => {
         {!settings.useTestEnvironment && <View style={styles.liveTag}><Text style={styles.liveTagText}>LIVE</Text></View>}
       </View>
 
-      {!!status?.deliveryAddress && (
-        <Text style={styles.address}>📍 {status.deliveryAddress}</Text>
-      )}
-
       {alreadyBooked ? (
         <>
           <Text style={styles.line}>
@@ -141,7 +137,6 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.cre
   title: { fontSize: 13, fontWeight: '800', color: COLORS.heading, flex: 1 },
   liveTag: { backgroundColor: COLORS.dangerAccent, borderRadius: 4, paddingHorizontal: 6, paddingVertical: 2 },
   liveTagText: { fontSize: 9, fontWeight: '800', color: '#FFFFFF' },
-  address: { fontSize: 12, color: COLORS.heading, marginTop: 8, lineHeight: 17 },
   label: { fontSize: 11, fontWeight: '700', color: COLORS.muted, marginTop: 10 },
   prepRow: { flexDirection: 'row', gap: 6, marginTop: 6 },
   prepPill: {

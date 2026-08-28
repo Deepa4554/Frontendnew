@@ -398,6 +398,12 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
               </View>
             </View>
             <Text style={styles.modalLine}>{order?.guestName || 'Walk-in'}{order?.guestPhone ? ` · ${order.guestPhone}` : ''}</Text>
+            {/* Visible for every DELIVERY order regardless of whether a courier is set up —
+                a cafe doing its own deliveries has nowhere else to see where it's going, since
+                RiderBookingCard (the Borzo half of this) hides itself entirely when Borzo is off. */}
+            {order?.orderType === 'DELIVERY' && !!order?.deliveryAddress && (
+              <Text style={styles.modalLine}>📍 {order.deliveryAddress}</Text>
+            )}
 
             {!order ? (
               <ActivityIndicator size="small" color={COLORS.accent} style={{ marginVertical: 24 }} />
