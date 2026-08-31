@@ -1,14 +1,16 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { tablesApi, CreateTableRequest, UpdateTableRequest } from '../tablesApi';
 import { queryKeys } from './queryKeys';
+import { socketAwareInterval } from '../../realtime/socketLiveness';
 
 // Tables' occupancy is derived from live orders, so it invalidates on the same
 // OrdersHub "ordersChanged" push orders do (see useOrdersRealtime) — this interval is
-// just the safety net for a dropped/blocked socket.
+// just the safety net for a dropped/blocked socket, relaxed to 60s once the socket has
+// proven itself alive (see socketLiveness.ts) and back to 30s the moment it hasn't.
 // refetchIntervalInBackground: a floor view left open on a second screen is unfocused, and
 // React Query pauses refetchInterval while it is — see useOrders for the full reasoning.
 export const useTables = () =>
-  useQuery({ queryKey: queryKeys.tables, queryFn: tablesApi.list, refetchInterval: 30000, refetchIntervalInBackground: true });
+  useQuery({ queryKey: queryKeys.tables, queryFn: tablesApi.list, refetchInterval: socketAwareInterval(30000, 60000), refetchIntervalInBackground: true });
 
 // Not table-specific, so no polling needed — this token is valid indefinitely.
 export const useMenuOnlyQrToken = () => useQuery({ queryKey: queryKeys.menuOnlyQrToken, queryFn: tablesApi.getMenuOnlyQrToken });

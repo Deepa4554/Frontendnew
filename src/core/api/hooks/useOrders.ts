@@ -2,6 +2,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit, PayOptions, VoidReasonCode } from '../ordersApi';
 import { PagedResult } from '../types';
 import { queryKeys } from './queryKeys';
+import { socketAwareInterval } from '../../realtime/socketLiveness';
 
 /**
  * Per-call-site polling overrides. The defaults below are tuned for the live service screens
@@ -26,13 +27,13 @@ export const useOrders = (
   useQuery({
     queryKey: queryKeys.orders(params),
     queryFn: () => ordersApi.list(params),
-    // 30s was chosen on the assumption that OrdersHub's "ordersChanged" push (see
-    // useOrdersRealtime) is the real near-live path and this is only a rarely-used safety
-    // net. In production the socket is NOT reliably coming up, which makes this interval the
-    // actual update mechanism — and a kitchen waiting half a minute to see a ticket is a
-    // service problem. Back to roughly the pre-realtime cadence until the socket is proven
-    // healthy; at ~6 requests/min this is still well inside the 200/min per-IP rate limit.
-    refetchInterval: polling?.refetchInterval ?? 10000,
+    // 10s is the pre-realtime cadence, and stays the floor for exactly the reason spelled out
+    // below: connection.state saying "Connected" has already been proven not to mean pushes
+    // are landing (see ordersRealtime.ts's transport-selection comment). socketAwareInterval
+    // only relaxes to 60s once a message has actually arrived recently (see
+    // socketLiveness.ts) — a kitchen waiting a minute to see a ticket because of an unproven
+    // socket is exactly the service problem this cadence originally existed to avoid.
+    refetchInterval: polling?.refetchInterval ?? socketAwareInterval(10000, 60000),
     // React Query pauses refetchInterval whenever the tab/window loses focus unless this
     // is on — which silently disabled the safety net on exactly the screen that needs it
     // most: a KDS spends its whole life as an unfocused second window/monitor while staff
@@ -51,7 +52,8 @@ export const usePendingConfirmationOrders = () =>
   useQuery({
     queryKey: queryKeys.orders({ pendingConfirmation: true }),
     queryFn: () => ordersApi.list({ pendingConfirmation: true, pageSize: 50 }),
-    refetchInterval: 30000,
+    // Same socket-proven-alive relaxation as useOrders above, floor unchanged at 30s.
+    refetchInterval: socketAwareInterval(30000, 60000),
     // A guest's order must still raise the staff-confirm popup when the POS window is
     // sitting in the background — same reason as useOrders above.
     refetchIntervalInBackground: true,

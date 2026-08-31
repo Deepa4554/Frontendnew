@@ -5,6 +5,7 @@ import { authApi } from '../authApi';
 import { syncAccess } from '../../../features/auth/presentation/viewmodels/authSlice';
 import { RootState } from '../../store/rootReducer';
 import { AppDispatch } from '../../store';
+import { socketAwareInterval } from '../../realtime/socketLiveness';
 
 /**
  * Keeps role + screen-access fresh against the backend while the app is open, mounted
@@ -25,7 +26,9 @@ export const useLiveAccessSync = () => {
     queryKey: ['auth', 'liveAccess'],
     queryFn: authApi.me,
     enabled: isAuthenticated,
-    refetchInterval: 60000,
+    // Relaxed to 300s once the socket has proven itself alive (see socketLiveness.ts), back to
+    // 60s the moment it hasn't — same reasoning as useOrders/useTables.
+    refetchInterval: socketAwareInterval(60000, 300000),
     staleTime: 0,
   });
 

@@ -5,6 +5,7 @@ import { queryClient } from '../query';
 import { getAccessToken } from '../storage/tokenStore';
 import { getHubBaseUrl } from '../config/env';
 import { queryKeys } from '../api/hooks/queryKeys';
+import { recordSocketSignal, markSocketNotAlive } from './socketLiveness';
 
 /**
  * Query keys each server-side scope stands for — the client half of RealtimeScopes in
@@ -142,24 +143,45 @@ export const useOrdersRealtime = () => {
      * socket was down — not just orders, which is all this used to recover. */
     const resyncEverything = () => queueScopes(Object.keys(SCOPE_QUERY_KEYS));
 
-    connection.on('ordersChanged', resyncOrders);
+    connection.on('ordersChanged', () => {
+      recordSocketSignal();
+      resyncOrders();
+    });
 
     // Scope list comes off the wire, so an API that learns a new scope before this build does
     // must not break it — unknown names fall through SCOPE_QUERY_KEYS' lookup harmlessly, and
     // a malformed payload is ignored rather than thrown from inside the socket callback.
     connection.on('dataChanged', (scopes: unknown) => {
+      recordSocketSignal();
       if (Array.isArray(scopes)) queueScopes(scopes.filter((s): s is string => typeof s === 'string'));
     });
 
     connection.on('accessChanged', () => {
+      recordSocketSignal();
       queryClient.invalidateQueries({ queryKey: ['auth', 'liveAccess'] });
     });
+
+    // Carries no payload and invalidates nothing — HeartbeatService's only job is proving the
+    // pipe is actually delivering messages (see socketLiveness.ts), which lets the safety-net
+    // polling hooks slow down without trusting connection.state, which has lied before (see
+    // this file's own transport-selection comment below).
+    connection.on('heartbeat', recordSocketSignal);
 
     // Every push sent while the socket was down is gone for good — SignalR doesn't replay
     // them — so treat "we have a connection again" as its own resync trigger. Without this a
     // KDS that dropped mid-service reconnects to a board that's still missing the tickets
     // fired during the gap, and stays wrong until the next unrelated push.
+    //
+    // Deliberately does NOT call recordSocketSignal() — a reconnected handshake is exactly
+    // the thing that already fooled connection.state once (see this file's transport-selection
+    // comment). Liveness is only earned back once a real message actually arrives afterward.
     connection.onreconnected(resyncEverything);
+
+    // The instant SignalR itself knows the connection dropped, not 25s later when the
+    // liveness window happens to lapse — every safety-net poll should be back to its fast
+    // interval before the window even matters, so a drop mid-reconnect-attempt never has to
+    // wait out the timeout on a connection everyone already knows is gone.
+    connection.onreconnecting(() => markSocketNotAlive());
 
     let disposed = false;
     let retryTimer: ReturnType<typeof setTimeout> | undefined;
@@ -181,6 +203,7 @@ export const useOrdersRealtime = () => {
         retryAttempt = 0;
       } catch {
         if (disposed) return;
+        markSocketNotAlive();
         // Jittered for the same reason the reconnect policy above is: a cold-starting API
         // rejects every device's first connect at once, so an unjittered retry would bring
         // them all back simultaneously.
@@ -194,6 +217,11 @@ export const useOrdersRealtime = () => {
 
     return () => {
       disposed = true;
+      // This device's own liveness signal, not a global one — another mounted instance (there
+      // is only ever one, this hook is mounted once for the session's lifetime) isn't affected.
+      // Matters for the case this cleanup runs on logout: the next login mounts a fresh
+      // connection and must not inherit a stale "alive" reading from the one just torn down.
+      markSocketNotAlive();
       if (retryTimer) clearTimeout(retryTimer);
       if (coalesceTimer) clearTimeout(coalesceTimer);
       connection.stop();
