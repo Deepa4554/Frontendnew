@@ -120,6 +120,14 @@ const config = {
           to: path.resolve(__dirname, 'dist-web/errorLogger.js'),
         },
         {
+          // Cloudflare Pages SPA fallback: without this, any direct hit on a
+          // client-side route (e.g. /dashboard) 404s at the edge before
+          // React Navigation ever loads (vercel.json's rewrite has no effect
+          // here — Cloudflare Pages only honors _redirects).
+          from: path.resolve(__dirname, 'public/_redirects'),
+          to: path.resolve(__dirname, 'dist-web/_redirects'),
+        },
+        {
           // Self-hosted Tesseract.js OCR engine + language data (see
           // menuPhotoOcrFallback.ts) — served same-origin so "Import from
           // Photo" works under the CSP (no CDN in script-src/connect-src)
