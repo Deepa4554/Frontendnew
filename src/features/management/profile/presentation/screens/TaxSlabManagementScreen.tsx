@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator } from 'react-native';
+import { View, StyleSheet, Text, ScrollView, TouchableOpacity, TextInput, Alert, ActivityIndicator, Switch } from 'react-native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -12,6 +12,7 @@ import { getApiErrorMessage } from '../../../../../core/network/api';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { useResponsive } from '../../../../../core/utils/useResponsive';
 import { DesktopPageHeader } from '../../../../../shared/components/desktop/DesktopPageHeader';
+import { METHODS, PaymentMethod } from '../../../../../shared/components/billing/PaymentMethodPicker';
 
 /** Tax & GST Configuration — the global flat rate, plus the master list of GST rates menu
  * items are assigned to (see MenuScreen's Tax Slab picker), so one bill can carry more than
@@ -45,10 +46,54 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
   const [globalRateError, setGlobalRateError] = useState<string | null>(null);
   const [nameError, setNameError] = useState<string | null>(null);
   const [rateError, setRateError] = useState<string | null>(null);
+  // Optimistic mirror of the tender ticks, so a tap lands instantly instead of waiting out the
+  // round trip — cleared back to the server's answer whenever fresh settings arrive.
+  const [modeOverride, setModeOverride] = useState<Partial<Record<PaymentMethod, boolean>> | null>(null);
+  const [byModeOverride, setByModeOverride] = useState<boolean | null>(null);
 
   useEffect(() => {
     if (settings) setGlobalRateDraft(String(settings.taxRatePct));
+    setModeOverride(null);
+    setByModeOverride(null);
   }, [settings]);
+
+  // Which tenders currently carry tax. The server stores this as CSV; the screen works in ticks
+  // and sends a list back up (see UpdateSettingsRequest.taxablePaymentModes).
+  const taxableModes = new Set(
+    (settings?.taxablePaymentModes ?? '').split(',').map((m) => m.trim()).filter(Boolean),
+  );
+  const byModeOn = byModeOverride ?? settings?.taxByPaymentModeEnabled ?? false;
+  const isModeTaxed = (m: PaymentMethod) => modeOverride?.[m] ?? taxableModes.has(m);
+
+  const saveTaxByMode = async (next: { enabled?: boolean; modes?: PaymentMethod[] }) => {
+    if (!settings) return;
+    try {
+      await updateSettings.mutateAsync({
+        ...(next.enabled === undefined ? {} : { taxByPaymentModeEnabled: next.enabled }),
+        ...(next.modes === undefined ? {} : { taxablePaymentModes: next.modes }),
+      });
+    } catch (err) {
+      setModeOverride(null);
+      setByModeOverride(null);
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const toggleByMode = (on: boolean) => {
+    setByModeOverride(on);
+    // Switching on with nothing ticked would quietly make the entire menu tax-free, which is
+    // never what an Owner reaching for this meant — seed it with the tender they were going to
+    // tick anyway. Turning it back off leaves the ticks alone, so a re-enable remembers them.
+    const seed: PaymentMethod[] | undefined = on && taxableModes.size === 0 ? ['UPI'] : undefined;
+    if (seed) setModeOverride(Object.fromEntries(METHODS.map((x) => [x, seed.includes(x)])));
+    saveTaxByMode({ enabled: on, modes: seed });
+  };
+
+  const toggleTaxableMode = (m: PaymentMethod) => {
+    const next = METHODS.filter((x) => (x === m ? !isModeTaxed(x) : isModeTaxed(x)));
+    setModeOverride(Object.fromEntries(METHODS.map((x) => [x, next.includes(x)])));
+    saveTaxByMode({ modes: next });
+  };
 
   const sorted = [...(groups ?? [])].sort((a, b) => a.ratePct - b.ratePct);
   const hasDefault = sorted.some((g) => g.isDefault);
@@ -209,6 +254,65 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
             </TouchableOpacity>
           </View>
           {globalRateError && <Text style={styles.fieldError}>{globalRateError}</Text>}
+        </View>
+
+        {/* ---------- Tax by Payment Mode ---------- */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardIcon}>
+              <Icon name="cash-multiple" size={20} color={COLORS.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Tax by Payment Mode</Text>
+              <Text style={styles.cardDesc}>
+                Charge tax only on the tenders ticked below. A bill settled on any other tender is billed at 0%.
+              </Text>
+            </View>
+            <Switch
+              value={byModeOn}
+              onValueChange={toggleByMode}
+              disabled={!settings || updateSettings.isPending}
+              trackColor={{ false: '#DDD1C6', true: COLORS.accent }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          {byModeOn && (
+            <>
+              <Text style={styles.fieldLabel}>Tax charged on</Text>
+              <View style={styles.modeRow}>
+                {METHODS.map((m) => {
+                  const on = isModeTaxed(m);
+                  return (
+                    <TouchableOpacity
+                      key={m}
+                      style={[styles.modeChip, on && styles.modeChipOn]}
+                      onPress={() => toggleTaxableMode(m)}
+                      disabled={updateSettings.isPending}
+                    >
+                      <Icon
+                        name={on ? 'checkbox-marked' : 'checkbox-blank-outline'}
+                        size={15}
+                        color={on ? COLORS.accent : COLORS.muted}
+                      />
+                      <Text style={[styles.modeChipText, on && styles.modeChipTextOn]}>{m}</Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              {/* Said plainly, once, where the decision is actually being made. */}
+              <Text style={styles.warnText}>
+                GST is due on the sale itself, not on how the customer pays — no tender here makes a sale
+                tax-free in law. Only switch this on if your accountant has told you to bill this way.
+                {METHODS.every((m) => !isModeTaxed(m)) ? '\n\nNothing is ticked, so no bill will carry any tax at all.' : ''}
+              </Text>
+              <Text style={styles.cardDesc}>
+                Applies at settle time: a bill carries its tax while it is open, and the tax comes off the
+                moment a non-taxable tender is picked. Split across tenders? If any one of them is ticked
+                above, the whole bill is taxed. Bills already settled are never re-priced.
+              </Text>
+            </>
+          )}
         </View>
 
         {/* ---------- Add Tax Slab ---------- */}
@@ -382,6 +486,13 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   editInput: { fontSize: 12, fontWeight: '700', color: COLORS.heading, borderBottomWidth: 1, borderBottomColor: COLORS.accent, paddingVertical: isDesktopWeb ? 1.5 : 1.5, minWidth: 0 },
   defaultBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
   deleteBtn: { width: 32, height: 32, borderRadius: 16, alignItems: 'center', justifyContent: 'center' },
+  // Tender ticks for "Tax by Payment Mode" — the same checkbox-chip idiom PaymentMethodPicker
+  // uses, so the list an Owner configures reads like the one a cashier settles with.
+  modeRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8 },
+  modeChip: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 10, height: 30, borderRadius: 8, borderWidth: 1, borderColor: COLORS.background, backgroundColor: COLORS.background },
+  modeChipOn: { borderColor: COLORS.accent },
+  modeChipText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
+  modeChipTextOn: { color: COLORS.heading },
   emptyText: { fontSize: 12, color: COLORS.muted, textAlign: 'center', marginTop: 24, lineHeight: 20 },
   warnText: { fontSize: 12, color: COLORS.danger, marginTop: 9, lineHeight: 18 },
 });

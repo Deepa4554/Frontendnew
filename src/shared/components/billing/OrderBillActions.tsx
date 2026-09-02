@@ -236,6 +236,20 @@ export const OrderBillActions: React.FC<Props> = ({
   // no sense here — offer Close instead (see the payBtnGroup / partialBadge branches below).
   const fullyPrepaid = partiallyPaid && owed <= 0.01;
 
+  // Cafes billing tax per tender (Tax & GST screen) settle for less on a non-taxable one, so
+  // the picker has to price both outcomes — see PaymentMethodPicker's taxFreeOwed. Undefined
+  // for everyone else, which leaves the picker's behaviour untouched.
+  const taxableModes = settings?.taxByPaymentModeEnabled
+    ? (settings.taxablePaymentModes.split(',').map((m) => m.trim()).filter(Boolean) as PaymentMethod[])
+    : undefined;
+  // A taxable tender already collected against this bill has settled the question for the
+  // whole order — the server won't take that tax back off (PaymentModeTax), so neither does
+  // the picker: hand it a tax-free figure identical to `owed` and the choice stops mattering.
+  const taxLockedOn = (order.payments ?? []).some((p) => taxableModes?.includes(p.method as PaymentMethod));
+  const taxFreeOwed = taxableModes
+    ? (taxLockedOn ? owed : Math.max(0, Math.round(((order.taxFreeTotal ?? order.total) - amountPaid) * 100) / 100))
+    : undefined;
+
   // Scan-to-pay link for what's still owed (not order.total — a half-paid bill must charge
   // the balance, same figure the payment picker works from). Null whenever the cafe hasn't
   // set a UPI ID or there's nothing left to collect, which is exactly when the button below
@@ -256,6 +270,9 @@ export const OrderBillActions: React.FC<Props> = ({
   const khataOutstanding = khata?.customer.outstanding ?? null;
   const khataCleared = khataOutstanding !== null && khataOutstanding <= 0.005;
 
+  // Configured or absent, exactly like the UPI QR below — a review block nobody can scan is
+  // worse than none (see CafeSettings.googleReviewUrl).
+  const reviewUrl = settings?.googleReviewUrl || null;
   const upiUri = settings?.upiVpa
     ? buildUpiPaymentUri({ vpa: settings.upiVpa, payeeName: settings.businessName, amount: owed, note: `Bill ${order.number}` })
     : null;
@@ -395,6 +412,7 @@ export const OrderBillActions: React.FC<Props> = ({
   // tabs for the same bill. Same shape as the mutations' isPending everywhere else here.
   const [sendingWhatsAppBill, setSendingWhatsAppBill] = useState(false);
   const [upiQrOpen, setUpiQrOpen] = useState(false);
+  const [reviewQrOpen, setReviewQrOpen] = useState(false);
   const sendWhatsAppBill = async (phoneOverride?: string) => {
     if (sendingWhatsAppBill) return;
     setSendingWhatsAppBill(true);
@@ -790,6 +808,8 @@ export const OrderBillActions: React.FC<Props> = ({
           {!fullyPrepaid && (
             <PaymentMethodPicker
               owed={owed}
+              taxFreeOwed={taxFreeOwed}
+              taxableModes={taxableModes}
               guestName={order.guestName}
               guestPhone={order.guestPhone}
               allowComplimentary={canMarkComplimentary(role)}
@@ -900,6 +920,19 @@ export const OrderBillActions: React.FC<Props> = ({
               <Icon name="qrcode-scan" size={17} color={COLORS.heading} />
             </TouchableOpacity>
           )}
+          {/* "Rate us" — the same QR the bill prints, for showing a guest off the screen when
+              nothing was printed. Only once a review link is configured (Receipt Builder), and
+              only on a settled bill: asking for a review before the money is in reads as a
+              condition of paying. */}
+          {reviewUrl && order.paid && (
+            <TouchableOpacity
+              style={[styles.printBtnSeg, webNoOutline]}
+              onPress={() => setReviewQrOpen(true)}
+              accessibilityLabel="Show Google review QR"
+            >
+              <Icon name="star-outline" size={17} color={COLORS.heading} />
+            </TouchableOpacity>
+          )}
         </View>
 
         {!order.paid && (
@@ -999,6 +1032,22 @@ export const OrderBillActions: React.FC<Props> = ({
             <Text style={styles.upiVpaText}>{settings?.upiVpa}</Text>
             <Text style={styles.upiNote}>Any UPI app · amount is fixed. Mark the bill paid once you get the payment notification.</Text>
             <TouchableOpacity style={[styles.upiCloseBtn, webNoOutline]} onPress={() => setUpiQrOpen(false)}>
+              <Text style={styles.upiCloseText}>Close</Text>
+            </TouchableOpacity>
+          </TouchableOpacity>
+        </TouchableOpacity>
+      </Modal>
+
+      {/* Same code the slip prints, held up for a guest to scan on the way out. */}
+      <Modal visible={reviewQrOpen} transparent animationType="fade" onRequestClose={() => setReviewQrOpen(false)}>
+        <TouchableOpacity style={styles.upiBackdrop} activeOpacity={1} onPress={() => setReviewQrOpen(false)}>
+          <TouchableOpacity style={styles.upiCard} activeOpacity={1}>
+            <Text style={styles.upiTitle}>Enjoyed your visit?</Text>
+            <Text style={styles.upiNote}>Scan to rate us on Google</Text>
+            <View style={styles.upiQrBox}>
+              {reviewUrl && <QRCode value={reviewUrl} size={200} color="#000000" backgroundColor="#FFFFFF" />}
+            </View>
+            <TouchableOpacity style={[styles.upiCloseBtn, webNoOutline]} onPress={() => setReviewQrOpen(false)}>
               <Text style={styles.upiCloseText}>Close</Text>
             </TouchableOpacity>
           </TouchableOpacity>

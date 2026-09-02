@@ -5,6 +5,12 @@ export interface ApiSettings {
   /** The owning tenant's URL-safe slug — used to build tenant-aware QR ordering links. */
   tenantSlug: string | null;
   taxRatePct: number;
+  /** Charge tax only on the tenders in `taxablePaymentModes` instead of on every bill.
+   * Off for every cafe that hasn't deliberately turned it on. */
+  taxByPaymentModeEnabled: boolean;
+  /** Comma-separated tenders that carry tax while the switch above is on, e.g. "UPI,Card".
+   * Stored as CSV; sent back up as a string ARRAY (see UpdateSettingsRequest). */
+  taxablePaymentModes: string;
   currency: string;
   region: string;
   businessName: string;
@@ -69,6 +75,10 @@ export interface ApiSettings {
    * an Owner sets one in Cafe Settings, and while it's null no UPI QR is offered anywhere —
    * see buildUpiPaymentUri and buildReceiptLines. */
   upiVpa: string | null;
+  /** Where the "Rate us on Google" QR at the foot of a bill points. Null/blank = the cafe
+   * hasn't set one up and no review QR appears anywhere. Stored as a finished https:// URL —
+   * the server also accepts a bare Google Place ID and expands it (see GoogleReviewLink). */
+  googleReviewUrl: string | null;
   /** The cafe's own registered coordinates — null until an Owner/Manager taps "Use
    * Current Location" in Cafe Profile. AttendanceController's punch-in/out geofence
    * check is skipped entirely while these are null. */
@@ -137,6 +147,7 @@ export type UpdateSettingsRequest = Partial<
     | 'receiptShowFooter'
     | 'gstNumber'
     | 'upiVpa'
+    | 'googleReviewUrl'
     | 'latitude'
     | 'longitude'
     | 'serviceChargeDefaultPct'
@@ -163,6 +174,11 @@ export type UpdateSettingsRequest = Partial<
   serviceChargeClearDefault?: boolean;
   packingChargeClearDefault?: boolean;
   deliveryChargeClearDefault?: boolean;
+  taxByPaymentModeEnabled?: boolean;
+  /** A list going up, a CSV string coming back down (see ApiSettings) — the client never has
+   * to know the storage format. An empty array is a real value ("no tender is taxable"), not
+   * "leave unchanged"; omit the field entirely for that. */
+  taxablePaymentModes?: string[];
 };
 
 /** A notification category that has no dedicated named toggle of its own (Billing, System,

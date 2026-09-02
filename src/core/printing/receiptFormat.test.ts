@@ -401,6 +401,60 @@ describe('buildReceiptLines — refunded banner', () => {
   });
 });
 
+describe('buildReceiptLines — Google review QR', () => {
+  const receipt = (over: Partial<PrintableReceipt> = {}): PrintableReceipt => ({
+    businessName: 'Cafe',
+    orderNumber: '#1294',
+    time: '02:07 PM',
+    title: 'Table #T1',
+    orderTypeLabel: 'Dine In',
+    items: [item()],
+    subtotal: 100,
+    taxRatePct: 5,
+    tax: 5,
+    total: 105,
+    footer: 'Thanks!',
+    ...over,
+  });
+
+  const textOf = (lines: ReturnType<typeof buildReceiptLines>) =>
+    lines.map((l) => ('text' in l ? l.text : '')).join('\n');
+  const qrOf = (lines: ReturnType<typeof buildReceiptLines>) => lines.filter((l) => l.kind === 'qr');
+
+  it('prints nothing at all until a link is configured', () => {
+    const lines = buildReceiptLines(receipt());
+    expect(qrOf(lines)).toHaveLength(0);
+    expect(textOf(lines)).not.toContain('Google');
+  });
+
+  it('prints the QR with the configured link', () => {
+    const lines = buildReceiptLines(receipt({ reviewQrUrl: 'https://g.page/r/abc/review' }));
+    const qrs = qrOf(lines);
+    expect(qrs).toHaveLength(1);
+    expect(qrs[0]).toMatchObject({ data: 'https://g.page/r/abc/review' });
+    expect(textOf(lines)).toContain('Scan to rate us on Google');
+  });
+
+  it('carries fallback text for a printer that cannot draw a QR', () => {
+    // The BLE transport drops the code and prints this instead — without it the ask would
+    // vanish entirely on those printers (see the 'qr' ReceiptLine kind).
+    const [qr] = qrOf(buildReceiptLines(receipt({ reviewQrUrl: 'https://g.page/r/abc/review' })));
+    expect('fallbackText' in qr && qr.fallbackText).toBeTruthy();
+  });
+
+  it('sits below the footer, so it never splits the bill from its own total', () => {
+    const out = textOf(buildReceiptLines(receipt({ reviewQrUrl: 'https://g.page/r/abc/review' })));
+    expect(out.indexOf('TOTAL')).toBeLessThan(out.indexOf('Thanks!'));
+    expect(out.indexOf('Thanks!')).toBeLessThan(out.indexOf('Enjoyed your visit?'));
+  });
+
+  it('still prints when the footer is switched off', () => {
+    const out = textOf(buildReceiptLines(receipt({ reviewQrUrl: 'https://g.page/r/abc/review', showFooter: false })));
+    expect(out).not.toContain('Thanks!');
+    expect(out).toContain('Enjoyed your visit?');
+  });
+});
+
 describe('inferTaxRatePct', () => {
   it('recovers the flat rate a plain bill was charged at', () => {
     expect(inferTaxRatePct({ subtotal: 1000, tax: 50 })).toBe(5);

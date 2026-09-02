@@ -240,6 +240,11 @@ export interface PrintableReceipt extends PrintableBillAdjustments {
   showGuestPhone?: boolean;
   showItemNotes?: boolean;
   showFooter?: boolean;
+  /** Where the "Rate us on Google" QR at the foot of the slip points (see
+   * CafeSettings.googleReviewUrl). Omitted/blank prints no review block at all — the same
+   * "configured or absent" rule the UPI QR follows, so a cafe that never sets a link gets
+   * byte-for-byte the slip it prints today. */
+  reviewQrUrl?: string | null;
 }
 
 export type ReceiptLine =
@@ -474,6 +479,19 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
   }
 
   if (receipt.showFooter !== false) push({ kind: 'text', text: receipt.footer, align: 'center' });
+
+  // "Rate us" QR, under the footer — the last thing on the slip, where a guest reads it on
+  // the way out rather than while checking what they were charged. A printer that can't draw
+  // a QR (the BLE transport) prints fallbackText instead, so the ask still lands even though
+  // the code doesn't.
+  if (receipt.reviewQrUrl) {
+    push({ kind: 'feed' });
+    push({ kind: 'dashes' });
+    push({ kind: 'text', text: 'Enjoyed your visit?', align: 'center', bold: true });
+    push({ kind: 'text', text: 'Scan to rate us on Google', align: 'center' });
+    push({ kind: 'qr', data: receipt.reviewQrUrl, size: 5, fallbackText: 'Rate us on Google - ask staff for the link' });
+  }
+
   push({ kind: 'feed' });
 
   return lines;

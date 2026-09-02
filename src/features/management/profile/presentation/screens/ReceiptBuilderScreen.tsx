@@ -45,6 +45,8 @@ export const ReceiptBuilderScreen = ({ navigation }: any) => {
   const [savingGst, setSavingGst] = useState(false);
   const [upiDraft, setUpiDraft] = useState('');
   const [savingUpi, setSavingUpi] = useState(false);
+  const [reviewDraft, setReviewDraft] = useState('');
+  const [savingReview, setSavingReview] = useState(false);
 
   useEffect(() => {
     if (settings) setGstDraft(settings.gstNumber ?? '');
@@ -53,6 +55,33 @@ export const ReceiptBuilderScreen = ({ navigation }: any) => {
   useEffect(() => {
     if (settings) setUpiDraft(settings.upiVpa ?? '');
   }, [settings]);
+
+  useEffect(() => {
+    if (settings) setReviewDraft(settings.googleReviewUrl ?? '');
+  }, [settings]);
+
+  const saveReview = async () => {
+    if (!settings || reviewDraft.trim() === (settings.googleReviewUrl ?? '')) return;
+    const trimmed = reviewDraft.trim();
+    // Deliberately no client-side pattern check, unlike GST/UPI above: the server accepts a
+    // g.page link, a maps.app.goo.gl link, a plain Place ID and anything else scannable (see
+    // GoogleReviewLink), and it also REWRITES what it stores — a Place ID comes back as a full
+    // URL. Re-implementing that here would only mean two rules to keep in step.
+    try {
+      setSavingReview(true);
+      await updateSettings.mutateAsync({ googleReviewUrl: trimmed });
+      dispatch(showToast({
+        message: trimmed ? 'Review link updated.' : 'Review link removed — bills will not show a review QR.',
+        icon: 'check-circle',
+        tone: 'success',
+      }));
+    } catch (err) {
+      setReviewDraft(settings.googleReviewUrl ?? '');
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save review link'), icon: 'alert-circle-outline', tone: 'danger' }));
+    } finally {
+      setSavingReview(false);
+    }
+  };
 
   const toggle = async (field: ReceiptToggleField) => {
     if (!settings || saving) return;
@@ -191,6 +220,45 @@ export const ReceiptBuilderScreen = ({ navigation }: any) => {
             <Text style={styles.upiHint}>
               Adds a scan-to-pay QR for the exact bill amount, on the printed bill and behind Pay by UPI on the bill screen. Payment still has to be
               confirmed and marked paid by staff — the app is not told when a guest pays.
+            </Text>
+          </>
+        )}
+
+        <Text style={styles.fieldLabel}>Google review link</Text>
+        {isLoading ? (
+          <SkeletonBox height={46} radius={8} style={{ marginBottom: 20 }} />
+        ) : (
+          <>
+            <View style={styles.gstRow}>
+              <View style={{ borderRadius: 4, flex: 1 }}>
+                <TextInput
+                  style={[styles.gstInput, { flex: 1 }]}
+                  placeholder="Paste your review link or Place ID (leave blank to hide)"
+                  placeholderTextColor={COLORS.placeholder}
+                  value={reviewDraft}
+                  onChangeText={setReviewDraft}
+                  onBlur={saveReview}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  keyboardType="url"
+                />
+              </View>
+              {(savingReview || reviewDraft.trim() !== (settings?.googleReviewUrl ?? '')) && (
+                <TouchableOpacity style={styles.gstSaveBtn} onPress={saveReview} disabled={savingReview} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                  {savingReview ? (
+                    <ActivityIndicator size="small" color={COLORS.accent} />
+                  ) : (
+                    <Icon name="check" size={20} color={COLORS.accent} />
+                  )}
+                </TouchableOpacity>
+              )}
+            </View>
+            {/* Where to actually find the link — the single thing that stops this field from
+                being left blank is knowing which button in Google's dashboard produces it. */}
+            <Text style={styles.upiHint}>
+              Prints a "Scan to rate us on Google" QR at the foot of the bill and on the WhatsApp bill PDF.
+              Get the link from your Google Business Profile → Ask for reviews (it looks like
+              https://g.page/r/.../review); a Place ID works too.
             </Text>
           </>
         )}

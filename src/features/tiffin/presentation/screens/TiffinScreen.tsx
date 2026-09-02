@@ -91,6 +91,7 @@ async function printTiffinBill(
     footer: settings?.receiptFooter ?? 'Thank you!',
     showAddress: settings?.receiptShowAddress,
     showFooter: settings?.receiptShowFooter,
+    reviewQrUrl: settings?.googleReviewUrl,
   });
 }
 

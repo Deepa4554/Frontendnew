@@ -99,6 +99,7 @@ export const BillingScreen = () => {
       showGuestPhone: settings?.receiptShowGuestPhone,
       showItemNotes: settings?.receiptShowItemNotes,
       showFooter: settings?.receiptShowFooter,
+      reviewQrUrl: settings?.googleReviewUrl,
     });
     setPrinting(false);
     dispatch(showToast({

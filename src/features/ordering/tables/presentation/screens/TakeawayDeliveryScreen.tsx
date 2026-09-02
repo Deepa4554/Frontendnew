@@ -215,6 +215,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
       showGuestPhone: settings?.receiptShowGuestPhone,
       showItemNotes: settings?.receiptShowItemNotes,
       showFooter: settings?.receiptShowFooter,
+      reviewQrUrl: settings?.googleReviewUrl,
     });
     setPrintingBill(false);
     dispatch(showToast({ message: result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'danger' }));

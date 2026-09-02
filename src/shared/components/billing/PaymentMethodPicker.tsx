@@ -57,6 +57,17 @@ interface Props {
    *  Cashier never sees the option, same as the Bill Discount action. Defaults to false so a
    *  caller that forgets to pass it fails closed rather than open. */
   allowComplimentary?: boolean;
+  /** What would still be owed if this bill ended up settled on a tender the cafe charges no
+   *  tax on. Pass it together with `taxableModes` when the cafe has "tax by payment mode" on
+   *  (see the Tax & GST screen); leave both out — or pass the same figure as `owed` — and this
+   *  picker behaves exactly as it always did. Its only job is to let the amounts on screen
+   *  follow the tender BEFORE the settle, so a cashier never types a figure the server is
+   *  about to recompute out from under them. */
+  taxFreeOwed?: number;
+  /** Which tenders carry tax. Undefined means every tender does. Mirrors the server's rule in
+   *  PaymentModeTax: if ANY ticked tender is taxable, the whole bill is taxed — tax sits per
+   *  line at its own slab, so it can't be apportioned across a split. */
+  taxableModes?: PaymentMethod[];
   /** Fires on mount and on every change — both callers (an existing order's Settle
    *  button in OrderBillActions, Pay First's Settle button in POSCheckoutScreen) read
    *  the latest result at settle time instead of re-deriving this split/partial/
@@ -102,7 +113,7 @@ const webNoOutline = Platform.OS === 'web' ? ({ outlineStyle: 'none' } as any) :
  * Owns all of its own state; reports the current split/partial/canSettle via onChange rather
  * than being a controlled input, since neither caller needs to drive its state from outside.
  */
-export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPhone, allowComplimentary = false, onChange }) => {
+export const PaymentMethodPicker: React.FC<Props> = ({ owed: fullOwed, taxFreeOwed, taxableModes, guestName, guestPhone, allowComplimentary = false, onChange }) => {
   const COLORS = useThemeColors();
   const { isDesktopWeb } = useResponsive();
   const styles = makeStyles(COLORS, isDesktopWeb);
@@ -111,7 +122,7 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
   // settles without touching the picker at all.
   const [selectedMethods, setSelectedMethods] = useState<PaymentMethod[]>(['UPI']);
   const [multiAmounts, setMultiAmounts] = useState<Record<PaymentMethod, string>>({
-    Cash: '', Card: '', UPI: owed > 0 ? owed.toFixed(2) : '', Due: '', Complimentary: '',
+    Cash: '', Card: '', UPI: fullOwed > 0 ? fullOwed.toFixed(2) : '', Due: '', Complimentary: '',
   });
   // Who the khata belongs to, seeded from whatever the order already knows. Kept here rather
   // than in the caller so both entry points (an existing order's bill panel, POS's Pay First
@@ -138,6 +149,21 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
   // tick/untick anything, and unticking-then-reticking resets this so it starts fresh.
   const [cashTouched, setCashTouched] = useState(false);
   const [focusedField, setFocusedField] = useState<string | null>(null);
+
+  // How much of the bill is tax that this cafe wouldn't charge on a non-taxable tender (see
+  // the taxFreeOwed prop). Zero — and everything below it inert — for every cafe that hasn't
+  // switched the setting on, which is the overwhelmingly common case.
+  const taxDrop = taxableModes && taxFreeOwed !== undefined
+    ? Math.max(0, Math.round((fullOwed - taxFreeOwed) * 100) / 100)
+    : 0;
+  // Nothing ticked yet reads as "taxed", matching the server (PaymentModeTax.AppliesTo): an
+  // order that hasn't been tendered against shows the tax it was rung up with.
+  const taxCharged = taxDrop <= 0 || selectedMethods.length === 0
+    || selectedMethods.some((m) => taxableModes!.includes(m));
+  // Everything below — the auto-filled amounts, the balance, canSettle — works off THIS, not
+  // the prop, so ticking Cash on a cash-untaxed bill shrinks the amounts on screen the same
+  // instant it shrinks the bill the server will settle.
+  const owed = taxCharged ? fullOwed : Math.max(0, Math.round((fullOwed - taxDrop) * 100) / 100);
 
   const parsedAmount = (m: PaymentMethod) => parseFloat(multiAmounts[m]) || 0;
 
@@ -422,6 +448,18 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed, guestName, guestPho
         {selectedMethods.length > 0 && (
           <>
             <View style={styles.divider} />
+            {/* Why the bill just changed. Only ever shown by a cafe that bills tax per tender,
+                and only while the ticked tenders actually take it off — otherwise the amounts
+                would appear to move on their own the moment UPI gets unticked. */}
+            {taxDrop > 0 && !taxCharged && (
+              <View style={styles.billRow}>
+                <View style={styles.billLabelRow}>
+                  <Icon name="percent-outline" size={13} color={COLORS.warning} />
+                  <Text style={[styles.billLabel, styles.warning]}>Tax not charged on this tender</Text>
+                </View>
+                <Text style={[styles.billVal, styles.warning]}>−{money(taxDrop)}</Text>
+              </View>
+            )}
             <View style={styles.billRow}>
               <Text style={[styles.billLabel, styles.positive]}>Paid Amount</Text>
               {/* Money actually collected — a Due leg and a Complimentary leg are deliberately

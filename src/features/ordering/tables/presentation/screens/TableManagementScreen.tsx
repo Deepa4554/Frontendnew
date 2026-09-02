@@ -223,9 +223,23 @@ export const TableManagementScreen = ({ navigation }: any) => {
   // Everything the splitter shows is derived from the order itself, never from local state:
   // amountPaid/balanceDue come back off every pay call, so the paid ticks stay right after a
   // refresh, and after a second device collects a share on the same table.
-  const splitTotal = occupiedOrder?.total ?? 0;
+  // A cafe billing tax per tender (Tax & GST screen) settles this bill for less on a
+  // non-taxable one, so the shares have to be cut from whichever total the picked tender
+  // actually produces — otherwise the first share is sized against a total the server is about
+  // to shrink, and the settle comes back rejected for overshooting the balance. Once a taxable
+  // tender has been collected the question is closed for the whole bill (see PaymentModeTax),
+  // so every later share goes back to the taxed figure regardless of what's picked.
+  const splitTaxableModes = settings?.taxByPaymentModeEnabled
+    ? (settings.taxablePaymentModes.split(',').map((m) => m.trim()).filter(Boolean) as PaymentMethod[])
+    : undefined;
+  const splitTaxed = !splitTaxableModes
+    || splitTaxableModes.includes(splitMethod)
+    || (occupiedOrder?.payments ?? []).some((p) => splitTaxableModes.includes(p.method as PaymentMethod));
   const splitPaid = occupiedOrder?.amountPaid ?? 0;
-  const splitRemaining = occupiedOrder?.balanceDue ?? splitTotal;
+  const splitTotal = (splitTaxed ? occupiedOrder?.total : occupiedOrder?.taxFreeTotal) ?? 0;
+  const splitRemaining = splitTaxed
+    ? (occupiedOrder?.balanceDue ?? splitTotal)
+    : Math.max(0, Math.round((splitTotal - splitPaid) * 100) / 100);
   const splitShares = equalShares(splitTotal, splitWays);
   const splitPaidCount = paidShareCount(splitShares, splitPaid);
   // The share this tap collects. Front to back — see paidShareCount for why the order of
@@ -444,6 +458,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
       showGuestPhone: settings?.receiptShowGuestPhone,
       showItemNotes: settings?.receiptShowItemNotes,
       showFooter: settings?.receiptShowFooter,
+      reviewQrUrl: settings?.googleReviewUrl,
     });
     setPrintingBill(false);
     dispatch(showToast({ message: result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'danger' }));

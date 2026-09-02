@@ -267,6 +267,13 @@ export interface ApiOrder {
    * (the list endpoint doesn't load it). Only meaningful once `guestPhone` is set: an
    * anonymous walk-in's customer row is a shared bucket, not a real individual's points. */
   customerAvailablePoints: number | null;
+  /** True once this bill was settled on a tender the cafe charges no tax on — see the Tax & GST
+   * screen's "Tax by payment mode" switch. Always false unless that switch is on. */
+  taxSuppressed: boolean;
+  /** What `total` would come to if this bill were settled on a NON-taxable tender — what the
+   * payment picker prices its tenders against before one is picked. Equal to `total` whenever
+   * no tax is in play, so ignoring it is always safe. */
+  taxFreeTotal: number;
   /** Highest fire-round so far. An item with fireBatch === this is in the newest batch. */
   currentFireBatch: number;
   /** Staff-Confirm Mode: true while a guest QR order's first submission is sitting unfired

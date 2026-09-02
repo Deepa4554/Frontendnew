@@ -86,6 +86,7 @@ import {
 import { GuestPhonePrompt } from '../../../../../shared/components/billing/GuestPhonePrompt';
 import { CustomerLookupBadge } from '../../../../../shared/components/billing/CustomerLookupBadge';
 import {
+  PaymentMethod,
   PaymentMethodPicker,
   PaymentMethodPickerResult,
 } from '../../../../../shared/components/billing/PaymentMethodPicker';
@@ -1223,6 +1224,14 @@ export const POSCheckoutScreen = () => {
     pfPackingChargeAmount +
     pfDeliveryChargeAmount +
     pfTipAmount;
+  // What Pay First would settle for on a tender this cafe charges no tax on — the same figure
+  // OrderBillActions hands the picker for a server order, derived from the local cart here
+  // because Pay First settles before the order exists. Undefined unless the cafe bills tax per
+  // tender (see the Tax & GST screen), which leaves the picker exactly as it was.
+  const pfTaxableModes = settings?.taxByPaymentModeEnabled
+    ? (settings.taxablePaymentModes.split(',').map((m) => m.trim()).filter(Boolean) as PaymentMethod[])
+    : undefined;
+  const pfTaxFreeTotal = Math.max(0, Math.round((total - tax) * 100) / 100);
 
   // --- Live offer preview ---
   // The totals above are a client-side estimate and deliberately know nothing about Offers:
@@ -1928,9 +1937,15 @@ export const POSCheckoutScreen = () => {
       // genuine partial, or a real multi-tender split, is trusted as typed either way —
       // bumping a deliberately-short partial up to the full total would defeat the point
       // of it, and a split's per-tender amounts are exactly what the cashier meant to key in.
+      // ...and on a cafe that bills tax per tender, the authoritative figure for a NON-taxable
+      // one is the server's taxFreeTotal, not its total — the order was just created (and taxed)
+      // and the settle itself is what takes the tax back off. Sending the taxed total here would
+      // be rejected outright for overshooting the balance the server is about to recompute.
+      const pfSingleMethod = pfPayment.splits[0]?.method;
+      const pfSingleTaxed = !pfTaxableModes || pfTaxableModes.includes(pfSingleMethod);
       const splits: PaymentSplit[] =
         pfPayment.splits.length === 1 && !pfPayment.isPartial
-          ? [{ method: pfPayment.splits[0].method, amount: order.total }]
+          ? [{ method: pfSingleMethod, amount: pfSingleTaxed ? order.total : (order.taxFreeTotal ?? order.total) }]
           : pfPayment.splits;
       // keepOpen: this is an advance against the order, not a final settle — the token/
       // table/takeaway stays open on its dashboard so items can still be added. Amount
@@ -2048,6 +2063,7 @@ export const POSCheckoutScreen = () => {
           showGuestPhone: settings?.receiptShowGuestPhone,
           showItemNotes: settings?.receiptShowItemNotes,
           showFooter: settings?.receiptShowFooter,
+          reviewQrUrl: settings?.googleReviewUrl,
         });
       }
     } catch (err) {
@@ -2110,6 +2126,7 @@ export const POSCheckoutScreen = () => {
       showGuestPhone: settings?.receiptShowGuestPhone,
       showItemNotes: settings?.receiptShowItemNotes,
       showFooter: settings?.receiptShowFooter,
+      reviewQrUrl: settings?.googleReviewUrl,
     });
     setPfPrintingBill(false);
     dispatch(
@@ -2491,6 +2508,7 @@ export const POSCheckoutScreen = () => {
       showGuestPhone: settings?.receiptShowGuestPhone,
       showItemNotes: settings?.receiptShowItemNotes,
       showFooter: settings?.receiptShowFooter,
+      reviewQrUrl: settings?.googleReviewUrl,
     });
     setPrinting(false);
     dispatch(
@@ -3698,6 +3716,8 @@ export const POSCheckoutScreen = () => {
               <PaymentMethodPicker
                 key={pfPickerKey}
                 owed={total}
+                taxFreeOwed={pfTaxableModes ? pfTaxFreeTotal : undefined}
+                taxableModes={pfTaxableModes}
                 guestName={guestDraft || guestName}
                 guestPhone={guestPhoneDraft || guestPhone}
                 allowComplimentary={canMarkComplimentary(role)}
@@ -4355,7 +4375,12 @@ export const POSCheckoutScreen = () => {
                       bill (buildReceiptLines); a single-rate order keeps one Tax row. */}
                   {(() => {
                     const slabs = buildTaxBreakdown(receipt.items, taxRatePct);
-                    if (slabs.length > 1) {
+                    // Nothing charged (composition scheme, or a bill settled on a tender this
+                    // cafe bills tax-free) collapses to one plain row — the lines keep the SLAB
+                    // they were rung up under, so without this a mixed-rate bill would print a
+                    // "Tax 5% on ₹200 · ₹0.00" row per slab. Same rule the printed slip and the
+                    // PDF already apply (buildReceiptLines, ReceiptPdfBuilder).
+                    if (slabs.length > 1 && receipt.tax > 0) {
                       return slabs.map(slab => (
                         <View key={slab.ratePct} style={styles.slipTotalRow}>
                           <Text style={styles.slipTotalLabel}>{`Tax ${
@@ -4369,9 +4394,9 @@ export const POSCheckoutScreen = () => {
                     }
                     return (
                       <View style={styles.slipTotalRow}>
-                        <Text style={styles.slipTotalLabel}>{`Tax (${
-                          slabs[0]?.ratePct ?? taxRatePct
-                        }%)`}</Text>
+                        <Text style={styles.slipTotalLabel}>
+                          {receipt.tax > 0 ? `Tax (${slabs[0]?.ratePct ?? taxRatePct}%)` : 'Tax'}
+                        </Text>
                         <Text style={styles.slipTotalVal}>
                           ₹{receipt.tax.toFixed(2)}
                         </Text>
