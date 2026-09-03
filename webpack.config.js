@@ -120,21 +120,6 @@ const config = {
           to: path.resolve(__dirname, 'dist-web/errorLogger.js'),
         },
         {
-          // Cloudflare SPA fallback: without this, any direct hit on a
-          // client-side route (e.g. /dashboard) 404s at the edge before
-          // React Navigation ever loads (vercel.json's rewrite has no effect
-          // here — Cloudflare only honors _redirects).
-          //
-          // toType is required, not optional: CopyWebpackPlugin infers "file vs
-          // directory" from whether `to` has an extension, and `_redirects` has
-          // none — so it silently emits dist-web/_redirects/_redirects (a DIR).
-          // Wrangler readFileSync()s dist-web/_redirects during deploy, and a
-          // directory there fails the whole deploy with a bare "EISDIR".
-          from: path.resolve(__dirname, 'public/_redirects'),
-          to: path.resolve(__dirname, 'dist-web/_redirects'),
-          toType: 'file',
-        },
-        {
           // Self-hosted Tesseract.js OCR engine + language data (see
           // menuPhotoOcrFallback.ts) — served same-origin so "Import from
           // Photo" works under the CSP (no CDN in script-src/connect-src)
