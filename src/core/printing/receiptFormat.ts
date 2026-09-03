@@ -169,6 +169,28 @@ export const billAdjustmentsOf = (order: PrintableBillAdjustments): PrintableBil
 });
 
 /**
+ * The tax and total a slip should print, given whether the tenders being settled leave this bill
+ * carrying its tax (the server's rule at settle time is PaymentModeTax.AppliesTo; before the
+ * settle the payment picker reports the same answer as PaymentMethodPickerResult.taxCharged).
+ *
+ * Exists for the same reason billAdjustmentsOf does: four screens each build their own
+ * PrintableReceipt, and every one of them deciding this separately is exactly how the printed
+ * slip ended up charging tax that the Grand Total on screen had already taken off.
+ *
+ * Uses taxFreeTotal rather than `total - tax`, because tax carved OUT of a tax-inclusive MRP
+ * line was never added on top in the first place — subtracting it would silently under-charge
+ * that line. It is the server's own OrderBuildingService.TaxFreeTotal, carried on OrderDto for
+ * precisely this, so paper, screen and the stored settle all land on one figure.
+ */
+export const taxFiguresOf = (
+  order: { tax: number; total: number; taxFreeTotal?: number },
+  taxSuppressed?: boolean,
+): { tax: number; total: number } =>
+  taxSuppressed
+    ? { tax: 0, total: order.taxFreeTotal ?? order.total }
+    : { tax: order.tax, total: order.total };
+
+/**
  * The blended GST rate an order was actually billed at — for the receipt's "CGST (n%)"
  * LABEL only. The amounts it labels never come from this: they're either `receipt.tax`
  * split in half (see splitGst) or, whenever items carry their own taxRatePct/taxableAmount/

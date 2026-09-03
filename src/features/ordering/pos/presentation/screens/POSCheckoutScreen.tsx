@@ -67,7 +67,7 @@ import {
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { markKotPrinted } from '../../../../../core/printing/printedKots';
 import { getPrinterConfig } from '../../../../../core/printing/printerConfig';
-import { PrintableBillAdjustments, billAdjustmentsOf, buildTaxBreakdown, inferTaxRatePct } from '../../../../../core/printing/receiptFormat';
+import { PrintableBillAdjustments, billAdjustmentsOf, buildTaxBreakdown, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
 import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
@@ -646,6 +646,7 @@ export const POSCheckoutScreen = () => {
     guestPhone: '',
     compAmount: 0,
     complimentaryReason: '',
+    taxCharged: true,
   });
   const [pfPickerKey, setPfPickerKey] = useState(0);
   const [settlingMode, setSettlingMode] = useState<
@@ -2474,7 +2475,7 @@ export const POSCheckoutScreen = () => {
   };
 
   const [printing, setPrinting] = useState(false);
-  const printCurrentReceipt = async () => {
+  const printCurrentReceipt = async (opts?: { taxSuppressed: boolean }) => {
     if (!receipt) return;
     setPrinting(true);
     const result = await PrinterService.printReceipt({
@@ -2498,8 +2499,19 @@ export const POSCheckoutScreen = () => {
       // refetches (see sendBillViaWhatsAppFor's note on the same lag).
       ...billAdjustmentsOf(receiptOrder ?? receipt),
       taxRatePct: inferTaxRatePct(receiptOrder ?? receipt),
-      tax: receipt.tax,
-      total: receipt.total,
+      // Snapshot figures (not receiptOrder's) for the same reason the tax rate above reads the
+      // live row: the snapshot is what this screen is showing. Only taxFreeTotal has to come off
+      // the live row, since the snapshot never carried one — falling back to total - tax, which
+      // is what pfTaxFreeTotal above already does for a bill with no tax-inclusive MRP line.
+      ...taxFiguresOf(
+        {
+          tax: receipt.tax,
+          total: receipt.total,
+          taxFreeTotal: receiptOrder?.taxFreeTotal
+            ?? Math.max(0, Math.round((receipt.total - receipt.tax) * 100) / 100),
+        },
+        opts?.taxSuppressed,
+      ),
       refunded: (receiptOrder ?? receipt).refunded,
       refundedAmount: (receiptOrder ?? receipt).refundedAmount,
       footer: receiptFooter,

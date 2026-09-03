@@ -29,7 +29,7 @@ import { ordersApi } from '../../../../../core/api/ordersApi';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { markKotPrinted } from '../../../../../core/printing/printedKots';
-import { billAdjustmentsOf, inferTaxRatePct } from '../../../../../core/printing/receiptFormat';
+import { billAdjustmentsOf, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
 import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
 import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
@@ -427,7 +427,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
   // Customer-facing bill — items + prices + total. Can be printed at any point once the
   // order's been fired, independent of payment (print-then-pay or pay-then-print both work).
-  const handlePrintBill = async () => {
+  const handlePrintBill = async (opts?: { taxSuppressed: boolean }) => {
     if (!occupiedOrder) return;
     setPrintingBill(true);
     const result = await PrinterService.printReceipt({
@@ -448,8 +448,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
       discountAmount: occupiedOrder.discountAmount || undefined,
       ...billAdjustmentsOf(occupiedOrder),
       taxRatePct: inferTaxRatePct(occupiedOrder),
-      tax: occupiedOrder.tax,
-      total: occupiedOrder.total,
+      ...taxFiguresOf(occupiedOrder, opts?.taxSuppressed),
       refunded: occupiedOrder.refunded,
       refundedAmount: occupiedOrder.refundedAmount,
       footer: settings?.receiptFooter ?? 'Thank you for your visit!',

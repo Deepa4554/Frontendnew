@@ -73,7 +73,13 @@ interface Props {
     unfiredItems?: 'keep',
     complimentaryReason?: string,
   ) => void;
-  onPrintBill: () => void;
+  /** `taxSuppressed` is true when the tenders ticked right now mean this bill settles without
+   *  tax (see PaymentModeTax). The caller must then print `tax: 0` and `total: order.taxFreeTotal`
+   *  — the same figures the settle is about to store — so the slip in the guest's hand matches the
+   *  Grand Total on screen and the amount actually being collected. Always false for a cafe that
+   *  doesn't bill tax per tender, and after the bill is settled (the server's own figures are
+   *  authoritative by then). */
+  onPrintBill: (opts?: { taxSuppressed: boolean }) => void;
   /** phoneOverride: see onMarkPaid. Every implementation is already async (it mints a
    *  receipt token, then opens WhatsApp); returning the promise lets this component show a
    *  spinner and block a second tap while that's in flight, the way its sibling actions do. */
@@ -206,7 +212,7 @@ export const OrderBillActions: React.FC<Props> = ({
   // What PaymentMethodPicker currently has picked — see its onChange doc. Defaults to
   // nothing settleable; the picker reports its real starting value (Cash covering the
   // full owed amount) on mount, before any button press is possible.
-  const [paymentResult, setPaymentResult] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true, dueAmount: 0, guestName: '', guestPhone: '', compAmount: 0, complimentaryReason: '' });
+  const [paymentResult, setPaymentResult] = useState<PaymentMethodPickerResult>({ splits: [], isPartial: false, canSettle: true, dueAmount: 0, guestName: '', guestPhone: '', compAmount: 0, complimentaryReason: '', taxCharged: true });
   const [openAdjustment, setOpenAdjustment] = useState<AdjustmentKey | null>(null);
   // Lets the Service/Packing/Delivery Switches flip the instant they're tapped instead of
   // waiting on the bill-charges round trip + orders refetch — a Switch reads as "broken" if
@@ -249,6 +255,24 @@ export const OrderBillActions: React.FC<Props> = ({
   const taxFreeOwed = taxableModes
     ? (taxLockedOn ? owed : Math.max(0, Math.round(((order.taxFreeTotal ?? order.total) - amountPaid) * 100) / 100))
     : undefined;
+
+  // The bill as the ticked tenders would actually settle it. Dropping the tax is the server's
+  // call, and it only makes it at settle time (Order.TaxSuppressed) — but the cashier is
+  // reading this bill, and printing it, BEFORE that happens. So the summary below applies the
+  // same rule the picker already reports, instead of showing a Grand Total that contradicts the
+  // "Tax not charged on this tender" row sitting a few pixels under it and a printed slip that
+  // charges the guest for tax nobody is collecting.
+  //
+  // Never overrides a settled bill: once order.paid is true the server has recomputed the real
+  // figures, and those win. Identical to order.tax/order.total for every cafe that doesn't bill
+  // tax per tender, since taxCharged is then always true.
+  //
+  // taxFreeTotal (not total - tax) because tax carved OUT of a tax-inclusive MRP line was never
+  // added on top to begin with — see OrderBuildingService.TaxFreeTotal, which is the same
+  // figure the settle itself lands on.
+  const taxSuppressed = !order.paid && !paymentResult.taxCharged;
+  const shownTax = taxSuppressed ? 0 : order.tax;
+  const shownTotal = taxSuppressed ? (order.taxFreeTotal ?? order.total) : order.total;
 
   // Scan-to-pay link for what's still owed (not order.total — a half-paid bill must charge
   // the balance, same figure the payment picker works from). Null whenever the cafe hasn't
@@ -737,12 +761,14 @@ export const OrderBillActions: React.FC<Props> = ({
             </View>
           )}
           <View style={styles.billRow}>
-            <Text style={styles.billLabel}>{taxLabel}</Text>
-            <Text style={styles.billVal}>{money(order.tax)}</Text>
+            {/* Labelled as not charged rather than shown as a bare 0.00, so the reason the row
+                went to zero is on the bill itself and not only in the payment picker below. */}
+            <Text style={styles.billLabel}>{taxSuppressed ? `${taxLabel} (not charged on this tender)` : taxLabel}</Text>
+            <Text style={styles.billVal}>{money(shownTax)}</Text>
           </View>
           <View style={styles.grandTotalRow}>
             <Text style={styles.billTotalLabel}>Grand Total</Text>
-            <Text style={styles.billTotalVal}>{money(order.total)}</Text>
+            <Text style={styles.billTotalVal}>{money(shownTotal)}</Text>
           </View>
         </View>
       )}
@@ -885,7 +911,7 @@ export const OrderBillActions: React.FC<Props> = ({
         <View style={styles.printBtnGroup}>
           <TouchableOpacity
             style={[styles.printBtn, webNoOutline]}
-            onPress={onPrintBill}
+            onPress={() => onPrintBill({ taxSuppressed })}
             disabled={printingPending}
             accessibilityLabel="Guest Bill via Print"
           >

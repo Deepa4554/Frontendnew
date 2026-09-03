@@ -42,6 +42,12 @@ export interface PaymentMethodPickerResult {
    *  ordersApi.pay's PayOptions.complimentaryReason. Trimmed; guaranteed non-empty whenever
    *  canSettle is true and compAmount > 0. */
   complimentaryReason: string;
+  /** Whether the tenders currently ticked leave this bill carrying its tax — the same rule the
+   *  server applies at settle (PaymentModeTax.AppliesTo), decided here so the bill on screen and
+   *  the bill on paper can follow the tender BEFORE the settle rather than after it. Always true
+   *  for a cafe that doesn't bill tax per tender, which is what keeps every other cafe's totals
+   *  exactly as they were. */
+  taxCharged: boolean;
 }
 
 interface Props {
@@ -303,13 +309,16 @@ export const PaymentMethodPicker: React.FC<Props> = ({ owed: fullOwed, taxFreeOw
       .map((m) => ({ method: m, amount: effectiveAmount(m) }));
     onChangeRef.current({
       splits, isPartial, canSettle, dueAmount, guestName: trimmedName, guestPhone: digitsPhone,
-      compAmount, complimentaryReason: trimmedReason,
+      compAmount, complimentaryReason: trimmedReason, taxCharged,
     });
     // khataName/khataPhone/complimentaryReason are in here (unlike a plain amount change)
     // because canSettle itself flips on them — without that the Settle button stays disabled
     // until some unrelated edit happens to re-report.
+    // taxCharged is in here so unticking the last taxable tender re-reports immediately: the
+    // bill summary and the printed slip both read it, and they must not lag a tick behind the
+    // "Tax not charged on this tender" row this picker draws from the very same value.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [selectedMethods, multiAmounts, owed, khataName, khataPhone, complimentaryReason]);
+  }, [selectedMethods, multiAmounts, owed, khataName, khataPhone, complimentaryReason, taxCharged]);
 
   return (
     <>

@@ -23,7 +23,7 @@ import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { markKotPrinted } from '../../../../../core/printing/printedKots';
-import { billAdjustmentsOf, inferTaxRatePct } from '../../../../../core/printing/receiptFormat';
+import { billAdjustmentsOf, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
 import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
 import { ItemQtyStepper } from '../../../../../shared/components/billing/ItemQtyStepper';
@@ -184,7 +184,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
 
   // Customer-facing bill — items + prices + total. Distinct from Print KOT, which has
   // no prices.
-  const printBill = async () => {
+  const printBill = async (opts?: { taxSuppressed: boolean }) => {
     if (!order) return;
     setPrintingBill(true);
     const result = await PrinterService.printReceipt({
@@ -205,8 +205,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
       discountAmount: order.discountAmount || undefined,
       ...billAdjustmentsOf(order),
       taxRatePct: inferTaxRatePct(order),
-      tax: order.tax,
-      total: order.total,
+      ...taxFiguresOf(order, opts?.taxSuppressed),
       refunded: order.refunded,
       refundedAmount: order.refundedAmount,
       footer: settings?.receiptFooter ?? 'Thank you for your visit!',
