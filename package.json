@@ -10,6 +10,7 @@
     "web": "webpack serve --config webpack.config.js",
     "web:https": "webpack serve --config webpack.config.js --env https",
     "build:web": "webpack --mode production --config webpack.config.js",
+    "deploy": "wrangler deploy",
     "test": "jest",
     "postinstall": "patch-package"
   },
