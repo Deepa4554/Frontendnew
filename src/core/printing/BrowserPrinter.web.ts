@@ -68,6 +68,38 @@ const NO_FRAME_MESSAGE =
 const escapeHtml = (s: string): string =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 
+/** A QR encoded ahead of print, with the width it needs on this roll. */
+interface RenderedQr {
+  svg: string;
+  widthMm: number;
+}
+
+/**
+ * How wide to draw a QR, from its own module count rather than a fixed share of the roll.
+ *
+ * A 203dpi thermal head puts 8 dots in a millimetre, and a module thinner than about half a
+ * millimetre (4 dots) bleeds into its neighbours until no phone can read the symbol back.
+ * The size used to be a flat printableMm / 2, which is comfortable for the short link Google
+ * Business hands out (`g.page/r/.../review`, 29 modules, 0.7mm each) and quietly unreadable
+ * for a Google Maps URL pasted out of the address bar — those run past 200 characters, encode
+ * to 65+ modules, and at that same width give each one 0.37mm. The symbol printed perfectly
+ * and scanned nowhere. Since GoogleReviewLink.Normalize deliberately accepts any http(s) URL
+ * (a Zomato or TripAdvisor page has the same use), the length can't be assumed short, so the
+ * drawing has to follow the data.
+ *
+ * Floored at the old width so short links look exactly as they did, capped just under the
+ * printable width so a very long one can't run off the edge of the paper.
+ */
+const MIN_MODULE_MM = 0.5;
+
+function qrWidthMm(svg: string, printableMm: number): number {
+  // The renderer emits `viewBox="0 0 N N"`, N being the module count INCLUDING the quiet-zone
+  // margin — i.e. exactly the square that has to fit on the roll.
+  const modules = Number(svg.match(/viewBox="0 0 (\d+)/)?.[1]);
+  if (!Number.isFinite(modules) || modules <= 0) return printableMm / 2;
+  return Math.min(Math.max(modules * MIN_MODULE_MM, printableMm / 2), printableMm * 0.9);
+}
+
 /**
  * One ReceiptLine as HTML. Mirrors escpos.ts's renderLine — including its rule about when a
  * `big` line may actually be drawn big.
@@ -82,7 +114,7 @@ const escapeHtml = (s: string): string =>
  * line that doesn't fit doubled is emphasised with weight alone. It stays the most prominent
  * thing on the slip either way, which is all `big` is ever asked to do.
  */
-function renderLine(line: ReceiptLine, columns: number, qrSvg: Map<string, string>): string {
+function renderLine(line: ReceiptLine, columns: number, qrSvg: Map<string, RenderedQr>): string {
   switch (line.kind) {
     case 'dashes':
       return `<div>${'-'.repeat(columns)}</div>`;
@@ -93,9 +125,11 @@ function renderLine(line: ReceiptLine, columns: number, qrSvg: Map<string, strin
       // to decode by the time print() is called. A QR that failed to encode falls back to the
       // line's own plain-text stand-in, exactly as the BLE transport does (see
       // blePrinterMarkup.ts) rather than printing a blank gap.
-      const svg = qrSvg.get(line.data);
-      return svg
-        ? `<div class="qr">${svg}</div>`
+      const qr = qrSvg.get(line.data);
+      // The width is per-symbol (see qrWidthMm), so it rides on the element rather than in
+      // the stylesheet; the SVG itself just fills whatever square it's given.
+      return qr
+        ? `<div class="qr"><span style="width:${qr.widthMm.toFixed(1)}mm">${qr.svg}</span></div>`
         : `<div class="c">${escapeHtml(line.fallbackText)}</div>`;
     }
     case 'text': {
@@ -133,14 +167,18 @@ async function buildHtml(lines: ReceiptLine[], columns: number): Promise<string>
 
   // Encoded up front, together, because renderLine has to be synchronous — and because a
   // failure here must not take the receipt down with it (see the fallback in renderLine).
-  const qrSvg = new Map<string, string>();
+  const qrSvg = new Map<string, RenderedQr>();
   for (const line of lines) {
     if (line.kind !== 'qr' || qrSvg.has(line.data)) continue;
     try {
-      qrSvg.set(
-        line.data,
-        await qrToSvg(line.data, { type: 'svg', margin: 0, errorCorrectionLevel: 'M' }),
-      );
+      // margin: 4 is the quiet zone the QR spec requires on all four sides. It was 0 here,
+      // on the reasoning that the paper's own margin supplies it — true to the left and
+      // right, where the symbol is centred in the printable width, and false above and
+      // below, where the "Scan to rate us on Google" line sits about a millimetre off the
+      // top edge of the symbol. Without the zone a scanner never locks on, so the review QR
+      // printed and simply didn't work.
+      const svg = await qrToSvg(line.data, { type: 'svg', margin: 4, errorCorrectionLevel: 'M' });
+      qrSvg.set(line.data, { svg, widthMm: qrWidthMm(svg, printableMm) });
     } catch {
       // Leave it unset — renderLine prints the plain-text stand-in instead.
     }
@@ -181,16 +219,21 @@ async function buildHtml(lines: ReceiptLine[], columns: number): Promise<string>
   .c { text-align: center; }
   .b { font-weight: bold; }
   .big { font-size: 2em; font-weight: bold; line-height: 1.2; }
-  .qr { text-align: center; margin: 1mm 0; }
+  /* break-inside is the whole reason the review QR misprinted: it is the last element on the
+     slip, and on a continuous roll the driver's page boundary fell inside it — once slicing
+     the symbol off part-way down, once landing just above it so the QR went onto a page that
+     never fed and the slip came out with nothing there at all. A QR is meaningless in halves,
+     so it moves whole or not at all. */
+  .qr { text-align: center; margin: 2mm 0; break-inside: avoid; page-break-inside: avoid; }
+  .qr span { display: inline-block; }
   /* Height-capped, not width-fitted: logos are all shapes, and letting a wide banner stretch
      to the paper's own width would push the whole receipt down the roll. Matches the ESC/POS
      raster's own height cap (see ThermalLogoRasterizer.MaxHeightDots) so the logo takes
      roughly the same share of the receipt whichever transport printed it. */
   .logo { text-align: center; margin: 1mm 0; }
   .logo img { max-height: 20mm; max-width: 100%; object-fit: contain; }
-  /* Half the printable width: big enough for a phone to read off the slip, small enough to
-     leave the quiet zone the paper's own margin provides. */
-  .qr svg { width: ${(printableMm / 2).toFixed(1)}mm; height: ${(printableMm / 2).toFixed(1)}mm; }
+  /* Sized by the wrapper, which carries a per-symbol width — see qrWidthMm. */
+  .qr svg { display: block; width: 100%; height: auto; }
 </style>
 </head>
 <body>${body}</body>

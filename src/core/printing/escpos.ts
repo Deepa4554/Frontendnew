@@ -110,6 +110,10 @@ function renderLine(b: ByteBuilder, line: ReceiptLine, columns: number) {
     case 'qr': {
       b.push(...CMD.ALIGN_CENTER);
       b.push(...qrCommand(line.data, line.size ?? 6));
+      // "Print the stored symbol" leaves the position at the end of the symbol rather than at
+      // the start of the next line, so without this feed whatever follows can be drawn tight
+      // against the QR's bottom edge — eating the quiet zone the code needs to be readable.
+      b.push(0x0a);
       b.push(...CMD.ALIGN_LEFT);
       return;
     }
@@ -136,7 +140,13 @@ export function buildEscPosFromLines(lines: ReceiptLine[], columns = 32): Uint8A
   b.push(...CMD.INIT);
   for (const line of lines) renderLine(b, line, columns);
   b.push(...CMD.ALIGN_LEFT);
-  b.push(...CMD.FEED(3));
+  // GS V 0 cuts wherever the paper happens to be, and the blade sits 15-25mm past the head on
+  // the units these slips print on, so the feed before it has to cover that gap or the cut
+  // lands back inside the last thing printed. Three lines is about 12.7mm — under the gap on
+  // every one of them. It went unnoticed while the slip ended in text, where clipping the
+  // final blank line costs nothing; the review QR made it visible, being both the last element
+  // and the one element that stops working when its bottom edge is missing.
+  b.push(...CMD.FEED(5));
   b.push(...CMD.CUT);
   return b.toBytes();
 }
