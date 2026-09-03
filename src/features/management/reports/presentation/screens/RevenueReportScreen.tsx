@@ -48,7 +48,7 @@ export const RevenueReportScreen = () => {
     try {
       const def = {
         title: 'Revenue Report',
-        businessName: settings?.businessName ?? 'PrabandhOS',
+        businessName: settings?.businessName ?? 'Business',
         dateRangeLabel: `${rangeLabel} · ${activeBranchName}`,
         sections: [
           {

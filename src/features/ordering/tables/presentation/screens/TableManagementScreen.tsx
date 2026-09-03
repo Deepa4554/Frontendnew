@@ -431,7 +431,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
     if (!occupiedOrder) return;
     setPrintingBill(true);
     const result = await PrinterService.printReceipt({
-      businessName: settings?.businessName ?? 'PrabandhOS',
+      businessName: settings?.businessName ?? 'Business',
       addressLine: settings?.address?.trim() || undefined,
       orderNumber: occupiedOrder.number,
       time: formatIstReceiptTime(new Date(occupiedOrder.createdAt)),
@@ -610,7 +610,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
       receiptUrl = undefined;
     }
     const url = buildWhatsAppBillUrl({
-      businessName: settings?.businessName ?? 'PrabandhOS',
+      businessName: settings?.businessName ?? 'Business',
       orderNumber: occupiedOrder.number,
       items: occupiedOrder.items,
       subtotal: occupiedOrder.subtotal,
@@ -749,7 +749,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
           ) : (
             <>
               <Icon name="storefront-outline" size={22} color={COLORS.heading} />
-              <Text style={styles.brandTitle} numberOfLines={1}>{settings?.businessName ?? 'PrabandhOS'}</Text>
+              <Text style={styles.brandTitle} numberOfLines={1}>{settings?.businessName ?? 'Business'}</Text>
             </>
           )}
           <GlobalSearchTrigger navigation={navigation} />

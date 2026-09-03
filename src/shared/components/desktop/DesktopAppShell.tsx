@@ -230,7 +230,7 @@ export const DesktopAppShell: React.FC<Props> = ({ children, navigation, activeR
 
   // A cafe name longer than 11 characters (spaces included) is too wide for the sidebar
   // brand slot at full size — drop the brand font to 16 for those so they still fit on one line.
-  const brandName = settings?.businessName ?? 'PrabandhOS';
+  const brandName = settings?.businessName ?? 'Business';
   const brandTitleStyle =
     brandName.length > 11
       ? [styles.brandTitle, { fontSize: 16 }]

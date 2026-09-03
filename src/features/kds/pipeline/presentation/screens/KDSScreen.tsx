@@ -501,7 +501,7 @@ export const KDSScreen = () => {
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <Icon name="chef-hat" size={22} color={COLORS.heading} />
-          <Text style={styles.brandTitle} numberOfLines={1}>{settings?.businessName ?? 'PrabandhOS'}</Text>
+          <Text style={styles.brandTitle} numberOfLines={1}>{settings?.businessName ?? 'Business'}</Text>
           <GlobalSearchTrigger navigation={navigation} style={styles.searchBtn} />
           <View style={styles.clockPill}>
             <Icon name="clock-outline" size={14} color="#FFFFFF" />

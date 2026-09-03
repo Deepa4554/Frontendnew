@@ -167,9 +167,13 @@ export const CafeSettingsScreen = ({ navigation }: any) => {
   };
 
   const saveReceipt = async () => {
+    if (!nameDraft.trim()) {
+      dispatch(showToast({ message: 'Business name cannot be empty.', icon: 'alert-circle-outline', tone: 'danger' }));
+      return;
+    }
     try {
       await updateSettings.mutateAsync({
-        businessName: nameDraft.trim() || 'PrabandhOS',
+        businessName: nameDraft.trim(),
         receiptFooter: footerDraft.trim(),
       });
       dispatch(showToast({ message: 'Receipt customization updated — check your next printed receipt.', icon: 'check-circle', tone: 'success' }));

@@ -181,7 +181,7 @@ export const DashboardScreen = () => {
 
   const buildReportDefinition = (d: NonNullable<typeof data>): ReportDefinition => ({
     title: 'Dashboard',
-    businessName: settings?.businessName ?? 'PrabandhOS',
+    businessName: settings?.businessName ?? 'Business',
     dateRangeLabel: rangeLabel,
     sections: [
       {

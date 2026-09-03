@@ -69,6 +69,10 @@ yarn-error.log
 # webpack web build output
 /dist-web/
 
+# Local state `wrangler dev` writes beside the config — miniflare's cache SQLite and
+# its temp esbuild bundles. Regenerated on every run.
+/.wrangler/
+
 # Firebase config (FCM push notifications) — identifies the Firebase project per-developer/
 # per-environment; each dev drops their own in from the Firebase console rather than committing
 # a shared one.

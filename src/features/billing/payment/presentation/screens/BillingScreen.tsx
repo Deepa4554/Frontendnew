@@ -64,7 +64,7 @@ export const BillingScreen = () => {
   const METHOD_FILTERS: Array<'All' | 'Cash' | 'Card' | 'UPI' | 'Due' | 'Complimentary' | 'Multiple'> = ['All', 'Cash', 'Card', 'UPI', 'Due', 'Complimentary', 'Multiple'];
   const [methodPickerVisible, setMethodPickerVisible] = useState(false);
 
-  const businessName = settings?.businessName ?? 'PrabandhOS';
+  const businessName = settings?.businessName ?? 'Business';
   const businessAddress = settings?.address?.trim() || null;
   const receiptFooter = settings?.receiptFooter ?? 'Thank you for your visit!';
 

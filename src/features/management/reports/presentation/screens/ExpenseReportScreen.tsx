@@ -5,6 +5,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { useExpenseReport } from '../../../../../core/api/hooks/useExpenses';
+import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
@@ -26,6 +27,7 @@ export const ExpenseReportScreen = () => {
   const range = rangeForPreset(preset, customFrom, customTo);
   const rangeLabel = rangeLabelFor(preset, customFrom, customTo);
   const { data, isLoading, isError, refetch } = useExpenseReport({ from: range.from, to: range.to });
+  const { data: settings } = useSettings();
 
   const runExport = async (format: 'pdf' | 'excel') => {
     if (!data) return;
@@ -33,7 +35,7 @@ export const ExpenseReportScreen = () => {
     try {
       const def = {
         title: 'Expense Report',
-        businessName: 'PrabandhOS',
+        businessName: settings?.businessName ?? 'Business',
         dateRangeLabel: rangeLabel,
         sections: [
           {

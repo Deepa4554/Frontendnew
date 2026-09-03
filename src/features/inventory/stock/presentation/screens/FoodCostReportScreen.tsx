@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { useFoodCostReport } from '../../../../../core/api/hooks/useReports';
+import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { SearchClearButton } from '../../../../../shared/components/atoms/SearchClearButton';
@@ -29,6 +30,7 @@ export const FoodCostReportScreen = ({ navigation }: any) => {
   const [search, setSearch] = useState('');
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
   const { data: rows = [], isLoading, isError, refetch } = useFoodCostReport();
+  const { data: settings } = useSettings();
 
   const filtered = rows.filter((r) => r.menuItemName.toLowerCase().includes(search.toLowerCase()));
 
@@ -37,7 +39,7 @@ export const FoodCostReportScreen = ({ navigation }: any) => {
     try {
       const def = {
         title: 'Food Cost Report',
-        businessName: 'PrabandhOS',
+        businessName: settings?.businessName ?? 'Business',
         dateRangeLabel: 'Current menu prices & recipe costs',
         sections: [{
           title: 'Food cost by item',

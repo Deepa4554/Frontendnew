@@ -74,7 +74,7 @@ async function printTiffinBill(
   r: { orderNumber: string; name: string; planName: string; periodStart: string; periodEnd: string; deliveredDays: number; totalQty: number; rate: number; total: number },
 ) {
   return PrinterService.printReceipt({
-    businessName: settings?.businessName ?? 'PrabandhOS',
+    businessName: settings?.businessName ?? 'Business',
     addressLine: settings?.address?.trim() || undefined,
     orderNumber: r.orderNumber,
     time: formatIstReceiptTime(new Date()),

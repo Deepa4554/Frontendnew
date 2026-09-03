@@ -1,11 +1,16 @@
 name = "frontendnew"
-compatibility_date = "2024-09-23"
+main = "worker.js"
+# Kept at or below what the pinned wrangler's bundled runtime supports, so
+# `wrangler dev` actually starts and this config can be verified locally rather
+# than only on a deploy. Nothing this Worker does differs across nearby dates.
+compatibility_date = "2026-06-18"
 
 [assets]
 directory = "./dist-web"
-# The SPA fallback: serves index.html for any path that isn't a built asset, so
-# hitting /dashboard or /login directly reaches React Navigation instead of 404ing
-# at the edge. This is the whole mechanism — do NOT also ship a Pages-style
-# _redirects file with `/* /index.html 200`: the Workers API rejects that rule
-# outright as an infinite loop and fails the deploy.
-not_found_handling = "single-page-application"
+# The binding is what lets worker.js reach the assets itself, which it has to do:
+# it proxies /api/* and /hubs/* to the backend and serves everything else from here.
+binding = "ASSETS"
+# Deliberately NOT not_found_handling = "single-page-application". That fallback
+# fires for any unmatched path, /api/* included, so GET /api/settings would answer
+# with index.html at status 200 instead of reaching the backend. worker.js does the
+# same fallback, but only after the API routes have been peeled off.

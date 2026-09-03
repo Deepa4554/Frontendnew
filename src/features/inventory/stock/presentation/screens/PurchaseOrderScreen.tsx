@@ -292,7 +292,7 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
           const isCancelled = po.status === 'CANCELLED';
           const waUrl = isOrdered && po.vendorPhone
             ? buildWhatsAppPurchaseOrderUrl({
-                businessName: settings?.businessName ?? 'PrabandhOS',
+                businessName: settings?.businessName ?? 'Business',
                 poId: po.id,
                 vendorName: po.supplierName || 'Vendor',
                 vendorPhone: po.vendorPhone,

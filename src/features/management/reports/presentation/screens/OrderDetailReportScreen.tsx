@@ -72,7 +72,7 @@ export const OrderDetailReportScreen = () => {
     try {
       const def = {
         title: 'Order Detail Report',
-        businessName: settings?.businessName ?? 'PrabandhOS',
+        businessName: settings?.businessName ?? 'Business',
         dateRangeLabel: `${rangeLabel} · ${activeBranchName}${orderType ? ` · ${orderType}` : ''}`,
         sections: [
           {

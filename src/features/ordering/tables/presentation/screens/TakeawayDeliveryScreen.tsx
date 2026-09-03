@@ -188,7 +188,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
     if (!order) return;
     setPrintingBill(true);
     const result = await PrinterService.printReceipt({
-      businessName: settings?.businessName ?? 'PrabandhOS',
+      businessName: settings?.businessName ?? 'Business',
       addressLine: settings?.address?.trim() || undefined,
       orderNumber: order.number,
       time: formatIstReceiptTime(new Date(order.createdAt)),
@@ -263,7 +263,7 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
       receiptUrl = undefined;
     }
     const url = buildWhatsAppBillUrl({
-      businessName: settings?.businessName ?? 'PrabandhOS',
+      businessName: settings?.businessName ?? 'Business',
       orderNumber: order.number,
       items: order.items,
       subtotal: order.subtotal,

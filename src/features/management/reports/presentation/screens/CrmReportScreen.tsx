@@ -49,7 +49,7 @@ export const CrmReportScreen = () => {
     try {
       const def = {
         title: 'Customer (CRM) Report',
-        businessName: settings?.businessName ?? 'PrabandhOS',
+        businessName: settings?.businessName ?? 'Business',
         dateRangeLabel: `${rangeLabel} · ${activeBranchName}`,
         sections: [
           {

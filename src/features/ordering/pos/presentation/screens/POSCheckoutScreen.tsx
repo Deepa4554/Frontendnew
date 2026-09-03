@@ -690,7 +690,7 @@ export const POSCheckoutScreen = () => {
   }, [pendingOrderType, dispatch]);
   const { data: settings } = useSettings();
   const taxRatePct = settings?.taxRatePct ?? 8;
-  const businessName = settings?.businessName ?? 'PrabandhOS';
+  const businessName = settings?.businessName ?? 'Business';
   const businessAddress = settings?.address?.trim() || null;
   const receiptFooter = settings?.receiptFooter ?? 'Thank you for your visit!';
   // Owner-configurable (Settings → Order Types) — while settings haven't loaded yet,
@@ -3272,7 +3272,7 @@ export const POSCheckoutScreen = () => {
       {!isDesktopWeb && (
         <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
           <Text style={styles.brandTitle} numberOfLines={1}>
-            {settings?.businessName ?? 'PrabandhOS'}
+            {settings?.businessName ?? 'Business'}
           </Text>
           <GlobalSearchTrigger navigation={navigation} />
         </View>

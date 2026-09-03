@@ -223,7 +223,7 @@ export const PrinterSettingsScreen = ({ navigation, route }: any) => {
     persistConfig(draftConfig);
 
     setTesting(true);
-    const result = await PrinterService.printReceipt(SAMPLE_RECEIPT(settings?.businessName ?? 'PrabandhOS', settings?.taxRatePct ?? 8), draftConfig);
+    const result = await PrinterService.printReceipt(SAMPLE_RECEIPT(settings?.businessName ?? 'Business', settings?.taxRatePct ?? 8), draftConfig);
     setTesting(false);
     dispatch(showToast({ message: result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'danger' }));
   };

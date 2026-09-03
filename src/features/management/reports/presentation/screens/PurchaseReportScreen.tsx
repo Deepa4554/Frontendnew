@@ -5,6 +5,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { usePurchaseOrders } from '../../../../../core/api/hooks/useInventory';
+import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { showToast } from '../../../../../core/store/uiSlice';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
@@ -30,6 +31,7 @@ export const PurchaseReportScreen = () => {
   const range = rangeForPreset(preset, customFrom, customTo);
   const rangeLabel = rangeLabelFor(preset, customFrom, customTo);
   const { data: orders = [], isLoading, isError, refetch } = usePurchaseOrders({ from: range.from, to: range.to });
+  const { data: settings } = useSettings();
 
   const totalValue = orders.reduce((sum, o) => sum + orderValue(o), 0);
 
@@ -38,7 +40,7 @@ export const PurchaseReportScreen = () => {
     try {
       const def = {
         title: 'Purchase Report',
-        businessName: 'PrabandhOS',
+        businessName: settings?.businessName ?? 'Business',
         dateRangeLabel: rangeLabel,
         sections: [{
           title: 'Purchase orders',
