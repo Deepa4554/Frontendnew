@@ -73,6 +73,16 @@ const MODE_FILTER_ICON: Record<string, string> = {
   [UNSET_PAYMENT_MODE]: 'help-circle-outline',
 };
 
+const DATE_FILTERS = ['all', 'today', 'yesterday', 'week', 'month'] as const;
+type DateFilterKey = (typeof DATE_FILTERS)[number];
+const DATE_FILTER_LABEL: Record<DateFilterKey, string> = {
+  all: 'All Time', today: 'Today', yesterday: 'Yesterday', week: 'This Week', month: 'This Month',
+};
+const DATE_FILTER_ICON: Record<DateFilterKey, string> = {
+  all: 'calendar-blank', today: 'calendar-today', yesterday: 'calendar-arrow-left',
+  week: 'calendar-week', month: 'calendar-month',
+};
+
 export const CafeExpensesScreen = () => {
   const { isDesktopWeb } = useResponsive();
   const COLORS = useThemeColors();
@@ -93,6 +103,8 @@ export const CafeExpensesScreen = () => {
 
   // Which payment mode the history list below is narrowed to; ALL_MODES = no filter.
   const [modeFilter, setModeFilter] = useState<string>(ALL_MODES);
+  // Which day/range the history list is narrowed to; 'all' = no filter.
+  const [dateFilter, setDateFilter] = useState<DateFilterKey>('all');
 
   // ---------- Daily purchase list ----------
   // Daily opens first on purpose: filling the day's sheet is the recurring job, while the
@@ -234,7 +246,22 @@ export const CafeExpensesScreen = () => {
     return chips;
   }, [data?.recent, modeFilter]);
 
-  const visibleExpenses = (data?.recent ?? []).filter((e) => modeFilter === ALL_MODES || modeOf(e) === modeFilter);
+  // spentAt is a UTC instant; every comparison below happens on its IST calendar date so
+  // "Today" matches what the till clock (and todayIst()) call today, not a UTC day that can
+  // still be yesterday evening in IST.
+  const matchesDateFilter = (spentAt: string, filter: DateFilterKey) => {
+    if (filter === 'all') return true;
+    const spentIst = new Date(new Date(spentAt).getTime() + 330 * 60 * 1000).toISOString().slice(0, 10);
+    const today = todayIst();
+    if (filter === 'today') return spentIst === today;
+    if (filter === 'yesterday') return spentIst === shiftDay(today, -1);
+    if (filter === 'week') return spentIst >= shiftDay(today, -6) && spentIst <= today;
+    return spentIst.slice(0, 7) === today.slice(0, 7); // month
+  };
+
+  const visibleExpenses = (data?.recent ?? [])
+    .filter((e) => modeFilter === ALL_MODES || modeOf(e) === modeFilter)
+    .filter((e) => matchesDateFilter(e.spentAt, dateFilter));
   // All-time for the picked mode, not this month's — it's the total of exactly what's listed
   // underneath, so the two can't disagree.
   const visibleTotal = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
@@ -461,6 +488,7 @@ export const CafeExpensesScreen = () => {
         <View style={styles.listHeaderRow}>
           <Text style={[styles.sectionTitle, styles.listHeaderTitle]}>
             {modeFilter === ALL_MODES ? 'ALL EXPENSES' : `${modeFilter.toUpperCase()} EXPENSES`}
+            {dateFilter !== 'all' ? ` · ${DATE_FILTER_LABEL[dateFilter].toUpperCase()}` : ''}
           </Text>
           {!isLoading && visibleExpenses.length > 0 && (
             <Text style={styles.listHeaderTotal}>{money(visibleTotal)}</Text>
@@ -482,10 +510,30 @@ export const CafeExpensesScreen = () => {
           </View>
         )}
 
+        {!isLoading && (data?.recent.length ?? 0) > 0 && (
+          <View style={styles.modeFilterRow}>
+            {DATE_FILTERS.map((f) => (
+              <TouchableOpacity
+                key={f}
+                style={[styles.paymentModePill, styles.modeFilterPill, dateFilter === f && styles.paymentModePillActive]}
+                onPress={() => setDateFilter(f)}
+              >
+                <Icon name={DATE_FILTER_ICON[f]} size={13} color={dateFilter === f ? '#FFFFFF' : COLORS.muted} />
+                <Text style={[styles.paymentModePillText, dateFilter === f && styles.paymentModePillTextActive]}>{DATE_FILTER_LABEL[f]}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
+
         {isLoading && <SkeletonList rows={6} />}
         {!isLoading && (data?.recent.length ?? 0) === 0 && <Text style={styles.emptyText}>No expenses logged yet.</Text>}
         {!isLoading && (data?.recent.length ?? 0) > 0 && visibleExpenses.length === 0 && (
-          <Text style={styles.emptyText}>Nothing paid by {modeFilter} yet.</Text>
+          <Text style={styles.emptyText}>
+            {modeFilter === ALL_MODES && dateFilter === 'all' ? 'No expenses match.'
+              : modeFilter === ALL_MODES ? `Nothing logged ${DATE_FILTER_LABEL[dateFilter].toLowerCase()}.`
+              : dateFilter === 'all' ? `Nothing paid by ${modeFilter} yet.`
+              : `Nothing paid by ${modeFilter} ${DATE_FILTER_LABEL[dateFilter].toLowerCase()}.`}
+          </Text>
         )}
 
         {visibleExpenses.map((e) => (
