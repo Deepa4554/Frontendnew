@@ -885,10 +885,10 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   },
   // Drops the equal-width flex the form pills use: there can be six of these, and splitting a
   // phone's width six ways clips "Not set". Sized to content and wrapped instead.
-  // `flex: 0` (not just flexGrow/Shrink 0) would also zero out flexBasis, collapsing the pill
-  // to its padding and letting the icon/text spill onto the next chip — so those are set
-  // individually here, leaving flexBasis at its default 'auto'.
-  modeFilterPill: { flexGrow: 0, flexShrink: 0, paddingHorizontal: 10, paddingVertical: 6 },
+  // The base paymentModePill sets `flex: 1`, which already collapses flexBasis to 0% — so
+  // flexGrow/flexShrink alone aren't enough here; flexBasis must be reset to 'auto' explicitly
+  // or these pills render near-zero width with their icon/text overlapping the next chip.
+  modeFilterPill: { flexGrow: 0, flexShrink: 0, flexBasis: 'auto', paddingHorizontal: 10, paddingVertical: 6 },
   listHeaderRow: { flexDirection: 'row', alignItems: 'center' },
   listHeaderTitle: { flex: 1 },
   listHeaderTotal: {

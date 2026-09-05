@@ -11,8 +11,9 @@ import { getApiErrorMessage } from '../../../core/network/api';
 import { canApplyBillDiscount, canMarkComplimentary } from '../../../core/auth/permissions';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
 import { LoadingOverlay } from '../atoms/LoadingOverlay';
-import { useApplyBillDiscount, useBillCoupon, useBillGiftCard, useBillCharges, useBillLoyalty, useCloseOrder, useUpdateOrderGuest, useServeAll, useFireOrder, useRemoveOrderItem } from '../../../core/api/hooks/useOrders';
+import { useApplyBillDiscount, useBillCoupon, useBillGiftCard, useBillCharges, useBillLoyalty, useBillMilestone, useCloseOrder, useUpdateOrderGuest, useServeAll, useFireOrder, useRemoveOrderItem } from '../../../core/api/hooks/useOrders';
 import { useSettings } from '../../../core/api/hooks/useSettings';
+import { useLoyaltyMilestones } from '../../../core/api/hooks/useLoyaltyMilestones';
 import { useKhata } from '../../../core/api/hooks/useKhatabook';
 import { PaymentMethodPicker, PaymentMethodPickerResult, PaymentMethod, PaymentSplit } from './PaymentMethodPicker';
 import { BillAdjustmentsPanel, AdjustmentTile, AdjustmentApplyValue } from './BillAdjustmentsPanel';
@@ -25,7 +26,7 @@ import { Tooltip } from '../atoms/Tooltip';
 // — PaymentMethodPicker is the canonical source now, this file just settles with what it reports.
 export type { PaymentMethod, PaymentSplit };
 
-type AdjustmentKey = 'discount' | 'coupon' | 'giftcard' | 'loyalty' | 'service' | 'packing' | 'delivery' | 'tip';
+type AdjustmentKey = 'discount' | 'coupon' | 'giftcard' | 'loyalty' | 'milestone' | 'service' | 'packing' | 'delivery' | 'tip';
 
 interface Props {
   order: ApiOrder;
@@ -63,7 +64,12 @@ interface Props {
    *  `complimentaryReason` carries the reason typed into the payment picker when the settle
    *  includes a Complimentary leg — the caller must pass it through to ordersApi.pay's
    *  PayOptions.complimentaryReason, which the server rejects the settle without. Undefined for
-   *  every ordinary settle. */
+   *  every ordinary settle.
+   *  `serveAll` is willServeOnSettle at the moment Settle was tapped ("Mark items as Served on
+   *  Settlement" ticked and this bill actually has unserved fired lines) — the caller must pass
+   *  it through to ordersApi.pay's PayOptions.serveAll so the server folds the serve-all
+   *  transition into the same Pay call instead of this component making its own separate
+   *  ServeAll request first. Always false/undefined when offerServeOnSettle wasn't passed. */
   onMarkPaid: (
     payments: PaymentSplit[],
     allowPartial?: boolean,
@@ -72,6 +78,7 @@ interface Props {
     guest?: { name: string; phone: string },
     unfiredItems?: 'keep',
     complimentaryReason?: string,
+    serveAll?: boolean,
   ) => void;
   /** `taxSuppressed` is true when the tenders ticked right now mean this bill settles without
    *  tax (see PaymentModeTax). The caller must then print `tax: 0` and `total: order.taxFreeTotal`
@@ -155,11 +162,13 @@ export const OrderBillActions: React.FC<Props> = ({
   const billGiftCard = useBillGiftCard();
   const billCharges = useBillCharges();
   const billLoyalty = useBillLoyalty();
+  const billMilestone = useBillMilestone();
+  const { data: loyaltyMilestones } = useLoyaltyMilestones();
   const closeOrder = useCloseOrder();
   const serveAll = useServeAll();
   const fireOrder = useFireOrder();
   const removeOrderItem = useRemoveOrderItem();
-  const adjustmentPending = applyBillDiscount.isPending || billCoupon.isPending || billGiftCard.isPending || billCharges.isPending || billLoyalty.isPending;
+  const adjustmentPending = applyBillDiscount.isPending || billCoupon.isPending || billGiftCard.isPending || billCharges.isPending || billLoyalty.isPending || billMilestone.isPending;
   // Only the three charge switches. billCharges.isPending is shared with the pencil-edit
   // path, which already renders its own spinner inside BillAdjustmentsPanel — gating the
   // overlay on this instead keeps a single loader per action.
@@ -232,6 +241,15 @@ export const OrderBillActions: React.FC<Props> = ({
   const amountPaid = order.amountPaid ?? 0;
   const partiallyPaid = order.partiallyPaid ?? false;
   const customerAvailablePoints = order.customerAvailablePoints ?? null;
+  // Highest active, not-yet-claimed milestone this order's customer has reached — a display
+  // hint only (ApplyBillMilestone re-derives eligibility itself against the live DB row), so
+  // a stale/racing milestone list here just means the tile briefly over- or under-shows,
+  // never a wrong discount actually being applied.
+  const eligibleMilestone = order.customerTotalPoints != null
+    ? (loyaltyMilestones ?? [])
+        .filter((m) => m.isActive && m.thresholdPoints <= order.customerTotalPoints! && m.thresholdPoints > (order.customerMilestoneClaimedThreshold ?? 0))
+        .sort((a, b) => b.thresholdPoints - a.thresholdPoints)[0] ?? null
+    : null;
   // What's actually left to collect — order.total once nothing's been paid yet, but the
   // real remaining balance once a partial payment already chipped away at it. Every
   // "settle" calculation below targets this, not order.total.
@@ -320,9 +338,12 @@ export const OrderBillActions: React.FC<Props> = ({
   const packingChargeOn = chargeOverride.packing ?? packingChargeAmount > 0;
   const deliveryChargeOn = chargeOverride.delivery ?? deliveryChargeAmount > 0;
 
-  // Runs before the money is taken, and a failure here aborts the settle: a bill that's been
-  // paid while its lines silently stayed unserved is the worse of the two half-states, and
-  // payment is much the harder step to walk back. The backend treats serve progress and
+  // Used by runClose below only — a real settle (runSettle) folds this into the Pay call
+  // itself now (see PayOptions.serveAll) instead of making this its own round trip first.
+  // Close is a different endpoint with no equivalent flag, so it still needs this: run before
+  // the money is treated as collected, and a failure here aborts the close — a bill that's
+  // been closed while its lines silently stayed unserved is the worse of the two half-states,
+  // and closing is much the harder step to walk back. The backend treats serve progress and
   // payment as independent (see OrdersController.ServeAll), so the sequencing is purely
   // about which failure the cashier is left holding.
   const serveAllForSettle = async () => {
@@ -349,9 +370,11 @@ export const OrderBillActions: React.FC<Props> = ({
   };
 
   // The settle itself, once the unfired-items question (if there was one) has been answered.
+  // No separate ServeAll round trip in front of this any more — willServeOnSettle rides along
+  // on the Pay call itself (see onMarkPaid's `serveAll` and PayOptions.serveAll), which is what
+  // used to cost every settle-with-the-tick-on an extra full request before the money moved.
   const runSettle = async (andThen?: 'print' | 'whatsapp', phoneOverride?: string, unfiredChoice?: 'keep') => {
     if (paymentResult.splits.length === 0) return;
-    if (!(await serveAllForSettle())) return;
     // Only forwarded when there's actually credit in play — see onMarkPaid's `guest`. The
     // picker won't report canSettle for a Due leg without both fields, so by here they're real.
     const guest = paymentResult.dueAmount > 0
@@ -360,7 +383,7 @@ export const OrderBillActions: React.FC<Props> = ({
     // Only forwarded when there's actually a write-off in play — the picker won't report
     // canSettle for a Complimentary leg without a reason, so by here it's real.
     const complimentaryReason = paymentResult.compAmount > 0 ? paymentResult.complimentaryReason : undefined;
-    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride, guest, unfiredChoice, complimentaryReason);
+    onMarkPaid(paymentResult.splits, paymentResult.isPartial, andThen, phoneOverride, guest, unfiredChoice, complimentaryReason, willServeOnSettle);
   };
 
   // Which action the unfired-items prompt is standing in front of, so it can be resumed with the
@@ -531,6 +554,9 @@ export const OrderBillActions: React.FC<Props> = ({
         case 'loyalty':
           await billLoyalty.mutateAsync({ id: order.id, points: value.amount! });
           break;
+        case 'milestone':
+          await billMilestone.mutateAsync({ id: order.id });
+          break;
       }
       setOpenAdjustment(null);
     } catch (err) {
@@ -596,13 +622,27 @@ export const OrderBillActions: React.FC<Props> = ({
 
   const tiles: AdjustmentTile[] = [
     { key: 'discount', label: 'Discount', icon: 'tag-outline', amount: order.billDiscountAmount, hidden: !canApplyBillDiscount(role), applied: order.billDiscountAmount > 0, kind: 'percentOrFlat', removable: true },
-    { key: 'coupon', label: order.couponCode ?? 'Coupon', icon: 'ticket-percent-outline', amount: order.couponDiscountAmount, hidden: !!order.couponCode, applied: !!order.couponCode, kind: 'text' },
-    { key: 'giftcard', label: 'Gift Card', icon: 'wallet-giftcard', amount: order.giftCardAmountApplied, hidden: !!order.giftCardCode, applied: !!order.giftCardCode, kind: 'text' },
+    // Same guestPhone gate as Loyalty Points below — a customer-issued coupon/gift card is
+    // matched back to its owner by phone (see IssueCoupon/IssueGiftCard on the backend), so
+    // there's nothing for a phone-less walk-in to redeem.
+    { key: 'coupon', label: order.couponCode ?? 'Coupon', icon: 'ticket-percent-outline', amount: order.couponDiscountAmount, hidden: !order.guestPhone || !!order.couponCode, applied: !!order.couponCode, kind: 'text' },
+    { key: 'giftcard', label: 'Gift Card', icon: 'wallet-giftcard', amount: order.giftCardAmountApplied, hidden: !order.guestPhone || !!order.giftCardCode, applied: !!order.giftCardCode, kind: 'text' },
     {
       key: 'loyalty', label: 'Loyalty Points', icon: 'star-circle-outline', amount: loyaltyDiscountAmount,
       hidden: !order.guestPhone || loyaltyPointsRedeemed > 0, applied: loyaltyPointsRedeemed > 0, kind: 'points',
       hint: `${customerAvailablePoints ?? 0} pts available · redeems 1 pt = ₹1, capped at what's owed`,
       quickFill: maxLoyaltyPoints > 0 ? { label: 'Max', value: String(Math.max(0, maxLoyaltyPoints)) } : undefined,
+    },
+    // No code to type and no amount to pick — eligibility is entirely the customer's own
+    // lifetime points crossing a threshold an Owner configured (Points screen), so tapping
+    // this tile applies it directly via quickToggleValue rather than opening an editor.
+    // Backend re-derives eligibility itself at apply time; this tile just decides whether
+    // there's anything to tap.
+    {
+      key: 'milestone', label: eligibleMilestone ? `Milestone ${eligibleMilestone.discountPct}% Off` : 'Milestone Reward',
+      icon: 'trophy-outline', amount: order.milestoneDiscountAmount,
+      hidden: !order.guestPhone || !eligibleMilestone || !!order.milestoneThresholdApplied,
+      applied: !!order.milestoneThresholdApplied, kind: 'flat', quickToggleValue: {},
     },
     // Service/Packing/Delivery no longer show as grid tiles (hidden: true) — Bill Summary's
     // own Switch rows below are now the primary on/off control for these three. They stay

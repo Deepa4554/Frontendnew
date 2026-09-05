@@ -102,12 +102,16 @@ export interface ApiSettings {
   deliveryChargeAutoApplyTakeaway: boolean;
   deliveryChargeAutoApplyDelivery: boolean;
   deliveryChargeAutoApplyToken: boolean;
+  /** Percentage of a bill that comes back as loyalty points, 0-100. A point redeems for ₹1,
+   * so this reads as the cashback rate: 5 means a ₹1000 bill earns 50 points worth ₹50. */
+  loyaltyEarnPct: number;
 }
 
 export type UpdateSettingsRequest = Partial<
   Pick<
     ApiSettings,
     | 'taxRatePct'
+    | 'loyaltyEarnPct'
     | 'currency'
     | 'region'
     | 'businessName'

@@ -73,6 +73,7 @@ export const queryKeys = {
   integrations: ['integrations'] as const,
   whatsAppStatus: ['whatsapp', 'status'] as const,
   rewards: ['rewards'] as const,
+  loyaltyMilestones: ['loyaltyMilestones'] as const,
   offers: ['offers'] as const,
   dashboard: (range: unknown) => ['dashboard', range] as const,
   salesForecast: (forecastDays: number) => ['dashboard', 'forecast', forecastDays] as const,

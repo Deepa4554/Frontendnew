@@ -144,12 +144,16 @@ export const useServeItem = () => {
   });
 };
 
-// QSR token flow: "Mark All as Served" in one tap (see ordersApi.serveAll).
+// QSR token flow: "Mark All as Served" in one tap (see ordersApi.serveAll). The response IS
+// the whole updated order (only serve-progress fields moved, no inventory/customer side
+// effect — see OrdersController.ServeAll), so this takes the same fast path as
+// useRemoveOrderItem/useApplyBillDiscount below instead of refetching the ~6s active-orders
+// list for a change the response already carried.
 export const useServeAll = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id }: { id: number }) => ordersApi.serveAll(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: ['orders'] }),
+    onSuccess: (updated) => commitOrderResult(qc, updated),
   });
 };
 
@@ -175,20 +179,34 @@ export const usePayOrder = () => {
   return useMutation({
     mutationFn: ({ id, paymentMethod, splits, ...opts }: { id: number; paymentMethod?: string; splits?: PaymentSplit[] } & PayOptions) =>
       ordersApi.pay(id, paymentMethod, splits, opts),
-    // onSettled, not onSuccess: same reasoning as useConfirmGuestOrder — a failed pay is
-    // usually "Order is already paid" (OrdersController's row-locked guard) because someone
-    // else settled it on another device, so the failure is precisely when this screen's copy
-    // is known to be stale and most needs refetching. Without this the open order modal sits
-    // on the pre-payment state until useOrder's 30s tick happens to come round.
-    onSettled: () => {
-      qc.invalidateQueries({ queryKey: ['orders'] });
-      qc.invalidateQueries({ queryKey: queryKeys.tables });
+    // A successful settle's response IS the whole updated order (same shape useRemoveOrderItem/
+    // useApplyBillDiscount already take the fast path on), so this patches caches with it
+    // instead of refetching the ~6s active-orders list for data the response just handed over
+    // — that refetch used to run up to three times per settle (this, the folded-in ServeAll
+    // that used to be its own call, and the realtime push's own invalidate).
+    onSuccess: (result) => {
+      // A Complimentary write-off above the Manager threshold comes back as a pending-approval
+      // stub, not an order — nothing applied yet, so there's no fresh order to patch caches
+      // with (same fallback useApplyBillDiscount takes for its own threshold case below).
+      if ('pendingApproval' in result) return;
+      commitOrderResult(qc, result);
       // A settle carrying a 'Due' tender opens/adds to a customer's khata, and the same call
       // can move their CRM record (see OrdersController.AttachCustomerAsync). Invalidated
       // unconditionally rather than only for credit settles — this fires once per bill, and
-      // the alternative is threading "was any of that on credit" back out of the mutation.
+      // the alternative is threading "was any of that on credit" back out of the mutation. No
+      // response data to patch either of these with, so they stay a real (but much smaller
+      // than the orders list) invalidate.
       qc.invalidateQueries({ queryKey: ['khatabook'] });
       qc.invalidateQueries({ queryKey: ['customers'] });
+    },
+    // A FAILED pay is usually "Order is already paid" (OrdersController's row-locked guard)
+    // because someone else settled it on another device — the one case where there's no fresh
+    // order in the response to patch with, and this screen's own copy is known to be stale.
+    // Full refetch here, same as before this change, is what pulls the stale card out of
+    // whatever list (or open modal) is still showing it as unpaid.
+    onError: () => {
+      qc.invalidateQueries({ queryKey: ['orders'] });
+      qc.invalidateQueries({ queryKey: queryKeys.tables });
     },
   });
 };
@@ -223,23 +241,39 @@ export const useCloseOrder = () => {
   });
 };
 
-// Fire (dispatch unfired items to kitchen), add/remove item, and billing-time
-// discount/coupon/gift card all change what Tables/KDS/Billing show — invalidate
-// the same graph usePayOrder does.
+// Fire is the single point stock comes off the shelf (see OrderBuildingService.
+// FireUnfiredItemsAsync) — that's the one part of invalidateOrderGraph's old blanket
+// invalidation still worth keeping here. Customers is dropped: firing touches no
+// customer/loyalty data (that happens at order creation, not fire). The response IS the
+// whole updated order, same fast path as useRemoveOrderItem below, which is the actual
+// win — this used to refetch the ~6s active-orders list on every single KOT.
+//
+// Whatever list is meant to show this order already gets it from useCreateOrder's own
+// (unchanged) invalidateOrderGraph on the fresh-create-then-fire path, or was already
+// showing it going into a resume/append fire — either way the row exists in cache by the
+// time this patch runs, or that other invalidate is already in flight to bring it in.
 export const useFireOrder = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => ordersApi.fire(id),
-    onSuccess: () => invalidateOrderGraph(qc),
+    onSuccess: (updated) => {
+      commitOrderResult(qc, updated);
+      qc.invalidateQueries({ queryKey: ['inventory'] });
+    },
   });
 };
 
+// Adding a line to an existing, not-yet-paid order deducts no stock and touches no customer
+// record (see OrdersController.AddItem — inventory only moves once the new line is FIRED,
+// its own separate call). The response IS the whole updated order, so this is the same fast
+// path useUpdateOrderItemQty/useRemoveOrderItem already take instead of refetching the whole
+// active-orders list for a change the response already carried.
 export const useAddOrderItem = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, menuItemId, qty, modifier, variantId, modifierOptionIds, openPrice }: { id: number; menuItemId: number; qty: number; modifier?: string; variantId?: number; modifierOptionIds?: number[]; openPrice?: number }) =>
       ordersApi.addItem(id, { menuItemId, qty, modifier, variantId, modifierOptionIds, openPrice }),
-    onSuccess: () => invalidateOrderGraph(qc),
+    onSuccess: (updated) => commitOrderResult(qc, updated),
   });
 };
 
@@ -410,6 +444,18 @@ export const useBillLoyalty = () => {
     onSuccess: (updated) => {
       commitOrderResult(qc, updated);
       // Redeeming points draws down the customer's balance — refresh their CRM record.
+      qc.invalidateQueries({ queryKey: ['customers'] });
+    },
+  });
+};
+
+export const useBillMilestone = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: number }) => ordersApi.billMilestone(id),
+    onSuccess: (updated) => {
+      commitOrderResult(qc, updated);
+      // Claiming a milestone advances the customer's claimed high-water mark — refresh their CRM record.
       qc.invalidateQueries({ queryKey: ['customers'] });
     },
   });

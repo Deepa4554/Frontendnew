@@ -13,6 +13,7 @@ import { pickAndParseCsv, normalizeMenuCsvRows } from '../../../../core/utils/cs
 import { pickImageAsDataUri } from '../../../../core/utils/imagePicker';
 import { extractMenuItemsFromPhoto } from '../../../../core/utils/menuPhotoImport';
 import { useResponsive } from '../../../../core/utils/useResponsive';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 
 // A real predefined starter menu — not AI-generated, just a sensible default spread
 // across the app's standard categories so a brand-new cafe isn't starting from zero.
@@ -335,7 +336,10 @@ export const OnboardingMenuScreen = ({ navigation }: any) => {
       <Modal visible={!!editingRow} transparent animationType="fade" onRequestClose={() => setEditingRow(null)}>
         <View style={styles.editModalOverlay}>
           <View style={styles.editModalCard}>
-            <Text style={styles.editModalTitle}>Edit Item</Text>
+            <View style={styles.editModalHeaderRow}>
+              <Text style={[styles.editModalTitle, { flex: 1, minWidth: 0, marginBottom: 0 }]}>Edit Item</Text>
+              <CloseButton onPress={() => setEditingRow(null)} size={22} />
+            </View>
             <TextInput
               style={styles.editModalInput}
               placeholder="Name"
@@ -498,6 +502,8 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   editModalTitle: { fontSize: 15, fontWeight: '700', color: COLORS.heading, marginBottom: 10 },
+  // Carries the title's bottom margin now that the title itself sits in a row with the X.
+  editModalHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 10 },
   editModalInput: {
     borderWidth: 1,
     borderColor: COLORS.divider,

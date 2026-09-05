@@ -4,6 +4,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { RADIUS, INPUT_BORDER_WIDTH } from '../../design/commonStyles';
 import { CustomerLookupBadge } from './CustomerLookupBadge';
+import { CloseButton } from '../atoms/CloseButton';
 
 // See OrderBillActions' webNoOutline — same reason, the browser's own focus ring on a
 // react-native-web TouchableOpacity reads as a stray outline around the whole control.
@@ -71,7 +72,10 @@ export const GuestPhonePrompt: React.FC<Props> = ({ visible, initialPhone, onSub
         <View style={styles.card}>
           <View style={styles.head}>
             <Icon name="whatsapp" size={20} color={COLORS.accent} />
-            <Text style={styles.title}>Guest Mobile Number</Text>
+            <Text style={[styles.title, { flex: 1, minWidth: 0 }]}>Guest Mobile Number</Text>
+            {/* Same thing Cancel does — the X is just the one a cashier reaches for
+                without reading the button row first. */}
+            <CloseButton onPress={onCancel} size={22} />
           </View>
           <Text style={styles.hint}>{hint ?? 'Needed to send the bill on WhatsApp.'}</Text>
 

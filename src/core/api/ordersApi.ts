@@ -169,6 +169,11 @@ export interface PayOptions {
    *  total on screen: `fire` to send them to the kitchen, `removeItem` to take them off. Either
    *  leaves nothing unfired, and the settle then needs nothing here. Omit on the ordinary bill. */
   unfiredItems?: 'keep';
+  /** Folds a ServeAll (see useServeAll) into this same call/transaction — "Mark items as
+   *  Served on Settlement" on the settle sheet sets this instead of the caller making its own
+   *  separate ServeAll round trip and awaiting it before Pay. False/omitted leaves every
+   *  line's serve progress untouched, exactly as a Pay call always has without this flag. */
+  serveAll?: boolean;
 }
 
 export interface ApiOrder {
@@ -209,6 +214,10 @@ export interface ApiOrder {
    * loyaltyPointsRedeemed. */
   loyaltyDiscountAmount: number;
   loyaltyPointsRedeemed: number;
+  /** Discount from a LoyaltyMilestone claimed at billing time. Paired with
+   * milestoneThresholdApplied. */
+  milestoneDiscountAmount: number;
+  milestoneThresholdApplied: number | null;
   /** Billing-time charges — added on top of tax, not themselves taxed. */
   serviceChargeAmount: number;
   packingChargeAmount: number;
@@ -274,6 +283,11 @@ export interface ApiOrder {
    * payment picker prices its tenders against before one is picked. Equal to `total` whenever
    * no tax is in play, so ignoring it is always safe. */
   taxFreeTotal: number;
+  /** Lifetime points and the highest LoyaltyMilestone threshold already claimed — same
+   * `get(id)`-only, guestPhone-gated caveat as customerAvailablePoints above. Compare against
+   * GET /loyalty-milestones to decide whether the Milestone Reward tile has anything to offer. */
+  customerTotalPoints: number | null;
+  customerMilestoneClaimedThreshold: number | null;
   /** Highest fire-round so far. An item with fireBatch === this is in the newest batch. */
   currentFireBatch: number;
   /** Staff-Confirm Mode: true while a guest QR order's first submission is sitting unfired
@@ -424,6 +438,11 @@ export const ordersApi = {
    * ₹1) — only meaningful once guestPhone is set (see ApiOrder.customerAvailablePoints). */
   billLoyalty: (id: number, points: number) =>
     apiClient.patch<ApiOrder>(`/orders/${id}/bill-loyalty`, { points }).then((r) => r.data),
+  /** Claims the highest not-yet-claimed LoyaltyMilestone the order's customer has reached
+   * (lifetime points, see ApiOrder.customerTotalPoints/customerMilestoneClaimedThreshold) as a
+   * bill-time percentage discount — only meaningful once guestPhone is set, same as billLoyalty. */
+  billMilestone: (id: number) =>
+    apiClient.patch<ApiOrder>(`/orders/${id}/bill-milestone`).then((r) => r.data),
   /** Service Charge / Packing Charge / Delivery Charge / Tip / Round Off, applied together —
    * every field optional, only the ones supplied change (send 0 to clear one). ServiceCharge
    * accepts either a percentage of subtotal OR a flat amount, not both. */

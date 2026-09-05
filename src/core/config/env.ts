@@ -4,7 +4,7 @@ import { Platform } from 'react-native';
 // this one line if the backend ever moves to a different host — everything
 // in the app (apiClient, QR ordering links, refresh-token calls) reads
 // through getApiBaseUrl()/getHubBaseUrl()/getPublicOrderBaseUrl() below.
-const PRODUCTION_API_ORIGIN = 'https://cafeposapi-et7f.onrender.com';
+const PRODUCTION_API_ORIGIN = 'https://api.prabandhos.com';
 
 // Flip to true while testing against a locally-running backend (`dotnet run`
 // in CafePosApi, listening on 0.0.0.0:5080). When true, the backend URL is

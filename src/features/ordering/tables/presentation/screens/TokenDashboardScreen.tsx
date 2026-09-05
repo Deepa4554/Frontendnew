@@ -143,7 +143,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
     );
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep', complimentaryReason?: string) => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep', complimentaryReason?: string, serveAll?: boolean) => {
     if (!order) return;
     try {
       // guestName/guestPhone are only present on a settle carrying a Due (udhaar) leg — the
@@ -151,8 +151,10 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
       // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
       // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
       // complimentaryReason: only set on a settle carrying a Complimentary leg — the server
-      // rejects that settle without it too.
-      const result = await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems, complimentaryReason });
+      // rejects that settle without it too. serveAll: this screen passes offerServeOnSettle,
+      // so this folds the "Mark items as Served on Settlement" tick into the same Pay call
+      // instead of OrderBillActions making its own separate ServeAll request first.
+      const result = await payOrder.mutateAsync({ id: order.id, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems, complimentaryReason, serveAll });
       // A Complimentary write-off above the auto-approve threshold doesn't settle at all —
       // nothing applied, order untouched — it just goes to the Owner's Approvals queue.
       if ('pendingApproval' in result) {

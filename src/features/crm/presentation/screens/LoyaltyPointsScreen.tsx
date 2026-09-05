@@ -6,19 +6,30 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useThemeColors } from '../../../../core/theme/useThemeColors';
 import { useCustomers } from '../../../../core/api/hooks/useCustomers';
 import { useRewards, useCreateReward, useUpdateReward, useDeleteReward } from '../../../../core/api/hooks/useRewards';
+import { useLoyaltyMilestones, useCreateLoyaltyMilestone, useUpdateLoyaltyMilestone, useDeleteLoyaltyMilestone } from '../../../../core/api/hooks/useLoyaltyMilestones';
+import { useSettings, useUpdateSettings } from '../../../../core/api/hooks/useSettings';
 import { Reward } from '../../../../core/api/rewardsApi';
+import { LoyaltyMilestone } from '../../../../core/api/loyaltyMilestonesApi';
 import { RootState } from '../../../../core/store/rootReducer';
 import { isOwnerOrManager } from '../../../../core/auth/permissions';
 import { confirmAlert } from '../../../../shared/components/ConfirmDialogHost';
 import { showToast } from '../../../../core/store/uiSlice';
 import { getApiErrorMessage } from '../../../../core/network/api';
 import { SkeletonGrid, SkeletonList } from '../../../../shared/components/atoms/Skeleton';
+import { CloseButton } from '../../../../shared/components/atoms/CloseButton';
 
 import { modalHeadingOverride } from '../../../../shared/design/commonStyles';
 import { useResponsive } from '../../../../core/utils/useResponsive';
 import { DesktopPageHeader } from '../../../../shared/components/desktop/DesktopPageHeader';
 
 const ICON_CHOICES = ['coffee', 'food-croissant', 'tag-outline', 'gift-outline', 'cup-outline', 'food', 'star-outline', 'cookie'];
+
+/** Earn rates offered as taps rather than a free number field — the rate is a pricing decision
+ * an Owner makes once, and a typo in a text box here quietly changes what every future bill
+ * gives away. 100 stays on the list because it is what cafes have been running on. */
+const EARN_RATE_CHOICES = [0, 1, 2, 5, 10, 15, 20, 25, 50, 100];
+/** Bill used for the worked example under the picker. Round, and big enough that even 1% earns. */
+const EARN_RATE_EXAMPLE_BILL = 1000;
 
 export const LoyaltyPointsScreen = () => {
   const { isDesktopWeb } = useResponsive();
@@ -32,9 +43,15 @@ export const LoyaltyPointsScreen = () => {
   const { data: customersData, isLoading } = useCustomers();
   const members = customersData?.items ?? [];
   const { data: rewards = [], isLoading: rewardsLoading } = useRewards();
+  const { data: milestones = [], isLoading: milestonesLoading } = useLoyaltyMilestones();
+  const { data: settings } = useSettings();
+  const updateSettings = useUpdateSettings();
   const createReward = useCreateReward();
   const updateReward = useUpdateReward();
   const deleteReward = useDeleteReward();
+  const createMilestone = useCreateLoyaltyMilestone();
+  const updateMilestone = useUpdateLoyaltyMilestone();
+  const deleteMilestone = useDeleteLoyaltyMilestone();
 
   const totalPool = members.reduce((sum, m) => sum + m.availablePoints, 0);
   const totalRedeemed = members.reduce((sum, m) => sum + (m.totalPoints - m.availablePoints), 0);
@@ -45,6 +62,26 @@ export const LoyaltyPointsScreen = () => {
   const [draftName, setDraftName] = useState('');
   const [draftPoints, setDraftPoints] = useState('');
   const [draftIcon, setDraftIcon] = useState(ICON_CHOICES[0]);
+
+  const [milestoneModalVisible, setMilestoneModalVisible] = useState(false);
+  const [editingMilestone, setEditingMilestone] = useState<LoyaltyMilestone | null>(null);
+  const [draftThreshold, setDraftThreshold] = useState('');
+  const [draftDiscountPct, setDraftDiscountPct] = useState('');
+
+  const setEarnRate = async (pct: number) => {
+    try {
+      await updateSettings.mutateAsync({ loyaltyEarnPct: pct });
+      dispatch(showToast({
+        message: pct === 0
+          ? 'Points earning is off — bills no longer add to a guest’s balance.'
+          : `Guests now earn ${pct}% of every bill back as points.`,
+        icon: 'check-circle',
+        tone: 'success',
+      }));
+    } catch (e) {
+      dispatch(showToast({ message: getApiErrorMessage(e), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
 
   const openAdd = () => {
     setEditing(null);
@@ -101,6 +138,60 @@ export const LoyaltyPointsScreen = () => {
     ]);
   };
 
+  const openAddMilestone = () => {
+    setEditingMilestone(null);
+    setDraftThreshold('');
+    setDraftDiscountPct('');
+    setMilestoneModalVisible(true);
+  };
+
+  const openEditMilestone = (milestone: LoyaltyMilestone) => {
+    setEditingMilestone(milestone);
+    setDraftThreshold(String(milestone.thresholdPoints));
+    setDraftDiscountPct(String(milestone.discountPct));
+    setMilestoneModalVisible(true);
+  };
+
+  const handleSaveMilestone = async () => {
+    const thresholdPoints = parseInt(draftThreshold, 10);
+    const discountPct = parseFloat(draftDiscountPct);
+    if (isNaN(thresholdPoints) || thresholdPoints <= 0) {
+      dispatch(showToast({ message: 'Enter how many lifetime points this milestone needs.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    if (isNaN(discountPct) || discountPct <= 0 || discountPct > 100) {
+      dispatch(showToast({ message: 'Enter a discount between 1 and 100 percent.', icon: 'alert-circle-outline', tone: 'warning' }));
+      return;
+    }
+    try {
+      if (editingMilestone) {
+        await updateMilestone.mutateAsync({ id: editingMilestone.id, req: { thresholdPoints, discountPct } });
+      } else {
+        await createMilestone.mutateAsync({ thresholdPoints, discountPct });
+      }
+      setMilestoneModalVisible(false);
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save milestone'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const handleDeleteMilestone = (milestone: LoyaltyMilestone) => {
+    confirmAlert('Remove Milestone', `Remove the ${milestone.thresholdPoints}-point milestone?`, [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Remove',
+        style: 'destructive',
+        onPress: async () => {
+          try {
+            await deleteMilestone.mutateAsync(milestone.id);
+          } catch (err) {
+            dispatch(showToast({ message: getApiErrorMessage(err, 'Could not remove milestone'), icon: 'alert-circle-outline', tone: 'danger' }));
+          }
+        },
+      },
+    ]);
+  };
+
   return (
     <View style={styles.container}>
       <DesktopPageHeader icon="star-circle-outline" title="Points" />
@@ -128,6 +219,90 @@ export const LoyaltyPointsScreen = () => {
             </View>
           </View>
         </View>
+
+        {settings && (
+          <View style={styles.earnCard}>
+            <Text style={styles.sectionTitle}>Points Earn Rate</Text>
+            {/* Stated in rupees, not just percent: a point is worth ₹1 at redemption, so the
+                rate is money off a future bill and reads far more clearly as "₹50 back". */}
+            <Text style={styles.earnHint}>
+              {settings.loyaltyEarnPct === 0
+                ? 'Off — bills are not adding anything to a guest’s balance.'
+                : `A ₹${EARN_RATE_EXAMPLE_BILL.toLocaleString()} bill earns ${Math.floor(EARN_RATE_EXAMPLE_BILL * settings.loyaltyEarnPct / 100).toLocaleString()} points — ₹${Math.floor(EARN_RATE_EXAMPLE_BILL * settings.loyaltyEarnPct / 100).toLocaleString()} off a later visit.`}
+            </Text>
+            <View style={styles.earnChipRow}>
+              {EARN_RATE_CHOICES.map((pct) => (
+                <TouchableOpacity
+                  key={pct}
+                  disabled={!canManage || updateSettings.isPending}
+                  style={[styles.earnChip, settings.loyaltyEarnPct === pct && styles.earnChipActive]}
+                  onPress={() => setEarnRate(pct)}
+                >
+                  <Text style={[styles.earnChipText, settings.loyaltyEarnPct === pct && styles.earnChipTextActive]}>
+                    {pct === 0 ? 'Off' : `${pct}%`}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+            {!canManage && <Text style={styles.earnHint}>Only an Owner or Manager can change this.</Text>}
+          </View>
+        )}
+
+        <View style={styles.sectionHeader}>
+          <Text style={styles.sectionTitle}>Milestone Rewards</Text>
+          {canManage && (
+            <TouchableOpacity style={styles.addBtn} onPress={openAddMilestone}>
+              <Icon name="plus" size={16} color="#FFFFFF" />
+              <Text style={styles.addBtnText}>Add</Text>
+            </TouchableOpacity>
+          )}
+        </View>
+        <Text style={[styles.earnHint, { paddingHorizontal: 16, marginBottom: 12 }]}>
+          Cross a milestone's lifetime points and a guest's very next bill can claim its discount — see the Milestone Reward tile at checkout.
+        </Text>
+
+        {milestonesLoading && (
+          <View style={{ paddingHorizontal: 16, marginBottom: 20 }}>
+            <SkeletonList rows={2} />
+          </View>
+        )}
+
+        {!milestonesLoading && milestones.length === 0 && (
+          <Text style={styles.emptyText}>
+            {canManage ? 'No milestones yet — tap Add to create your first one.' : 'No milestones set up yet.'}
+          </Text>
+        )}
+
+        {milestones.length > 0 && (
+          <View style={[styles.ledgerCard, { marginBottom: isDesktopWeb ? 18 : 18 }]}>
+            {[...milestones].sort((a, b) => a.thresholdPoints - b.thresholdPoints).map((m, i, sorted) => (
+              <TouchableOpacity
+                key={m.id}
+                style={[styles.ledgerRow, i !== sorted.length - 1 && styles.ledgerDivider]}
+                activeOpacity={canManage ? 0.7 : 1}
+                onPress={() => canManage && openEditMilestone(m)}
+              >
+                <View style={styles.ledgerIcon}>
+                  <Icon name="trophy-outline" size={16} color={COLORS.accent} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={styles.ledgerName}>{m.thresholdPoints.toLocaleString()} lifetime points</Text>
+                  <Text style={styles.ledgerAction}>{m.isActive ? 'Active' : 'Disabled'}</Text>
+                </View>
+                <Text style={styles.ledgerPts}>{m.discountPct}% off</Text>
+                {canManage && (
+                  <TouchableOpacity
+                    style={[styles.rewardDeleteBtn, { marginLeft: 9 }]}
+                    onPress={() => handleDeleteMilestone(m)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon name="close" size={14} color={COLORS.muted} />
+                  </TouchableOpacity>
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        )}
 
         <View style={styles.sectionHeader}>
           <Text style={styles.sectionTitle}>Reward Catalog</Text>
@@ -212,7 +387,10 @@ export const LoyaltyPointsScreen = () => {
       <Modal visible={modalVisible} transparent animationType="fade" onRequestClose={() => setModalVisible(false)}>
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{editing ? 'Edit Reward' : 'Add Reward'}</Text>
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]}>{editing ? 'Edit Reward' : 'Add Reward'}</Text>
+              <CloseButton onPress={() => setModalVisible(false)} size={22} />
+            </View>
 
             <Text style={styles.fieldLabel}>Name</Text>
             <View style={{ borderRadius: 8 }}>
@@ -269,6 +447,55 @@ export const LoyaltyPointsScreen = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={milestoneModalVisible} transparent animationType="fade" onRequestClose={() => setMilestoneModalVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{editingMilestone ? 'Edit Milestone' : 'Add Milestone'}</Text>
+
+            <Text style={styles.fieldLabel}>Lifetime points needed</Text>
+            <View style={{ borderRadius: 8 }}>
+              <TextInput
+                style={styles.fieldInput}
+                placeholder="e.g. 1000"
+                placeholderTextColor={COLORS.placeholder}
+                value={draftThreshold}
+                onChangeText={(t) => setDraftThreshold(t.replace(/[^0-9]/g, ''))}
+                keyboardType="numeric"
+              />
+            </View>
+
+            <Text style={styles.fieldLabel}>Discount on the next bill (%)</Text>
+            <View style={{ borderRadius: 8 }}>
+              <TextInput
+                style={styles.fieldInput}
+                placeholder="e.g. 10"
+                placeholderTextColor={COLORS.placeholder}
+                value={draftDiscountPct}
+                onChangeText={(t) => setDraftDiscountPct(t.replace(/[^0-9.]/g, ''))}
+                keyboardType="decimal-pad"
+              />
+            </View>
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setMilestoneModalVisible(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={styles.modalSaveBtn}
+                onPress={handleSaveMilestone}
+                disabled={createMilestone.isPending || updateMilestone.isPending}
+              >
+                {createMilestone.isPending || updateMilestone.isPending ? (
+                  <ActivityIndicator size="small" color="#FFFFFF" />
+                ) : (
+                  <Text style={styles.modalSaveText}>{editingMilestone ? 'Save' : 'Add'}</Text>
+                )}
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -307,6 +534,29 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     marginBottom: isDesktopWeb ? 10 : 10.5,
   },
   sectionTitle: { fontSize: isDesktopWeb ? 20 : 14, fontWeight: 'bold', color: COLORS.heading },
+  earnCard: {
+    backgroundColor: COLORS.card,
+    marginHorizontal: 12,
+    marginTop: 12,
+    borderRadius: 8,
+    padding: 15,
+    gap: 8,
+  },
+  earnHint: { fontSize: isDesktopWeb ? 13 : 11.5, color: COLORS.muted, lineHeight: isDesktopWeb ? 18 : 16 },
+  earnChipRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  // Sized to content and wrapped rather than sharing the row width equally: ten chips split
+  // evenly on a phone leaves each too narrow to read, let alone tap.
+  earnChip: {
+    flexGrow: 0,
+    flexShrink: 0,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
+    borderRadius: 8,
+    backgroundColor: COLORS.cardAlt,
+  },
+  earnChipActive: { backgroundColor: COLORS.button },
+  earnChipText: { fontSize: 12, fontWeight: '700', color: COLORS.muted },
+  earnChipTextActive: { color: '#FFFFFF' },
   addBtn: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -362,6 +612,9 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     alignItems: 'center',
     padding: isDesktopWeb ? 18 : 18,
   },
+  // Title on the left, the X hard against the right edge — same header shape every
+  // other popup in the app uses (see CloseButton).
+  modalHeaderRow: { flexDirection: 'row', alignItems: 'flex-start', gap: 6 },
   modalSheet: {
     width: '100%',
     maxWidth: 420,

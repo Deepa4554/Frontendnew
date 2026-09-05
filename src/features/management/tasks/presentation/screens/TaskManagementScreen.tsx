@@ -118,7 +118,12 @@ const TaskCard: React.FC<{ item: ApiTask; assigneeName: string }> = ({ item, ass
       <Modal visible={statusPickerVisible} transparent animationType="fade" onRequestClose={() => setStatusPickerVisible(false)}>
         <TouchableOpacity style={styles.pickerOverlay} activeOpacity={1} onPress={() => setStatusPickerVisible(false)}>
           <View style={styles.pickerSheet}>
-            <Text style={styles.pickerTitle}>{item.title}</Text>
+            {/* Tapping the backdrop closes this too, but that's an invisible affordance —
+                the X is the one a first-time user can actually see. */}
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.pickerTitle, { flex: 1, minWidth: 0 }]} numberOfLines={2}>{item.title}</Text>
+              <CloseButton onPress={() => setStatusPickerVisible(false)} size={22} />
+            </View>
             {(['TODO', 'IN_PROGRESS', 'DONE', 'BLOCKED'] as TaskStatus[]).map((s) => (
               <TouchableOpacity
                 key={s}

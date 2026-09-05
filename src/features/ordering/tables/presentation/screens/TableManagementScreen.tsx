@@ -366,7 +366,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
     }
   };
 
-  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep', complimentaryReason?: string) => {
+  const handleMarkPaid = async (payments: PaymentSplit[], allowPartial?: boolean, andThen?: 'print' | 'whatsapp', phoneOverride?: string, guest?: { name: string; phone: string }, unfiredItems?: 'keep', complimentaryReason?: string, serveAll?: boolean) => {
     if (!occupiedModal?.orderId) {
       setOccupiedModal(null);
       return;
@@ -377,8 +377,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
       // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
       // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
       // complimentaryReason: only set on a settle carrying a Complimentary leg — the server
-      // rejects that settle without it too.
-      const result = await payOrder.mutateAsync({ id: occupiedModal.orderId, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems, complimentaryReason });
+      // rejects that settle without it too. serveAll: this screen passes offerServeOnSettle,
+      // so this folds the "Mark items as Served on Settlement" tick into the same Pay call
+      // instead of OrderBillActions making its own separate ServeAll request first.
+      const result = await payOrder.mutateAsync({ id: occupiedModal.orderId, splits: payments, allowPartial, guestName: guest?.name, guestPhone: guest?.phone, unfiredItems, complimentaryReason, serveAll });
       // A Complimentary write-off above the auto-approve threshold doesn't settle at all —
       // nothing applied, order untouched — it just goes to the Owner's Approvals queue.
       if ('pendingApproval' in result) {
@@ -1387,7 +1389,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>{newZoneMode ? 'Add Table to a New Floor' : `Add Table to ${activeZone}`}</Text>
+            <View style={styles.occupiedModalHeader}>
+              <Text style={[styles.modalTitle, { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]}>{newZoneMode ? 'Add Table to a New Floor' : `Add Table to ${activeZone}`}</Text>
+              <CloseButton onPress={closeAddModal} size={22} />
+            </View>
 
             {newZoneMode ? (
               <>
@@ -1464,7 +1469,10 @@ export const TableManagementScreen = ({ navigation }: any) => {
       >
         <View style={styles.modalOverlay}>
           <View style={styles.modalSheet}>
-            <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Edit {editingTable?.code}</Text>
+            <View style={styles.occupiedModalHeader}>
+              <Text style={[styles.modalTitle, { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]} numberOfLines={1}>Edit {editingTable?.code}</Text>
+              <CloseButton onPress={closeEditModal} size={22} />
+            </View>
 
             <Text style={styles.modalLine}>Table Name</Text>
             <View style={styles.newZoneInputWrap}>

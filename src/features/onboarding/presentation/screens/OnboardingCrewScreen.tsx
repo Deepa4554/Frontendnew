@@ -269,7 +269,12 @@ export const OnboardingCrewScreen = ({ navigation }: any) => {
       <Modal visible={rolePickerOpen} transparent animationType="fade" onRequestClose={() => setRolePickerOpen(false)}>
         <TouchableOpacity style={styles.modalOverlay} activeOpacity={1} onPress={() => setRolePickerOpen(false)}>
           <View style={styles.pickerSheet}>
-            <Text style={styles.pickerTitle}>Select Role</Text>
+            {/* Same header shape as the Choose Screens picker below — tapping outside works,
+                but the X is the visible way out. */}
+            <View style={styles.accessSheetHeader}>
+              <Text style={styles.pickerTitle}>Select Role</Text>
+              <CloseButton onPress={() => setRolePickerOpen(false)} size={22} color={COLORS.heading} />
+            </View>
             {LOGIN_ROLES.map((r) => (
               <TouchableOpacity key={r} style={styles.pickerRow} onPress={() => { setRole(r); setRolePickerOpen(false); }}>
                 <Text style={styles.pickerRowText}>{ROLE_LABELS[r]}</Text>

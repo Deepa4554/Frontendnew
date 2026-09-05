@@ -2258,6 +2258,7 @@ export const POSCheckoutScreen = () => {
     guest?: { name: string; phone: string },
     unfiredItems?: 'keep',
     complimentaryReason?: string,
+    serveAll?: boolean,
   ) => {
     if (!receipt) return;
     try {
@@ -2266,7 +2267,9 @@ export const POSCheckoutScreen = () => {
       // unfiredItems likewise: only set when the cashier chose to bill a never-fired line
       // anyway, and the server rejects that settle without it (see PayOptions.unfiredItems).
       // complimentaryReason: only set on a settle carrying a Complimentary leg — the server
-      // rejects that settle without it too.
+      // rejects that settle without it too. serveAll is always undefined here — this receipt
+      // modal doesn't pass offerServeOnSettle to OrderBillActions — but forwarded anyway so
+      // this stays correct if that ever changes.
       const result = await payOrderMutation.mutateAsync({
         id: receipt.orderId,
         splits: payments,
@@ -2275,6 +2278,7 @@ export const POSCheckoutScreen = () => {
         guestPhone: guest?.phone,
         unfiredItems,
         complimentaryReason,
+        serveAll,
       });
       // A Complimentary write-off above the auto-approve threshold doesn't settle at all —
       // nothing applied, order untouched — it just goes to the Owner's Approvals queue.
@@ -2544,7 +2548,11 @@ export const POSCheckoutScreen = () => {
   //
   // A real View rather than a fragment: as a pinned flex child it must keep its own
   // height when the item list overflows, which needs a node to put flexShrink: 0 on.
-  const renderCartHeader = () => (
+  //
+  // inSheet: this header is inside the expanded cart Modal (the narrow/tablet layout)
+  // rather than the desktop side panel, so it carries the X that dismisses the sheet.
+  // The side panel is always on screen and has nothing to close, hence the flag.
+  const renderCartHeader = (inSheet: boolean = false) => (
     <View style={styles.cartHeaderBlock}>
       {/* Resume/append mode: existing order's already-fired KOTs, shown read-only. */}
       {resumeMode && resumeOrder && (
@@ -2615,6 +2623,12 @@ export const POSCheckoutScreen = () => {
                 />
               </TouchableOpacity>
             </Tooltip>
+            {/* The sheet's only close affordance on a tablet/desktop browser: the
+                drag handle and the tap-outside backdrop below are phone-layout only,
+                so without this the expanded cart had no way out at those widths. */}
+            {inSheet && (
+              <CloseButton onPress={() => setCartExpanded(false)} size={22} />
+            )}
           </View>
         </View>
         <View style={styles.orderSubtitleRow}>
@@ -3401,16 +3415,26 @@ export const POSCheckoutScreen = () => {
           {/* ---------- Expanded cart sheet — full order details, guest info, split/discount, Fire to Kitchen ---------- */}
           <Modal visible={cartExpanded} transparent animationType={isDesktopWeb ? 'fade' : 'slide'} onRequestClose={() => setCartExpanded(false)}>
             <View style={isDesktopWeb ? styles.optionsOverlayDesktop : styles.cartSheetOverlay}>
-              {!isDesktopWeb && (
-                <TouchableOpacity style={styles.cartSheetBackdrop} activeOpacity={1} onPress={() => setCartExpanded(false)} />
-              )}
+              {/* Tap-outside-to-close, on BOTH layouts. It used to be phone-only, and the
+                  desktop-web branch carried no close control of its own — so at any browser
+                  width from 768px up (a tablet still gets this sheet, not the ≥1024px side
+                  panel) the expanded cart could be opened and never dismissed. Absolutely
+                  filled and rendered first, so the sheet below draws on top of it and only
+                  the area around the sheet is tappable. The X in renderCartHeader is the
+                  visible half of the same fix. Desktop web takes no tint of its own —
+                  optionsOverlayDesktop already paints the scrim. */}
+              <TouchableOpacity
+                style={isDesktopWeb ? StyleSheet.absoluteFill : styles.cartSheetBackdrop}
+                activeOpacity={1}
+                onPress={() => setCartExpanded(false)}
+              />
               {/* Header and summary sit outside the ScrollView so only the line items
                   move: on a full order the Total and the KOT buttons used to scroll off
                   the bottom of the sheet, and the cashier had to swipe past every line
                   to fire the order. */}
               <View style={isDesktopWeb ? [styles.optionsSheetDesktop, styles.payFirstSheetDesktop] : styles.cartSheet}>
                 {!isDesktopWeb && <View style={styles.cartSheetHandle} />}
-                {renderCartHeader()}
+                {renderCartHeader(true)}
                 <ScrollView
                   style={styles.cartSheetScroll}
                   showsVerticalScrollIndicator={false}

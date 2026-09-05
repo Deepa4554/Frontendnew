@@ -6,6 +6,7 @@ import { FlashList } from '@shopify/flash-list';
 import { EmptyState, ErrorState } from '../../../../../shared/components/atoms/StateComponents';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
+import { CloseButton } from '../../../../../shared/components/atoms/CloseButton';
 import { LoadingOverlay } from '../../../../../shared/components/atoms/LoadingOverlay';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
@@ -134,7 +135,10 @@ const NotificationPreferencesModal: React.FC<{
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={styles.backdrop}>
         <View style={styles.sheet}>
-          <Text style={styles.sheetTitle}>My Notifications</Text>
+          <View style={styles.sheetHeaderRow}>
+            <Text style={[styles.sheetTitle, { flex: 1, minWidth: 0 }]}>My Notifications</Text>
+            <CloseButton onPress={onClose} size={22} />
+          </View>
           <Text style={styles.sheetSub}>
             Choose what reaches this account. Anything addressed to you personally — a task
             assigned to you, your own approval's outcome — always comes through.
@@ -189,6 +193,9 @@ const makePrefStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb:
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.45)', justifyContent: 'center', alignItems: 'center', padding: 20 },
   sheet: { width: '100%', maxWidth: isDesktopWeb ? 460 : 400, backgroundColor: COLORS.cardAlt, borderRadius: RADIUS.modal, padding: 20 },
   sheetTitle: { fontSize: 18, fontWeight: '700', color: COLORS.heading },
+  // Title left, X hard right — the sheet has a Done button at the bottom, but on a long
+  // preference list that button is below the fold; the X is always in view.
+  sheetHeaderRow: { flexDirection: 'row', alignItems: 'center', gap: 6 },
   sheetSub: { fontSize: 12, color: COLORS.muted, marginTop: 6, marginBottom: 12, lineHeight: 17 },
   row: { flexDirection: 'row', alignItems: 'center', paddingVertical: 11, gap: 12 },
   rowLabel: { fontSize: 14, fontWeight: '600', color: COLORS.heading },
