@@ -41,6 +41,7 @@ export const queryKeys = {
   profitReport: (params?: unknown) => ['reports', 'profit', params] as const,
   salesReport: (params?: unknown) => ['reports', 'sales', params] as const,
   taxGstReport: (params?: unknown) => ['reports', 'tax-gst', params] as const,
+  taxInputReport: (params?: unknown) => ['reports', 'tax-input', params] as const,
   crmReport: (params?: unknown) => ['reports', 'crm', params] as const,
   ordersReport: (params?: unknown) => ['reports', 'orders', params] as const,
   customers: (params?: unknown) => ['customers', params] as const,

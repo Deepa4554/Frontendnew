@@ -1,4 +1,4 @@
-import { splitGst, buildTaxBreakdown, buildReceiptLines, buildKotLines, inferTaxRatePct, PrintableReceipt, PrintableReceiptItem } from './receiptFormat';
+import { splitGst, buildTaxBreakdown, buildReceiptLines, buildKotLines, inferTaxRatePct, billDocumentTitle, PrintableReceipt, PrintableReceiptItem } from './receiptFormat';
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
 
@@ -483,5 +483,154 @@ describe('inferTaxRatePct', () => {
 
   it('treats missing reduction fields as zero', () => {
     expect(inferTaxRatePct({ subtotal: 500, tax: 25 })).toBe(5);
+  });
+});
+
+describe('billDocumentTitle', () => {
+  it('calls a registered cafe\'s bill a tax invoice', () => {
+    expect(billDocumentTitle({ gstNumber: '27AAAPA1234A1Z5' })).toBe('TAX INVOICE');
+  });
+
+  it('calls a composition dealer\'s bill a bill of supply despite the GSTIN', () => {
+    // The case a GSTIN check alone gets wrong — registered, prints the number, but its
+    // customer claims no credit against it.
+    expect(billDocumentTitle({ gstNumber: '27AAAPA1234A1Z5', isCompositionScheme: true }))
+      .toBe('BILL OF SUPPLY');
+  });
+
+  it('claims neither GST document for an unregistered cafe', () => {
+    // Not "BILL OF SUPPLY" — that is itself a GST document, and this cafe can issue none.
+    expect(billDocumentTitle({})).toBe('BILL');
+    expect(billDocumentTitle({ gstNumber: '   ' })).toBe('BILL');
+  });
+
+  it('agrees with what the slip actually prints', () => {
+    const out = buildReceiptLines({
+      businessName: 'Cafe',
+      orderNumber: '#1294',
+      time: '02:07 PM',
+      title: 'Table #T1',
+      orderTypeLabel: 'Dine In',
+      items: [item()],
+      subtotal: 100,
+      taxRatePct: 5,
+      tax: 5,
+      total: 105,
+      footer: 'Thanks!',
+      gstNumber: '27AAAPA1234A1Z5',
+    }).map((l) => ('text' in l ? l.text : '')).join('\n');
+
+    expect(out).toContain('TAX INVOICE');
+  });
+});
+
+describe('buildReceiptLines — HSN/SAC', () => {
+  const receipt = (over: Partial<PrintableReceipt> = {}): PrintableReceipt => ({
+    businessName: 'Cafe',
+    orderNumber: '#1294',
+    time: '02:07 PM',
+    title: 'Table #T1',
+    orderTypeLabel: 'Dine In',
+    items: [item({ name: 'Paneer Masala', qty: 2, price: 500 })],
+    subtotal: 1000,
+    taxRatePct: 5,
+    tax: 50,
+    total: 1050,
+    footer: 'Thanks!',
+    ...over,
+  });
+
+  const textOf = (lines: ReturnType<typeof buildReceiptLines>) =>
+    lines.map((l) => ('text' in l ? l.text : '')).join('\n');
+
+  it('prints a line\'s code under it', () => {
+    const out = textOf(buildReceiptLines(
+      receipt({ items: [item({ name: 'Paneer Masala', hsnCode: '996331' })] }),
+    ));
+    expect(out).toContain('HSN/SAC: 996331');
+  });
+
+  it('prints nothing at all at a cafe that has entered no codes', () => {
+    // The pre-existing slip has to stay byte-identical for every cafe that never sets one.
+    expect(textOf(buildReceiptLines(receipt()))).not.toContain('HSN/SAC');
+  });
+});
+
+describe('buildReceiptLines — tax on service/packing/delivery charges', () => {
+  const receipt = (over: Partial<PrintableReceipt> = {}): PrintableReceipt => ({
+    businessName: 'Cafe',
+    orderNumber: '#1294',
+    time: '02:07 PM',
+    title: 'Table #T1',
+    orderTypeLabel: 'Dine In',
+    items: [item({ name: 'Paneer Masala', qty: 2, price: 500, taxRatePct: 5, taxableAmount: 1000, taxAmount: 50 })],
+    subtotal: 1000,
+    taxRatePct: 5,
+    tax: 50,
+    total: 1050,
+    footer: 'Thanks!',
+    ...over,
+  });
+
+  const textOf = (lines: ReturnType<typeof buildReceiptLines>) =>
+    lines.map((l) => ('text' in l ? l.text : '')).join('\n');
+
+  it('moves a taxed charge above the GST rows', () => {
+    // The taxable value on those rows already includes it; printed below, the slip would be
+    // saying the charge came after tax.
+    const out = textOf(buildReceiptLines(receipt({
+      serviceChargeAmount: 100,
+      chargesTaxRatePct: 5,
+      chargesTaxableAmount: 100,
+      chargesTaxAmount: 5,
+      tax: 55,
+      total: 1155,
+    })));
+
+    expect(out.indexOf('Service Charge')).toBeGreaterThan(-1);
+    expect(out.indexOf('Service Charge')).toBeLessThan(out.indexOf('CGST'));
+  });
+
+  it('keeps an untaxed charge below them, exactly as before', () => {
+    const out = textOf(buildReceiptLines(receipt({ serviceChargeAmount: 100, total: 1150 })));
+    expect(out.indexOf('Service Charge')).toBeGreaterThan(out.indexOf('CGST'));
+  });
+
+  it('keeps a tip below the GST rows even on a bill that taxed its charges', () => {
+    // A tip is not consideration for the supply, so it is never in the taxable base.
+    const out = textOf(buildReceiptLines(receipt({
+      serviceChargeAmount: 100,
+      tipAmount: 200,
+      chargesTaxRatePct: 5,
+      chargesTaxableAmount: 100,
+      chargesTaxAmount: 5,
+      tax: 55,
+      total: 1355,
+    })));
+
+    expect(out.indexOf('Tip')).toBeGreaterThan(out.indexOf('CGST'));
+  });
+
+  it('folds the charge tax into its own slab so the rows still add up', () => {
+    const slabs = buildTaxBreakdown(
+      [item({ taxRatePct: 5, taxableAmount: 1000, taxAmount: 50 })],
+      5,
+      { ratePct: 5, taxableAmount: 100, taxAmount: 5 },
+    );
+
+    expect(slabs).toHaveLength(1);
+    expect(slabs[0].taxableAmount).toBe(1100);
+    expect(slabs[0].taxAmount).toBe(55);
+  });
+
+  it('invents no slab row when the charges were not taxed', () => {
+    const slabs = buildTaxBreakdown(
+      [item({ taxRatePct: 5, taxableAmount: 1000, taxAmount: 50 })],
+      5,
+      { ratePct: null, taxableAmount: 0, taxAmount: 0 },
+    );
+
+    expect(slabs).toHaveLength(1);
+    expect(slabs[0].ratePct).toBe(5);
   });
 });

@@ -24,6 +24,11 @@ export interface CafeExpense {
   createdAt: string;
   /** null on rows saved before the field existed — see UNSET_PAYMENT_MODE. */
   paymentMode: PaymentMode | null;
+  /** GST on the vendor's bill. `amount` stays INCLUSIVE of it, so recording a rate never
+   * restates what the expense cost. Null means "not recorded" — the input-tax report keeps
+   * those out of the credit rather than counting them as exempt. */
+  taxRatePct: number | null;
+  vendorGstin: string | null;
 }
 
 export interface CategoryTotal {
@@ -54,6 +59,10 @@ export interface CreateCafeExpenseRequest {
   /** Omitted leaves the row unset rather than defaulting to Cash — unlike the daily sheet,
    * where every filled row was definitely paid somehow. */
   paymentMode?: PaymentMode;
+  /** GST rate on the vendor's bill, 0-100. `amount` above stays inclusive of it. Omit when the
+   * rate isn't known — that records "not recorded", which reports separately from a real 0%. */
+  taxRatePct?: number;
+  vendorGstin?: string;
 }
 
 /** Returned instead of the expense when a Manager's entry lands above

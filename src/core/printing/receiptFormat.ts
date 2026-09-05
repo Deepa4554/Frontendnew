@@ -30,6 +30,10 @@ export interface PrintableReceiptItem {
   taxableAmount?: number;
   /** Tax charged on this line. */
   taxAmount?: number;
+  /** HSN/SAC this line was invoiced under (see OrderItem.HsnCode). Printed under the line, not
+   * as a column — a 32-column slip has no room for one. Undefined at a cafe that has entered no
+   * codes, which prints nothing extra at all. */
+  hsnCode?: string | null;
   /** Cancelled line — kept on the order (never deleted, so the KOT/void history survives) but
    * NOT part of the bill. Filtered out here rather than at each caller: every screen that
    * prints hands over `order.items` wholesale, and one that forgets would print food the guest
@@ -40,6 +44,25 @@ export interface PrintableReceiptItem {
 }
 
 const round2 = (n: number) => Math.round(n * 100) / 100;
+
+/**
+ * What the bill calls itself. A GST invoice has to say which kind of document it is: a slip
+ * charging GST that never claims to be a tax invoice is something the customer cannot claim
+ * credit against, and an officer reading an untitled one cannot tell the two apart.
+ *
+ * Composition dealers are checked first because a GSTIN alone gets them wrong — they HAVE a
+ * registration and print it, but supply at their own rate and issue a bill of supply against
+ * it. A cafe with no GSTIN is not registered at all, so it can issue neither GST document; its
+ * slip is titled plainly, which is also what every cafe that has never entered a GSTIN keeps.
+ *
+ * Mirrors BillDocument.Title on the server — the thermal slip and the PDF of the same bill
+ * must not disagree about what they are.
+ */
+export const billDocumentTitle = (receipt: {
+  isCompositionScheme?: boolean;
+  gstNumber?: string | null;
+}): string =>
+  receipt.isCompositionScheme ? 'BILL OF SUPPLY' : receipt.gstNumber?.trim() ? 'TAX INVOICE' : 'BILL';
 
 /** Halves a GST figure into the Central and State components a tax invoice must state
  * separately — one combined "GST 5%" line does not make a valid tax invoice. The halves are
@@ -66,10 +89,20 @@ export const splitGst = (taxAmount: number): { cgst: number; sgst: number } => {
  *
  * Each slab also carries its CGST/SGST halves and the half-rate to label them with. Those are
  * additional fields rather than a replacement for `taxAmount`, so callers that only want the
- * combined figure keep working untouched. */
+ * combined figure keep working untouched.
+ *
+ * `charges` is tax charged on the Service/Packing/Delivery charges (see Order.ChargesTaxAmount).
+ * It folds into the slab it was charged at rather than getting a row of its own, because it is
+ * part of the bill's single `tax` figure — a breakdown that left it out would print slab rows
+ * that don't add up to the tax line above them. Omitted by every caller at a cafe that hasn't
+ * opted in, and by the ones (the sample receipt, the POS preview) that have no order to read it
+ * off — all of which get exactly the breakdown they got before.
+ *
+ * Mirrors OrderTaxLineDto.From on the server, which does the same fold for the PDF. */
 export const buildTaxBreakdown = (
   items: PrintableReceiptItem[],
   fallbackRatePct: number,
+  charges?: { ratePct?: number | null; taxableAmount?: number; taxAmount?: number },
 ): {
   ratePct: number;
   taxableAmount: number;
@@ -93,6 +126,15 @@ export const buildTaxBreakdown = (
     const entry = byRate.get(rate) ?? { taxableAmount: 0, taxAmount: 0 };
     entry.taxableAmount += item.taxableAmount ?? 0;
     entry.taxAmount += item.taxAmount ?? 0;
+    byRate.set(rate, entry);
+  }
+  // Only when something was actually charged — an all-zero pair would invent a 0% slab row on
+  // a bill that never taxed its charges.
+  if (charges && ((charges.taxableAmount ?? 0) !== 0 || (charges.taxAmount ?? 0) !== 0)) {
+    const rate = charges.ratePct ?? 0;
+    const entry = byRate.get(rate) ?? { taxableAmount: 0, taxAmount: 0 };
+    entry.taxableAmount += charges.taxableAmount ?? 0;
+    entry.taxAmount += charges.taxAmount ?? 0;
     byRate.set(rate, entry);
   }
   return [...byRate.entries()]
@@ -132,12 +174,23 @@ export interface PrintableBillAdjustments {
   loyaltyDiscountAmount?: number;
   /** Points redeemed (1 point = Rs.1) — printed beside the loyalty amount. */
   loyaltyPointsRedeemed?: number;
-  /** Billing-time charges. Added on top of tax rather than taxed themselves (see
-   * RecomputeTotals), which is why they print below the GST rows and not above them. */
+  /** Billing-time charges. Where they print depends on whether this bill taxed them — above
+   * the GST rows when it did (they sit inside the taxable value shown there), below when it
+   * didn't (added on top of an already-computed tax). See chargesTaxAmount. */
   serviceChargeAmount?: number;
   packingChargeAmount?: number;
   deliveryChargeAmount?: number;
+  /** Never taxed — a tip is not consideration for the supply — so it always prints below the
+   * GST rows, even on a bill that taxed the three charges above. */
   tipAmount?: number;
+  /** Tax charged on Service/Packing/Delivery, and the slab it was charged at — see
+   * Order.ChargesTaxRatePct. Both zero/undefined at every cafe that hasn't opted in and on
+   * every bill placed before the setting existed, which is what keeps those slips identical.
+   * Already inside `tax` and `total`; carried separately so the breakdown can fold it into the
+   * right slab (see buildTaxBreakdown) instead of printing slab rows that don't add up. */
+  chargesTaxRatePct?: number | null;
+  chargesTaxableAmount?: number;
+  chargesTaxAmount?: number;
   /** Final rounding nudge — either sign, negative rounds the total down. Zero prints nothing. */
   roundOffAmount?: number;
 }
@@ -165,6 +218,9 @@ export const billAdjustmentsOf = (order: PrintableBillAdjustments): PrintableBil
   packingChargeAmount: order.packingChargeAmount,
   deliveryChargeAmount: order.deliveryChargeAmount,
   tipAmount: order.tipAmount,
+  chargesTaxRatePct: order.chargesTaxRatePct,
+  chargesTaxableAmount: order.chargesTaxableAmount,
+  chargesTaxAmount: order.chargesTaxAmount,
   roundOffAmount: order.roundOffAmount,
 });
 
@@ -235,6 +291,9 @@ export interface PrintableReceipt extends PrintableBillAdjustments {
   /** Food/trade licence number (FSSAI, shop licence). Same rule as gstNumber: no value,
    * no line — a bill shouldn't carry an empty "Licence No:" label. */
   licenceNumber?: string | null;
+  /** This cafe bills under the GST composition scheme, so its slip is a bill of supply rather
+   * than a tax invoice — see billDocumentTitle and CafeSettings.IsCompositionScheme. */
+  isCompositionScheme?: boolean;
   /** The cafe's own logo URL (Cafe Profile screen) — only consumed by the 'browser' transport
    * (see the 'image' ReceiptLine kind's own note). The ESC/POS transports get their copy of
    * the logo from a separately pre-fetched raster, not from this field. */
@@ -411,6 +470,10 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
   push({ kind: 'feed' });
 
   push({ kind: 'dashes' });
+  // What kind of document this is — see billDocumentTitle. Between the cafe's identity block
+  // and the order's own details, the same place the PDF puts it.
+  push({ kind: 'text', text: billDocumentTitle(receipt), align: 'center', bold: true });
+  push({ kind: 'dashes' });
   push({ kind: 'text', text: twoCol(`Order ${receipt.orderNumber}`, receipt.time, columns) });
   push({ kind: 'text', text: twoCol(receipt.title, receipt.orderTypeLabel, columns) });
   if (receipt.waiterName && receipt.showWaiterName !== false) push({ kind: 'text', text: twoCol('Waiter', receipt.waiterName, columns) });
@@ -422,6 +485,9 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
 
   for (const item of billedItems) {
     pushAmountRow(push, `${item.qty}x ${itemLabel(item)}`, money(item.price * item.qty), columns);
+    // Under the line rather than in a column of its own — 32 columns has no room for a fourth
+    // field. Prints only where a code exists, so a cafe that has entered none is unaffected.
+    if (item.hsnCode) push({ kind: 'text', text: `  HSN/SAC: ${item.hsnCode}` });
     for (const addOn of item.selectedModifiers ?? []) {
       push({ kind: 'text', text: `  + ${addOn.qty > 1 ? `${addOn.qty}x ` : ''}${addOn.name}` });
     }
@@ -455,9 +521,22 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
     receipt.loyaltyPointsRedeemed ? `Loyalty Points (${receipt.loyaltyPointsRedeemed})` : 'Loyalty Points',
     receipt.loyaltyDiscountAmount,
   );
+  // Charges that were themselves taxed print ABOVE the GST rows — the taxable value on those
+  // rows already includes them, so printing them below would state that they came after tax.
+  // Nothing at a cafe that hasn't opted in; those charges print below, exactly as before.
+  const chargesTaxed = (receipt.chargesTaxAmount ?? 0) !== 0;
+  if (chargesTaxed) {
+    pushCharge('Service Charge', receipt.serviceChargeAmount);
+    pushCharge('Packing Charge', receipt.packingChargeAmount);
+    pushCharge('Delivery Charge', receipt.deliveryChargeAmount);
+  }
   // One pair of rows per slab when the bill mixes rates, each slab shown as its CGST and
   // SGST halves — a tax invoice has to state the two components separately (see splitGst).
-  const taxBreakdown = buildTaxBreakdown(billedItems, receipt.taxRatePct);
+  const taxBreakdown = buildTaxBreakdown(billedItems, receipt.taxRatePct, {
+    ratePct: receipt.chargesTaxRatePct,
+    taxableAmount: receipt.chargesTaxableAmount,
+    taxAmount: receipt.chargesTaxAmount,
+  });
   if (receipt.tax <= 0) {
     // Nothing charged (unregistered or composition scheme) — a single plain row reads better
     // than a CGST and an SGST line that both say 0.00.
@@ -475,12 +554,15 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
     pushAmountRow(push, `CGST (${ratePct / 2}%)`, money(cgst), columns);
     pushAmountRow(push, `SGST (${ratePct / 2}%)`, money(sgst), columns);
   }
-  // Charges sit below the GST rows because that is where RecomputeTotals adds them — on top
-  // of the tax, not inside the taxable base. Printing them above the tax rows would state on
-  // the invoice that they had been taxed.
-  pushCharge('Service Charge', receipt.serviceChargeAmount);
-  pushCharge('Packing Charge', receipt.packingChargeAmount);
-  pushCharge('Delivery Charge', receipt.deliveryChargeAmount);
+  // Untaxed charges sit below the GST rows because that is where RecomputeTotals adds them —
+  // on top of the tax, not inside the taxable base. Skipped when they were taxed, since they
+  // have already printed above.
+  if (!chargesTaxed) {
+    pushCharge('Service Charge', receipt.serviceChargeAmount);
+    pushCharge('Packing Charge', receipt.packingChargeAmount);
+    pushCharge('Delivery Charge', receipt.deliveryChargeAmount);
+  }
+  // A tip is never taxed, so it prints here on every bill.
   pushCharge('Tip', receipt.tipAmount);
   if (receipt.roundOffAmount) {
     // The sign is the whole point of this row — a bare "Rs.0.40" printed against a total that

@@ -743,6 +743,7 @@ export const MenuScreen = ({ navigation }: any) => {
   // null = "no slab of its own", which bills at the cafe's default tax group (or the flat
   // Cafe Settings rate when there is none). Sent as 0 to clear — see UpdateMenuItemRequest.
   const [editTaxGroupId, setEditTaxGroupId] = useState<number | null>(null);
+  const [editHsnCode, setEditHsnCode] = useState('');
   const [editVegNonVeg, setEditVegNonVeg] = useState<'Veg' | 'NonVeg' | 'Jain' | 'Eggetarian' | null>(null);
   // MRP item — the till asks for the rate when this is added to an order, and bills it
   // tax-inclusive. The Price field below stays the last-known rate (what the grid shows and
@@ -1081,6 +1082,7 @@ export const MenuScreen = ({ navigation }: any) => {
     setEditItemType(item.itemType);
     setEditVegNonVeg(item.vegNonVegType ?? null);
     setEditTaxGroupId(item.taxGroupId ?? null);
+    setEditHsnCode(item.hsnCode ?? '');
     setEditIsOpenPrice(item.isOpenPrice);
   };
 
@@ -1147,6 +1149,8 @@ export const MenuScreen = ({ navigation }: any) => {
           vegNonVegType: editVegNonVeg,
           // 0 clears it back to the cafe default — undefined would mean "leave unchanged".
           taxGroupId: editTaxGroupId ?? 0,
+          // Empty string clears the override back to the cafe default (see UpdateMenuItemRequest).
+          hsnCode: editHsnCode.trim(),
           isOpenPrice: editIsOpenPrice,
         },
       });
@@ -2000,6 +2004,26 @@ export const MenuScreen = ({ navigation }: any) => {
                 <Text style={styles.emptyStationsHint}>
                   No tax slabs set up yet — add them from Cafe Settings → Tax Slabs to bill different GST rates.
                 </Text>
+              )}
+
+              {/* Only worth showing once the cafe actually prints HSN codes — until a default is
+                  set, no bill carries one and a per-item override would go nowhere. */}
+              {settings?.defaultHsnCode && (
+                <>
+                  <Text style={styles.fieldLabel}>HSN / SAC Code</Text>
+                  <TextInput
+                    style={styles.formInput}
+                    value={editHsnCode}
+                    onChangeText={setEditHsnCode}
+                    placeholder={`Default (${settings.defaultHsnCode})`}
+                    placeholderTextColor={COLORS.placeholder}
+                    keyboardType="number-pad"
+                  />
+                  <Text style={styles.emptyStationsHint}>
+                    Leave blank to use the cafe's default. Set one only for packaged goods that carry their
+                    own HSN. Changing it never restates an invoice already issued.
+                  </Text>
+                </>
               )}
 
               <Text style={styles.fieldLabel}>Item Type</Text>

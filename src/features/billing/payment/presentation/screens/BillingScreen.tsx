@@ -82,6 +82,7 @@ export const BillingScreen = () => {
       waiterName: openOrder.servedByName ?? openOrder.createdByName,
       gstNumber: settings?.gstNumber,
       licenceNumber: settings?.licenceNumber,
+      isCompositionScheme: settings?.isCompositionScheme,
       logoUrl: settings?.logoUrl,
       items: openOrder.items,
       subtotal: openOrder.subtotal,

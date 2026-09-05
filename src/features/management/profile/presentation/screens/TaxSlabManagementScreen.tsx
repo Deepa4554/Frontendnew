@@ -50,12 +50,67 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
   // round trip — cleared back to the server's answer whenever fresh settings arrive.
   const [modeOverride, setModeOverride] = useState<Partial<Record<PaymentMethod, boolean>> | null>(null);
   const [byModeOverride, setByModeOverride] = useState<boolean | null>(null);
+  // Same optimistic-mirror trick as the tender ticks above, for the same reason: a switch that
+  // waits out the round trip before moving reads as a switch that didn't work.
+  const [chargesTaxOverride, setChargesTaxOverride] = useState<boolean | null>(null);
+  const [compositionOverride, setCompositionOverride] = useState<boolean | null>(null);
+  const [hsnDraft, setHsnDraft] = useState('');
+  const [hsnError, setHsnError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (settings) setGlobalRateDraft(String(settings.taxRatePct));
+    if (settings) {
+      setGlobalRateDraft(String(settings.taxRatePct));
+      setHsnDraft(settings.defaultHsnCode ?? '');
+    }
     setModeOverride(null);
     setByModeOverride(null);
+    setChargesTaxOverride(null);
+    setCompositionOverride(null);
   }, [settings]);
+
+  const chargesTaxOn = chargesTaxOverride ?? settings?.taxChargesEnabled ?? false;
+  const compositionOn = compositionOverride ?? settings?.isCompositionScheme ?? false;
+
+  const toggleChargesTax = async (next: boolean) => {
+    if (!settings) return;
+    setChargesTaxOverride(next);
+    try {
+      await updateSettings.mutateAsync({ taxChargesEnabled: next });
+    } catch (err) {
+      setChargesTaxOverride(null);
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const toggleComposition = async (next: boolean) => {
+    if (!settings) return;
+    setCompositionOverride(next);
+    try {
+      await updateSettings.mutateAsync({ isCompositionScheme: next });
+    } catch (err) {
+      setCompositionOverride(null);
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const saveHsn = async () => {
+    if (!settings) return;
+    const code = hsnDraft.trim();
+    // Mirrors HsnCode.Normalize on the server so a typo is caught before the round trip; the
+    // server still validates, this just spares the user a toast for something the field knows.
+    if (code && !/^\d{4,8}$/.test(code)) {
+      setHsnError('HSN/SAC codes are 4 to 8 digits, numbers only.');
+      return;
+    }
+    setHsnError(null);
+    try {
+      // Empty string is the "clear it" value, not "leave unchanged" — see UpdateSettingsRequest.
+      await updateSettings.mutateAsync({ defaultHsnCode: code });
+      dispatch(showToast({ message: code ? 'HSN/SAC code saved' : 'HSN/SAC code cleared', icon: 'check-circle-outline', tone: 'success' }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
 
   // Which tenders currently carry tax. The server stores this as CSV; the screen works in ticks
   // and sends a list back up (see UpdateSettingsRequest.taxablePaymentModes).
@@ -313,6 +368,82 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
               </Text>
             </>
           )}
+        </View>
+
+        {/* ---------- GST on service / packing / delivery charges ---------- */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardIcon}>
+              <Icon name="room-service-outline" size={20} color={COLORS.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>GST on Service & Delivery Charges</Text>
+              <Text style={styles.cardDesc}>
+                Charge GST on the service, packing and delivery charges too, at the global rate above.
+              </Text>
+            </View>
+            <Switch
+              value={chargesTaxOn}
+              onValueChange={toggleChargesTax}
+              disabled={!settings || updateSettings.isPending}
+              trackColor={{ false: '#DDD1C6', true: COLORS.accent }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+          <Text style={styles.cardDesc}>
+            Under GST these charges are part of the same supply as the food, so they are taxable — but turning
+            this on RAISES the total of every new bill that carries one. Orders already placed keep the tax they
+            were billed with, so a period you have already filed never changes.
+          </Text>
+        </View>
+
+        {/* ---------- Invoice identity: composition scheme + default HSN ---------- */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardIcon}>
+              <Icon name="file-document-outline" size={20} color={COLORS.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Composition Scheme</Text>
+              <Text style={styles.cardDesc}>
+                Your bill prints as a BILL OF SUPPLY instead of a TAX INVOICE.
+              </Text>
+            </View>
+            <Switch
+              value={compositionOn}
+              onValueChange={toggleComposition}
+              disabled={!settings || updateSettings.isPending}
+              trackColor={{ false: '#DDD1C6', true: COLORS.accent }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+
+          <Text style={styles.fieldLabel}>Default HSN / SAC code</Text>
+          <View style={styles.valueInputRow}>
+            <View style={[styles.inputWrap, hsnError && styles.inputWrapError]}>
+              <TextInput
+                style={styles.input}
+                keyboardType="number-pad"
+                value={hsnDraft}
+                onChangeText={(t) => { setHsnDraft(t); if (hsnError) setHsnError(null); }}
+                placeholder="996331"
+                placeholderTextColor={COLORS.placeholder}
+              />
+            </View>
+            <TouchableOpacity style={styles.saveBtn} onPress={saveHsn} disabled={updateSettings.isPending}>
+              {updateSettings.isPending ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.saveBtnText}>Save</Text>
+              )}
+            </TouchableOpacity>
+          </View>
+          {hsnError && <Text style={styles.fieldError}>{hsnError}</Text>}
+          <Text style={styles.cardDesc}>
+            Printed on every bill line and summarised in the Tax / GST report. Most cafes need only this one code
+            — 996331 covers restaurant service. Set a different code on individual menu items only for packaged
+            goods sold across the counter. Leave blank to print no HSN at all.
+          </Text>
         </View>
 
         {/* ---------- Add Tax Slab ---------- */}

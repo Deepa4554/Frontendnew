@@ -66,6 +66,11 @@ const PAYMENT_MODE_ICON: Record<PaymentMode, string> = {
 /** The mode a row is filtered and totalled under. Rows saved before the field existed have
  * none, and are shown as their own bucket rather than being read as Cash. */
 const modeOf = (e: CafeExpense) => e.paymentMode ?? UNSET_PAYMENT_MODE;
+
+/** The GST slabs a cafe's own purchases realistically arrive at, plus "not known" — which is
+ * FIRST because it's the honest default: most small cash purchases come with no usable bill,
+ * and a screen that pre-picks 5% would quietly manufacture credit nobody is entitled to. */
+const GST_RATE_CHOICES: (number | null)[] = [null, 0, 5, 12, 18, 28];
 const ALL_MODES = 'All';
 const MODE_FILTER_ICON: Record<string, string> = {
   [ALL_MODES]: 'filter-variant',
@@ -100,6 +105,9 @@ export const CafeExpensesScreen = () => {
   const [purpose, setPurpose] = useState('');
   const [spentBy, setSpentBy] = useState('');
   const [expenseMode, setExpenseMode] = useState<PaymentMode>('Cash');
+  // null = "rate not recorded", which is the default and a real answer of its own — most cash
+  // purchases come with no usable bill. Only a picked rate feeds the input-tax credit.
+  const [gstRate, setGstRate] = useState<number | null>(null);
 
   // Which payment mode the history list below is narrowed to; ALL_MODES = no filter.
   const [modeFilter, setModeFilter] = useState<string>(ALL_MODES);
@@ -290,8 +298,14 @@ export const CafeExpensesScreen = () => {
       return;
     }
     try {
-      const result = await addExpense.mutateAsync({ amount: amt, category, purpose: purpose.trim(), spentBy: spentBy.trim(), paymentMode: expenseMode });
+      const result = await addExpense.mutateAsync({
+        amount: amt, category, purpose: purpose.trim(), spentBy: spentBy.trim(), paymentMode: expenseMode,
+        // Omitted rather than sent as 0 when nothing was picked: "not recorded" and "0% rated"
+        // are different answers to whoever claims the credit (see CafeExpense.TaxRatePct).
+        ...(gstRate === null ? {} : { taxRatePct: gstRate }),
+      });
       setModalVisible(false);
+      setGstRate(null);
       // Above ApprovalThresholds.ExpenseAmount, the backend holds this as a pending
       // ApprovalRequest for the Owner instead of recording it — nothing's on the books yet.
       if ('pendingApproval' in result) {
@@ -610,6 +624,29 @@ export const CafeExpensesScreen = () => {
             {expenseMode === 'Due' && (
               <Text style={styles.modeHint}>Not paid to the vendor yet — still counted in this month's spend.</Text>
             )}
+
+            <Text style={styles.fieldLabel}>GST on the bill</Text>
+            <View style={styles.paymentModeRow}>
+              {GST_RATE_CHOICES.map((r) => {
+                const on = gstRate === r;
+                return (
+                  <TouchableOpacity
+                    key={String(r)}
+                    style={[styles.paymentModePill, on && styles.paymentModePillActive]}
+                    onPress={() => setGstRate(r)}
+                  >
+                    <Text style={[styles.paymentModePillText, on && styles.paymentModePillTextActive]}>
+                      {r === null ? 'Not known' : `${r}%`}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            <Text style={styles.modeHint}>
+              {gstRate === null
+                ? "No rate recorded — this spend won't be counted as input tax credit."
+                : `The amount above stays as typed; ₹${(parseFloat(amount || '0') - parseFloat(amount || '0') / (1 + gstRate / 100)).toFixed(2)} of it is claimable GST.`}
+            </Text>
 
             <Text style={styles.fieldLabel}>Purpose</Text>
             <View style={{ borderRadius: 8 }}>

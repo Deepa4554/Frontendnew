@@ -29,6 +29,10 @@ interface DraftLine {
 
 const emptyLine = (): DraftLine => ({ key: `${Date.now()}-${Math.random()}`, inventoryItemId: null, quantity: '', unitCost: '' });
 
+/** GST slabs a cafe's supplier invoices realistically arrive at, with "not known" FIRST —
+ * a pre-picked rate would manufacture credit off invoices nobody actually read. */
+const PURCHASE_GST_RATES: (number | null)[] = [null, 0, 5, 12, 18, 28];
+
 /** Local draft per line while filling out the Receive modal, keyed by PurchaseItem id. */
 interface ReceiveLine {
   receivedQuantity: string;
@@ -60,6 +64,9 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
 
   const [receivingOrder, setReceivingOrder] = useState<PurchaseOrder | null>(null);
   const [receiveLines, setReceiveLines] = useState<Record<number, ReceiveLine>>({});
+  // GST on the vendor's invoice for this delivery. null = "not recorded", which is the default
+  // and a real answer — it keeps the spend out of the input-tax credit instead of claiming 0%.
+  const [receiveGstRate, setReceiveGstRate] = useState<number | null>(null);
   const [receiveExpiryPickerLineKey, setReceiveExpiryPickerLineKey] = useState<number | null>(null);
   const [receiving, setReceiving] = useState(false);
   const [cancellingId, setCancellingId] = useState<number | null>(null);
@@ -143,6 +150,9 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
       };
     });
     setReceiveLines(draft);
+    // Back to "not known" for each delivery rather than remembering the last one — a
+    // remembered rate would silently claim credit on an invoice nobody checked.
+    setReceiveGstRate(null);
     setReceivingOrder(order);
   };
 
@@ -177,6 +187,11 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
             purchaseItemId: Number(purchaseItemId),
             receivedQuantity: parseFloat(line.receivedQuantity),
             unitCost: parseFloat(line.unitCost),
+            // One rate for the whole delivery: a vendor invoice normally carries a single GST
+            // rate, and a picker per line would swamp a modal that already has three fields on
+            // each. A delivery genuinely mixing rates has to be received as separate orders —
+            // the column is per line, so per-line entry is a UI change, not a data change.
+            ...(receiveGstRate === null ? {} : { taxRatePct: receiveGstRate }),
             // Already ISO — DatePickerModal emits yyyy-MM-dd, which is what the API takes.
             expiryDate: line.expiryDate.trim() || undefined,
           })),
@@ -576,6 +591,29 @@ export const PurchaseOrderScreen = ({ navigation }: any) => {
                 );
               })}
 
+              <Text style={styles.receiveGstLabel}>GST on the vendor's invoice</Text>
+              <View style={styles.receiveGstRow}>
+                {PURCHASE_GST_RATES.map((r) => {
+                  const on = receiveGstRate === r;
+                  return (
+                    <TouchableOpacity
+                      key={String(r)}
+                      style={[styles.receiveGstPill, on && styles.receiveGstPillOn]}
+                      onPress={() => setReceiveGstRate(r)}
+                    >
+                      <Text style={[styles.receiveGstPillText, on && styles.receiveGstPillTextOn]}>
+                        {r === null ? 'Not known' : `${r}%`}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+              <Text style={styles.receiveGstHint}>
+                {receiveGstRate === null
+                  ? "No rate recorded — this purchase won't be counted as input tax credit."
+                  : 'The costs above stay as entered; the GST inside them is reported as claimable credit.'}
+              </Text>
+
               <View style={styles.modalActions}>
                 <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setReceivingOrder(null)}>
                   <Text style={styles.modalCancelText}>Cancel</Text>
@@ -697,6 +735,13 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   costInputWrap: { flex: 1, borderRadius: 8 },
   costInput: { width: '100%', backgroundColor: COLORS.cardAlt, borderRadius: 8, borderWidth: 1, borderColor: COLORS.inputBorder, paddingHorizontal: isDesktopWeb ? 6 : 6, height: 34, fontSize: 12, color: COLORS.heading },
   modalActions: { flexDirection: 'row', gap: isDesktopWeb ? 6 : 6, marginTop: isDesktopWeb ? 9 : 9 },
+  receiveGstLabel: { fontSize: 12, fontWeight: '700', color: COLORS.heading, marginTop: 12, marginBottom: 6 },
+  receiveGstRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  receiveGstPill: { paddingHorizontal: 10, paddingVertical: 6, borderRadius: 14, borderWidth: 1, borderColor: COLORS.divider, backgroundColor: COLORS.cardAlt },
+  receiveGstPillOn: { backgroundColor: COLORS.accent, borderColor: COLORS.accent },
+  receiveGstPillText: { fontSize: 12, fontWeight: '600', color: COLORS.muted },
+  receiveGstPillTextOn: { color: '#FFFFFF' },
+  receiveGstHint: { fontSize: 11, color: COLORS.muted, marginTop: 6 },
   modalCancelBtn: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: COLORS.card, borderRadius: 6, paddingVertical: isDesktopWeb ? 7 : 7.5 },
   modalCancelText: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
   modalSaveBtn: { flex: 1.3, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: isDesktopWeb ? 4 : 4.5, backgroundColor: COLORS.button, borderRadius: 6, paddingVertical: isDesktopWeb ? 7 : 7.5 },

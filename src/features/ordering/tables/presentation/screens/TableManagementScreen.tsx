@@ -443,6 +443,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
       waiterName: occupiedOrder.servedByName ?? occupiedOrder.createdByName,
       gstNumber: settings?.gstNumber,
       licenceNumber: settings?.licenceNumber,
+      isCompositionScheme: settings?.isCompositionScheme,
       logoUrl: settings?.logoUrl,
       items: occupiedOrder.items,
       subtotal: occupiedOrder.subtotal,

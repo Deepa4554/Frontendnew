@@ -82,6 +82,7 @@ async function printTiffinBill(
     orderTypeLabel: 'Tiffin',
     gstNumber: settings?.gstNumber,
     licenceNumber: settings?.licenceNumber,
+    isCompositionScheme: settings?.isCompositionScheme,
     logoUrl: settings?.logoUrl,
     items: [{ name: `${r.planName} - ${fmtRange(r.periodStart, r.periodEnd)} (${r.deliveredDays}d)`, qty: r.totalQty, price: r.rate }],
     subtotal: r.total,

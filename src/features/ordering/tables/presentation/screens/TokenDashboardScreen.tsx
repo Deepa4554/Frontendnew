@@ -188,6 +188,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
       waiterName: order.servedByName ?? order.createdByName,
       gstNumber: settings?.gstNumber,
       licenceNumber: settings?.licenceNumber,
+      isCompositionScheme: settings?.isCompositionScheme,
       logoUrl: settings?.logoUrl,
       items: order.items,
       subtotal: order.subtotal,

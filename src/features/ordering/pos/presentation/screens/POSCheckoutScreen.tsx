@@ -2047,6 +2047,7 @@ export const POSCheckoutScreen = () => {
           waiterName: selectedWaiterName,
           gstNumber: settings?.gstNumber,
       licenceNumber: settings?.licenceNumber,
+      isCompositionScheme: settings?.isCompositionScheme,
       logoUrl: settings?.logoUrl,
           items: order.items,
           subtotal: order.subtotal,
@@ -2104,6 +2105,7 @@ export const POSCheckoutScreen = () => {
       waiterName: selectedWaiterName,
       gstNumber: settings?.gstNumber,
       licenceNumber: settings?.licenceNumber,
+      isCompositionScheme: settings?.isCompositionScheme,
       logoUrl: settings?.logoUrl,
       // CartLine.price is already per-unit-with-toppings, the same thing the printer
       // multiplies by qty for a server order's line (see buildReceiptLines).
@@ -2493,6 +2495,7 @@ export const POSCheckoutScreen = () => {
       waiterName: selectedWaiterName,
       gstNumber: settings?.gstNumber,
       licenceNumber: settings?.licenceNumber,
+      isCompositionScheme: settings?.isCompositionScheme,
       logoUrl: settings?.logoUrl,
       items: receipt.items,
       subtotal: receipt.subtotal,
@@ -2536,6 +2539,49 @@ export const POSCheckoutScreen = () => {
     );
   };
 
+  // Resume/append mode: the existing order's already-fired KOTs, read-only. Rendered as
+  // the first thing INSIDE the scroll area rather than as part of the pinned header —
+  // a table on its third or fourth round carries a KOT list taller than the sheet
+  // itself, and pinning that above the scroll squeezed the new-items list and its
+  // add-item box off the bottom with no way to scroll them back into reach.
+  const renderResumeBanner = () =>
+    resumeMode && resumeOrder ? (
+      <View style={styles.resumeBanner}>
+        <View style={styles.resumeBannerHead}>
+          <Icon name="silverware-variant" size={15} color={COLORS.accent} />
+          <Text style={styles.resumeBannerTitle}>
+            Adding to Order {resumeOrder.number}
+            {resumeOrder.tableCode ? ` · Table ${resumeOrder.tableCode}` : ''}
+          </Text>
+        </View>
+        <Text style={styles.resumeBannerSub}>
+          Already in the kitchen (read-only). New items below fire as a fresh
+          KOT.
+        </Text>
+        {resumeOrder.fireBatches.map(b => {
+          // Cancelled lines aren't "already in the kitchen" — the kitchen was told to
+          // stop making them and they're off the bill (see PrintableReceiptItem.voided),
+          // so listing them here re-shows an item the till just removed on the table.
+          const bItems = resumeOrder.items.filter(
+            it => it.fireBatch === b.batchNumber && !it.voided,
+          );
+          if (bItems.length === 0) return null;
+          return (
+            <View key={b.batchNumber} style={styles.resumeKot}>
+              <Text style={styles.resumeKotLabel}>
+                KOT {b.kotNumber || `#${b.batchNumber}`} · {b.status}
+              </Text>
+              {bItems.map(it => (
+                <Text key={it.id} style={styles.resumeKotItem}>
+                  {it.qty}× {it.name}
+                </Text>
+              ))}
+            </View>
+          );
+        })}
+      </View>
+    ) : null;
+
   // Shared between the mobile "collapsed bar -> slide-up modal" cart and the
   // desktop persistent side panel — same order details, guest chip, line
   // items, and Split/Discount/Fire actions either way, just different chrome
@@ -2554,44 +2600,6 @@ export const POSCheckoutScreen = () => {
   // The side panel is always on screen and has nothing to close, hence the flag.
   const renderCartHeader = (inSheet: boolean = false) => (
     <View style={styles.cartHeaderBlock}>
-      {/* Resume/append mode: existing order's already-fired KOTs, shown read-only. */}
-      {resumeMode && resumeOrder && (
-        <View style={styles.resumeBanner}>
-          <View style={styles.resumeBannerHead}>
-            <Icon name="silverware-variant" size={15} color={COLORS.accent} />
-            <Text style={styles.resumeBannerTitle}>
-              Adding to Order {resumeOrder.number}
-              {resumeOrder.tableCode ? ` · Table ${resumeOrder.tableCode}` : ''}
-            </Text>
-          </View>
-          <Text style={styles.resumeBannerSub}>
-            Already in the kitchen (read-only). New items below fire as a fresh
-            KOT.
-          </Text>
-          {resumeOrder.fireBatches.map(b => {
-            // Cancelled lines aren't "already in the kitchen" — the kitchen was told to
-            // stop making them and they're off the bill (see PrintableReceiptItem.voided),
-            // so listing them here re-shows an item the till just removed on the table.
-            const bItems = resumeOrder.items.filter(
-              it => it.fireBatch === b.batchNumber && !it.voided,
-            );
-            if (bItems.length === 0) return null;
-            return (
-              <View key={b.batchNumber} style={styles.resumeKot}>
-                <Text style={styles.resumeKotLabel}>
-                  KOT {b.kotNumber || `#${b.batchNumber}`} · {b.status}
-                </Text>
-                {bItems.map(it => (
-                  <Text key={it.id} style={styles.resumeKotItem}>
-                    {it.qty}× {it.name}
-                  </Text>
-                ))}
-              </View>
-            );
-          })}
-        </View>
-      )}
-
       <View style={styles.orderHeaderCol}>
         <View style={styles.orderHeaderTopRow}>
           <Text style={styles.orderTitle}>
@@ -3348,6 +3356,7 @@ export const POSCheckoutScreen = () => {
               showsVerticalScrollIndicator={false}
               contentContainerStyle={{ paddingBottom: 6 }}
             >
+              {renderResumeBanner()}
               {renderCartItems()}
             </ScrollView>
             {/* Pinned outside the scroll area so Subtotal/Total/Fire-to-Kitchen are
@@ -3440,6 +3449,7 @@ export const POSCheckoutScreen = () => {
                   showsVerticalScrollIndicator={false}
                   contentContainerStyle={{ paddingBottom: 8 }}
                 >
+                  {renderResumeBanner()}
                   {renderCartItems()}
                 </ScrollView>
                 {/* Bottom inset added here, not on the scroll's contentContainer — the

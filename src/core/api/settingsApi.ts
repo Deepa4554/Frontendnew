@@ -11,6 +11,16 @@ export interface ApiSettings {
   /** Comma-separated tenders that carry tax while the switch above is on, e.g. "UPI,Card".
    * Stored as CSV; sent back up as a string ARRAY (see UpdateSettingsRequest). */
   taxablePaymentModes: string;
+  /** Charge GST on the Service/Packing/Delivery charges too, instead of adding them on top of
+   * an already-computed tax. Off for every cafe that hasn't turned it on, and it only ever
+   * affects orders placed after the change — each bill snapshots the decision. */
+  taxChargesEnabled: boolean;
+  /** This cafe bills under the GST composition scheme, so its bill prints as a BILL OF SUPPLY
+   * rather than a TAX INVOICE. */
+  isCompositionScheme: boolean;
+  /** HSN/SAC used for menu items with no code of their own — the whole menu at most cafes.
+   * Null means no HSN is printed anywhere. */
+  defaultHsnCode: string | null;
   currency: string;
   region: string;
   businessName: string;
@@ -183,6 +193,11 @@ export type UpdateSettingsRequest = Partial<
    * to know the storage format. An empty array is a real value ("no tender is taxable"), not
    * "leave unchanged"; omit the field entirely for that. */
   taxablePaymentModes?: string[];
+  taxChargesEnabled?: boolean;
+  isCompositionScheme?: boolean;
+  /** Empty string clears it back to "no HSN"; omit the field to leave it unchanged. Digits
+   * only, 4-8 of them — the server rejects anything else rather than printing it on a bill. */
+  defaultHsnCode?: string;
 };
 
 /** A notification category that has no dedicated named toggle of its own (Billing, System,

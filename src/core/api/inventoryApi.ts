@@ -184,6 +184,11 @@ export interface ReceivePurchaseItemRequest {
   unitCost: number;
   /** ISO yyyy-MM-dd — this line's own lot, if it has a shelf life. */
   expiryDate?: string;
+  /** GST the vendor charged on this line. `unitCost` stays INCLUSIVE of it, so recording a rate
+   * never restates the purchase's value or the inventory average it feeds. Omit when it isn't
+   * known — that records "not recorded", which the input-tax report keeps out of the credit
+   * rather than counting as exempt. */
+  taxRatePct?: number;
 }
 
 /** Every line item on the order must be covered — partial receipt isn't supported yet. */

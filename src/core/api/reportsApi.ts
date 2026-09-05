@@ -110,14 +110,66 @@ export interface TaxBillLine {
   createdAt: string;
   taxableAmount: number;
   taxAmount: number;
+  /** The share of this bill's tax a refund has since reversed. 0 on most rows. */
+  refundedTaxAmount: number;
+}
+
+/** Rate-wise totals split by the HSN/SAC each line was invoiced under — the summary a GST
+ * return asks for separately. `hsnCode` is null for lines at a cafe that has entered no codes;
+ * those rows are kept (shown as "Not set") so this list always totals the same as `byRate`. */
+export interface TaxHsnLine {
+  hsnCode: string | null;
+  ratePct: number;
+  taxableAmount: number;
+  taxAmount: number;
+  lineCount: number;
 }
 
 export interface TaxGstReport {
+  /** GROSS — tax as originally invoiced. Refunds are NOT netted out of this or out of `byRate`/
+   * `byHsn`/`bills`: a return states supplies and credit notes separately, and shrinking a slab
+   * would break a period already reconciled against the bill-wise list. Use the net* figures
+   * for what is actually owed. */
   totalTaxableAmount: number;
   totalTaxCollected: number;
+  refundedTaxableAmount: number;
+  refundedTaxAmount: number;
+  netTaxableAmount: number;
+  netTaxAmount: number;
   byRate: TaxRateLine[];
+  byHsn: TaxHsnLine[];
   /** Bill-level detail so rate totals can be traced back to individual invoices. */
   bills: TaxBillLine[];
+}
+
+export interface TaxInputRateLine {
+  ratePct: number;
+  taxableAmount: number;
+  taxAmount: number;
+  lineCount: number;
+}
+
+/** Which register the input tax came from — "Purchase Orders" or "Expenses". */
+export interface TaxInputSource {
+  source: string;
+  grossAmount: number;
+  taxableAmount: number;
+  taxAmount: number;
+  lineCount: number;
+}
+
+export interface TaxInputReport {
+  totalGrossAmount: number;
+  totalTaxableAmount: number;
+  totalInputTax: number;
+  /** Spend whose GST rate nobody recorded. NOT counted as zero-rated — it may be hiding
+   * claimable tax, so it is surfaced instead of being folded into the credit. */
+  unrecordedGrossAmount: number;
+  /** Output tax over the same period, so the net position needs no second call. */
+  outputTaxCollected: number;
+  netTaxPayable: number;
+  byRate: TaxInputRateLine[];
+  bySource: TaxInputSource[];
 }
 
 export interface OrderDetailItem {
@@ -273,6 +325,11 @@ export const reportsApi = {
     apiClient.get<SalesReport>('/reports/sales', { params }).then((r) => r.data),
   taxGstReport: (params?: { days?: number; from?: string; to?: string; branchId?: number | null }) =>
     apiClient.get<TaxGstReport>('/reports/tax-gst', { params }).then((r) => r.data),
+
+  /** Input tax (ITC) on the period's purchases and expenses, plus the net position against the
+   * same period's output tax. Owner/Manager only — it exposes what the cafe pays its vendors. */
+  taxInputReport: (params?: { days?: number; from?: string; to?: string }) =>
+    apiClient.get<TaxInputReport>('/reports/tax-input', { params }).then((r) => r.data),
   crmReport: (params?: { days?: number; from?: string; to?: string; branchId?: number | null }) =>
     apiClient.get<CrmReport>('/reports/crm', { params }).then((r) => r.data),
   ordersReport: (params?: { days?: number; from?: string; to?: string; branchId?: number | null; orderType?: string; paymentMethod?: string }) =>

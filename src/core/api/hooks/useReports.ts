@@ -21,6 +21,11 @@ export const useSalesReport = (params?: { days?: number; from?: string; to?: str
 export const useTaxGstReport = (params?: { days?: number; from?: string; to?: string; branchId?: number | null }) =>
   useQuery({ queryKey: queryKeys.taxGstReport(params), queryFn: () => reportsApi.taxGstReport(params) });
 
+/** Input tax (ITC) on purchases and expenses. Takes no branchId — neither CafeExpense nor
+ * PurchaseOrder is branch-scoped, so passing one would filter nothing and imply otherwise. */
+export const useTaxInputReport = (params?: { days?: number; from?: string; to?: string }) =>
+  useQuery({ queryKey: queryKeys.taxInputReport(params), queryFn: () => reportsApi.taxInputReport(params) });
+
 export const useCrmReport = (params?: { days?: number; from?: string; to?: string; branchId?: number | null }) =>
   useQuery({ queryKey: queryKeys.crmReport(params), queryFn: () => reportsApi.crmReport(params) });
 

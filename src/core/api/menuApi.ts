@@ -35,6 +35,10 @@ export interface MenuItem {
   /** Which tax slab this item bills at (see taxGroupsApi). Null = the cafe's default tax
    * group, or Cafe Settings' flat rate when there's no default. */
   taxGroupId?: number | null;
+  /** HSN/SAC printed for this item on the invoice. Null falls back to Cafe Settings'
+   * `defaultHsnCode` — which is what most items use, since a restaurant bills its whole menu
+   * under one SAC. Per-item matters for packaged goods sold across the counter. */
+  hsnCode?: string | null;
   /** Available Half/Full/... price options — eager-loaded on the main list so the ordering
    * grid can show a picker without a fetch per item. Empty when the item has none. */
   variants: Variant[];
@@ -113,6 +117,9 @@ export interface CreateMenuItemRequest {
   itemType?: string;
   vegNonVegType?: string | null;
   taxGroupId?: number | null;
+  /** HSN/SAC for this item. Omit to leave it on the cafe-wide default. Digits only, 4-8 of
+   * them — the server rejects anything else rather than printing it on an invoice. */
+  hsnCode?: string;
   /** MRP item — rate typed at billing time. See MenuItem.isOpenPrice. */
   isOpenPrice?: boolean;
 }
@@ -135,6 +142,9 @@ export interface UpdateMenuItemRequest {
   /** Pass 0 to clear the item back to the cafe default — an omitted value means "leave
    * unchanged", like every other field on this PATCH, so it can't also mean "clear". */
   taxGroupId?: number | null;
+  /** HSN/SAC for this item. An EMPTY string clears it back to the cafe-wide default; omitting
+   * it leaves it unchanged, like every other field on this PATCH. */
+  hsnCode?: string;
   /** MRP item — rate typed at billing time. See MenuItem.isOpenPrice. */
   isOpenPrice?: boolean;
 }

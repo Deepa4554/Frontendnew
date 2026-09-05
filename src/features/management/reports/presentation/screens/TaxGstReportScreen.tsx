@@ -4,7 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import { useSelector, useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
-import { useTaxGstReport } from '../../../../../core/api/hooks/useReports';
+import { useTaxGstReport, useTaxInputReport } from '../../../../../core/api/hooks/useReports';
 import { useBranches } from '../../../../../core/api/hooks/useBranches';
 import { RootState } from '../../../../../core/store/rootReducer';
 import { showToast } from '../../../../../core/store/uiSlice';
@@ -31,6 +31,10 @@ export const TaxGstReportScreen = () => {
   const range = rangeForPreset(preset, customFrom, customTo);
   const rangeLabel = rangeLabelFor(preset, customFrom, customTo);
   const { data, isLoading, isError, refetch } = useTaxGstReport({ ...range, branchId: activeBranchId });
+  // Input tax is deliberately NOT branch-filtered — expenses and purchase orders carry no
+  // branch of their own, so a branch-scoped output figure sits beside a whole-cafe credit.
+  // The net-position card says so rather than implying the two were filtered alike.
+  const { data: input } = useTaxInputReport(range);
 
   const runExport = async (format: 'pdf' | 'excel') => {
     if (!data) return;
@@ -51,6 +55,49 @@ export const TaxGstReportScreen = () => {
           rows: data.byRate.map((r) => ({ rate: `${r.ratePct}%`, taxable: r.taxableAmount, tax: r.taxAmount, lines: r.lineCount })),
           totalsRow: { rate: 'Total', taxable: data.totalTaxableAmount, tax: data.totalTaxCollected, lines: '' },
         },
+        // Only when codes exist — a sheet of "Not set" rows is worse than no sheet.
+        ...(data.byHsn.some((h) => h.hsnCode) ? [{
+          title: 'HSN / SAC summary',
+          columns: [
+            { key: 'hsn', label: 'HSN/SAC' },
+            { key: 'rate', label: 'Rate' },
+            { key: 'taxable', label: 'Taxable Amount', align: 'right' as const },
+            { key: 'tax', label: 'Tax', align: 'right' as const },
+            { key: 'lines', label: 'Line Items', align: 'right' as const },
+          ],
+          rows: data.byHsn.map((h) => ({
+            hsn: h.hsnCode ?? 'Not set',
+            rate: `${h.ratePct}%`,
+            taxable: h.taxableAmount,
+            tax: h.taxAmount,
+            lines: h.lineCount,
+          })),
+          totalsRow: { hsn: 'Total', rate: '', taxable: data.totalTaxableAmount, tax: data.totalTaxCollected, lines: '' },
+        }] : []),
+        // The credit side, and the net position it leaves. Skipped when nothing in the period
+        // had a rate recorded, since an all-zero sheet reads as "no credit due" rather than
+        // "nobody entered the rates".
+        ...(input && input.bySource.length > 0 ? [{
+          title: 'Input tax (ITC) on purchases and expenses',
+          columns: [
+            { key: 'source', label: 'Source' },
+            { key: 'gross', label: 'Amount Paid', align: 'right' as const },
+            { key: 'taxable', label: 'Taxable Amount', align: 'right' as const },
+            { key: 'tax', label: 'Input Tax', align: 'right' as const },
+          ],
+          rows: [
+            ...input.bySource.map((s) => ({
+              source: s.source, gross: s.grossAmount, taxable: s.taxableAmount, tax: s.taxAmount,
+            })),
+            // Called out as its own row rather than left implicit: it is spend that may be
+            // hiding claimable credit, not spend that was exempt.
+            ...(input.unrecordedGrossAmount > 0
+              ? [{ source: 'No GST rate recorded', gross: input.unrecordedGrossAmount, taxable: '', tax: '' }]
+              : []),
+            { source: 'Output tax collected', gross: '', taxable: '', tax: input.outputTaxCollected },
+          ],
+          totalsRow: { source: 'Net GST payable', gross: '', taxable: '', tax: input.netTaxPayable },
+        }] : []),
         {
           title: 'Bill-wise detail',
           columns: [
@@ -58,14 +105,20 @@ export const TaxGstReportScreen = () => {
             { key: 'date', label: 'Date' },
             { key: 'taxable', label: 'Taxable Amount', align: 'right' as const },
             { key: 'tax', label: 'Tax', align: 'right' as const },
+            { key: 'refunded', label: 'Reversed by Refund', align: 'right' as const },
           ],
           rows: data.bills.map((b) => ({
-            bill: `#${b.orderId} ${b.title}`,
+            bill: `${b.orderNumber} ${b.title}`,
             date: new Date(b.createdAt).toLocaleDateString(),
             taxable: b.taxableAmount,
             tax: b.taxAmount,
+            refunded: b.refundedTaxAmount || '',
           })),
-          totalsRow: { bill: 'Total', date: '', taxable: data.totalTaxableAmount, tax: data.totalTaxCollected },
+          totalsRow: {
+            bill: 'Total', date: '',
+            taxable: data.totalTaxableAmount, tax: data.totalTaxCollected,
+            refunded: data.refundedTaxAmount,
+          },
         }],
       };
       if (format === 'pdf') await ReportExportService.exportToPDF(def);
@@ -107,10 +160,48 @@ export const TaxGstReportScreen = () => {
         ) : (
           <>
             <View style={styles.totalCard}>
-              <Text style={styles.totalLabel}>TOTAL TAX COLLECTED</Text>
+              <Text style={styles.totalLabel}>OUTPUT TAX COLLECTED</Text>
               <Text style={styles.totalValue}>₹{data.totalTaxCollected.toFixed(2)}</Text>
               <Text style={styles.totalSub}>on ₹{data.totalTaxableAmount.toFixed(2)} taxable amount</Text>
+              {/* Refunds are shown as their own reversal rather than netted into the slabs
+                  above — a return states supplies and credit notes separately. Hidden entirely
+                  when nothing was refunded, which is the ordinary period. */}
+              {data.refundedTaxAmount > 0 && (
+                <>
+                  <Text style={styles.reversalText}>
+                    less ₹{data.refundedTaxAmount.toFixed(2)} reversed by refunds
+                  </Text>
+                  <Text style={styles.netText}>
+                    Net tax on sales: ₹{data.netTaxAmount.toFixed(2)}
+                  </Text>
+                </>
+              )}
             </View>
+
+            {/* The one figure an accountant is actually after: output minus input. Rendered only
+                once the input report has loaded, so the card never flashes a net position that
+                is really just the output tax with no credit taken off it yet. */}
+            {input && (
+              <View style={styles.netCard}>
+                <Text style={styles.netCardLabel}>NET GST PAYABLE</Text>
+                <Text style={styles.netCardValue}>₹{input.netTaxPayable.toFixed(2)}</Text>
+                <Text style={styles.totalSub}>
+                  ₹{input.outputTaxCollected.toFixed(2)} output − ₹{input.totalInputTax.toFixed(2)} input credit
+                </Text>
+                {/* Spend whose rate nobody recorded is NOT counted as exempt — flagged, because
+                    every rupee of it may be hiding credit the cafe could have claimed. */}
+                {input.unrecordedGrossAmount > 0 && (
+                  <Text style={styles.warnText}>
+                    ₹{input.unrecordedGrossAmount.toFixed(2)} of spend has no GST rate recorded — not counted as credit.
+                  </Text>
+                )}
+                {activeBranchId !== null && (
+                  <Text style={styles.warnText}>
+                    Input credit is cafe-wide; expenses and purchases aren't branch-scoped.
+                  </Text>
+                )}
+              </View>
+            )}
 
             <View style={styles.tableCard}>
               {data.byRate.length === 0 ? (
@@ -128,6 +219,44 @@ export const TaxGstReportScreen = () => {
               )}
             </View>
 
+            {/* Only when the cafe has entered codes — the whole section is noise otherwise,
+                and a list of "Not set" rows tells nobody anything. */}
+            {data.byHsn.some((h) => h.hsnCode) && (
+              <>
+                <Text style={styles.sectionHeading}>HSN / SAC Summary</Text>
+                <View style={styles.tableCard}>
+                  {data.byHsn.map((h, i) => (
+                    <View key={`${h.hsnCode ?? 'none'}-${h.ratePct}`} style={[styles.row, i !== data.byHsn.length - 1 && styles.rowDivider]}>
+                      <View style={styles.rowHeader}>
+                        <Text style={styles.itemName}>{h.hsnCode ?? 'Not set'} · {h.ratePct}%</Text>
+                        <Text style={styles.itemValue}>₹{h.taxAmount.toFixed(2)}</Text>
+                      </View>
+                      <Text style={styles.metaText}>₹{h.taxableAmount.toFixed(2)} taxable · {h.lineCount} line item(s)</Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
+            {input && input.bySource.length > 0 && (
+              <>
+                <Text style={styles.sectionHeading}>Input Tax (ITC)</Text>
+                <View style={styles.tableCard}>
+                  {input.bySource.map((s, i) => (
+                    <View key={s.source} style={[styles.row, i !== input.bySource.length - 1 && styles.rowDivider]}>
+                      <View style={styles.rowHeader}>
+                        <Text style={styles.itemName}>{s.source}</Text>
+                        <Text style={styles.itemValue}>₹{s.taxAmount.toFixed(2)}</Text>
+                      </View>
+                      <Text style={styles.metaText}>
+                        ₹{s.grossAmount.toFixed(2)} paid · ₹{s.taxableAmount.toFixed(2)} taxable · {s.lineCount} entr{s.lineCount === 1 ? 'y' : 'ies'}
+                      </Text>
+                    </View>
+                  ))}
+                </View>
+              </>
+            )}
+
             <Text style={styles.sectionHeading}>Bill-wise Detail ({data.bills.length})</Text>
             <View style={styles.tableCard}>
               {data.bills.length === 0 ? (
@@ -141,6 +270,7 @@ export const TaxGstReportScreen = () => {
                     </View>
                     <Text style={styles.metaText}>
                       {new Date(b.createdAt).toLocaleDateString()} · ₹{b.taxableAmount.toFixed(2)} taxable
+                      {b.refundedTaxAmount > 0 ? ` · ₹${b.refundedTaxAmount.toFixed(2)} reversed by refund` : ''}
                     </Text>
                   </View>
                 ))
@@ -175,6 +305,12 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   totalLabel: { fontSize: 11, fontWeight: '700', color: COLORS.accent, letterSpacing: 0.5 },
   totalValue: { fontSize: isDesktopWeb ? 20 : 16, fontWeight: 'bold', color: COLORS.accent, marginTop: 4 },
   totalSub: { fontSize: 11, color: COLORS.muted, marginTop: 2 },
+  reversalText: { fontSize: 11, color: COLORS.muted, marginTop: 4 },
+  netText: { fontSize: 13, fontWeight: '700', color: COLORS.accent, marginTop: 2 },
+  netCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 8, padding: isDesktopWeb ? 14 : 10.5, marginBottom: isDesktopWeb ? 12 : 9, borderWidth: 1, borderColor: COLORS.divider },
+  netCardLabel: { fontSize: 11, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5 },
+  netCardValue: { fontSize: isDesktopWeb ? 20 : 16, fontWeight: 'bold', color: COLORS.heading, marginTop: 4 },
+  warnText: { fontSize: 11, color: COLORS.muted, marginTop: 6, fontStyle: 'italic' },
   sectionHeading: { fontSize: 12, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5, textTransform: 'uppercase', marginHorizontal: isDesktopWeb ? 16 : 12, marginBottom: 6, marginTop: 12 },
   tableCard: { backgroundColor: COLORS.cardAlt, marginHorizontal: isDesktopWeb ? 16 : 12, borderRadius: 8, overflow: 'hidden' },
   row: { paddingHorizontal: isDesktopWeb ? 14 : 10.5, paddingVertical: isDesktopWeb ? 12 : 9 },

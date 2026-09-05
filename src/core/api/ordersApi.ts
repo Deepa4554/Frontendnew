@@ -68,6 +68,9 @@ export interface OrderItem {
   taxableAmount: number;
   /** Tax charged on this line. The order's `tax` is the sum of these. */
   taxAmount: number;
+  /** HSN/SAC this line was invoiced under, snapshotted when it was placed. Null at a cafe that
+   * has entered no codes, which is when the bill omits them entirely. */
+  hsnCode?: string | null;
   /** Which fire-round this line was sent to the kitchen in. 0 = not yet fired (still
    * editable, invisible on KDS). === order.currentFireBatch means it's the newest batch. */
   fireBatch: number;
@@ -283,6 +286,13 @@ export interface ApiOrder {
    * payment picker prices its tenders against before one is picked. Equal to `total` whenever
    * no tax is in play, so ignoring it is always safe. */
   taxFreeTotal: number;
+  /** Tax charged on the Service/Packing/Delivery charges, and the slab it was charged at — see
+   * the Tax & GST screen's "Charge GST on service & delivery charges" switch. Null/zero at every
+   * cafe that hasn't turned it on, and on every bill placed before it existed. Already inside
+   * `tax` and `total`; carried separately so the bill can fold it into the right GST slab. */
+  chargesTaxRatePct?: number | null;
+  chargesTaxableAmount: number;
+  chargesTaxAmount: number;
   /** Lifetime points and the highest LoyaltyMilestone threshold already claimed — same
    * `get(id)`-only, guestPhone-gated caveat as customerAvailablePoints above. Compare against
    * GET /loyalty-milestones to decide whether the Milestone Reward tile has anything to offer. */
