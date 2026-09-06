@@ -346,6 +346,14 @@ export interface CreateOrderRequest {
   /** Saved onto the guest's Customer record, not the order itself — useful for
    * delivery, and remembered for their next visit. */
   guestAddress?: string | null;
+  /** Fire to the kitchen inside this same request instead of following up with a separate
+   * `fire(id)` call — what the KOT button wants, since it always needed both and the second
+   * round trip was pure latency in front of the cashier's spinner. Ignored for QSR/CASH (the
+   * backend already auto-fires those) and sent false by Hold Order, which must not fire.
+   *
+   * A fire that fails still returns the created order, unfired — check `currentFireBatch === 0`
+   * rather than expecting an error. See backend OrdersController.Create. */
+  fireImmediately?: boolean;
 }
 
 export const ordersApi = {

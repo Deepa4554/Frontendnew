@@ -1333,6 +1333,10 @@ export const POSCheckoutScreen = () => {
         discountAmount: discountFlat > 0 ? discountFlat : undefined,
         branchId: activeBranchId,
         servedByStaffId: waiterStaffId ?? undefined,
+        // Fire in the same request rather than a second round trip (see
+        // ordersApi.CreateOrderRequest.fireImmediately). Hold Order sends false so the order
+        // stays parked unfired; QSR/CASH ignore it, having auto-fired inside Create already.
+        fireImmediately: !holdOnly && !noFireStep,
       });
 
       if (holdOnly && !noFireStep) {
@@ -1347,24 +1351,21 @@ export const POSCheckoutScreen = () => {
         return;
       }
 
-      // Second step: fire to the kitchen — except QSR/Cash, which the backend already
-      // auto-fired inside Create (calling Fire again would 400 "No new items to fire").
-      // If firing fails, the order still safely exists as an Open order recoverable
-      // from the Tables screen — don't surface a raw error.
-      if (!noFireStep) {
-        try {
-          order = await fireOrderMutation.mutateAsync(order.id);
-        } catch {
-          clearCart();
-          dispatch(
-            showToast({
-              message: `Order ${order.number} placed but not yet sent to kitchen — fire it from the Tables screen.`,
-              icon: 'alert-circle-outline',
-              tone: 'warning',
-            }),
-          );
-          return;
-        }
+      // Firing now happens inside Create itself (fireImmediately above), so there is no second
+      // call to make. The backend deliberately still returns the created order when that fire
+      // fails, rather than failing the whole request — the order exists either way — so an
+      // unfired order is detected here by its batch number instead of by an exception, and gets
+      // exactly the recovery message the old catch block showed.
+      if (!noFireStep && order.currentFireBatch === 0) {
+        clearCart();
+        dispatch(
+          showToast({
+            message: `Order ${order.number} placed but not yet sent to kitchen — fire it from the Tables screen.`,
+            icon: 'alert-circle-outline',
+            tone: 'warning',
+          }),
+        );
+        return;
       }
 
       // Cash Sale has no kitchen step at all — nothing to print. Every other type
