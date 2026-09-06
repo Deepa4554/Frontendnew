@@ -363,6 +363,13 @@ export const ordersApi = {
   confirmGuestOrder: (id: number) => apiClient.post<ApiOrder>(`/orders/${id}/confirm`).then((r) => r.data),
   addItem: (id: number, req: CreateOrderItemRequest) =>
     apiClient.post<ApiOrder>(`/orders/${id}/items`, req).then((r) => r.data),
+  /** Appends several lines in ONE request — same rules and pricing as `addItem`, applied to the
+   * list as a unit (one bad line rejects the whole round and nothing is added). What the POS's
+   * "Add Items" flow uses: looping `addItem` cost a full round trip, an order row-lock, an offer
+   * re-evaluation and a totals recompute per line. Does not fire; follow with `fire(id)` as
+   * before. */
+  addItems: (id: number, items: CreateOrderItemRequest[]) =>
+    apiClient.post<ApiOrder>(`/orders/${id}/items/batch`, { items }).then((r) => r.data),
   /** Corrects an existing line's quantity — `qty` is the line's FINAL quantity, not a delta,
    * and must be >= 1 (use `removeItem` to drop the line entirely).
    *

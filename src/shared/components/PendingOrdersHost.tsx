@@ -12,8 +12,7 @@ import { confirmAlert } from './ConfirmDialogHost';
 import { CloseButton } from './atoms/CloseButton';
 import { NonBlockingOverlay } from './NonBlockingOverlay';
 import { useResponsive } from '../../core/utils/useResponsive';
-import { PrinterService } from '../../core/printing/PrinterService';
-import { markKotPrinted } from '../../core/printing/printedKots';
+import { printOrderKot } from '../../core/printing/orderKot';
 import { alertChime } from '../../core/notifications/alertChime';
 
 /**
@@ -127,25 +126,11 @@ export const PendingOrdersHost = () => {
   // POSCheckoutScreen, ...), which each print the newly-fired batch themselves right after
   // firing, this global host never did. A guest's own phone has no printer attached, so
   // without this the kitchen never got a physical ticket for anything ordered by QR — the
-  // order was genuinely in the kitchen's queue, just with no paper to show for it. Same
-  // batch-filtering logic as TableManagementScreen.printCurrentKot.
+  // order was genuinely in the kitchen's queue, just with no paper to show for it. The
+  // newly-fired round only — a re-print of everything is a staff action, see printAllOrderKots.
   const autoPrintKot = async (order: ApiOrder) => {
-    const batchItems = order.items.filter((i) => i.fireBatch === order.currentFireBatch && !i.voided);
-    if (batchItems.length === 0) return;
-    const batch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
-    // Claim it before printing, not after — AutoKotPrintHost's own poll can land while this
-    // request is still in flight, and it must see this batch as already spoken for.
-    if (batch) markKotPrinted(batch.kotNumber);
-    const result = await PrinterService.printKot({
-      title: order.tableCode ? `Table ${order.tableCode}` : order.title,
-      kotNumber: batch?.kotNumber || `#${order.currentFireBatch}`,
-      time: new Date(batch?.firedAt ?? order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      guestName: order.tableCode ? order.guestName : undefined,
-      items: batchItems.map((i) => ({
-        name: i.name, qty: i.qty, variantName: i.variantName, modifier: i.modifier, stationName: i.stationName, vegNonVegType: i.vegNonVegType,
-        selectedModifiers: i.selectedModifiers, subtitle: i.subtitle,
-      })),
-    });
+    const result = await printOrderKot(order, order.currentFireBatch);
+    if (!result) return;
     dispatch(showToast({ message: result.ok ? 'KOT sent to kitchen printer.' : result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'warning' }));
   };
 

@@ -42,7 +42,7 @@ import {
   useCreateOrder,
   useFireOrder,
   useOrder,
-  useAddOrderItem,
+  useAddOrderItems,
   usePayOrder,
   useBillCharges,
 } from '../../../../../core/api/hooks/useOrders';
@@ -65,7 +65,7 @@ import {
   ordersApi,
 } from '../../../../../core/api/ordersApi';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
-import { markKotPrinted } from '../../../../../core/printing/printedKots';
+import { printOrderKot, printAllOrderKots } from '../../../../../core/printing/orderKot';
 import { getPrinterConfig } from '../../../../../core/printing/printerConfig';
 import { PrintableBillAdjustments, billAdjustmentsOf, buildTaxBreakdown, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
 import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
@@ -561,7 +561,7 @@ export const POSCheckoutScreen = () => {
   const pendingOrderType = useSelector(
     (s: any) => s.tables.pendingOrderType as string | null,
   );
-  const addOrderItemMutation = useAddOrderItem();
+  const addOrderItemsMutation = useAddOrderItems();
   const [tablePickerVisible, setTablePickerVisible] = useState(false);
   // Cart + Fire to Kitchen live in a collapsible bottom sheet instead of the end of
   // one long page scroll, so they stay reachable even with a large (100+ item) menu.
@@ -733,7 +733,7 @@ export const POSCheckoutScreen = () => {
   const submitting =
     createOrderMutation.isPending ||
     fireOrderMutation.isPending ||
-    addOrderItemMutation.isPending;
+    addOrderItemsMutation.isPending;
   // Which of the two fire-adjacent buttons (KOT / KOT & Print) was actually pressed —
   // `submitting` alone can't tell them apart since it's one combined flag across both
   // underlying mutations, so both buttons used to light up together no matter which one
@@ -1458,11 +1458,15 @@ export const POSCheckoutScreen = () => {
   // holdOnly) fire them as a fresh KOT — the existing fired KOTs are never touched. Guest
   // and table already live on the order, so nothing is re-asked. Returns to Orders after.
   const submitAppend = async (andPrint: boolean = true) => {
-    if (resumeOrderId == null || addOrderItemMutation.isPending) return;
+    if (resumeOrderId == null || addOrderItemsMutation.isPending) return;
     try {
-      for (const c of cart) {
-        await addOrderItemMutation.mutateAsync({
-          id: resumeOrderId,
+      // One request for the whole round, not one per line (see ordersApi.addItems). Looping the
+      // single-item call meant the waiter watched the spinner tick through a full round trip per
+      // item; it also let a round land half-added if the network dropped mid-loop, which the
+      // batch endpoint rules out by rejecting or applying the round as a unit.
+      await addOrderItemsMutation.mutateAsync({
+        id: resumeOrderId,
+        items: cart.map(c => ({
           menuItemId: c.menuItemId,
           qty: c.qty,
           modifier: c.modifier || undefined,
@@ -1471,8 +1475,8 @@ export const POSCheckoutScreen = () => {
             ? c.modifierOptionIds
             : undefined,
           openPrice: c.openPrice,
-        });
-      }
+        })),
+      });
       // Always fires: appending used to be able to stop here and leave the round unfired, which
       // billed the guest for food the kitchen was never told to make. Fire creates a NEW KOT
       // containing only these just-added items.
@@ -2317,44 +2321,8 @@ export const POSCheckoutScreen = () => {
   // surface a toast either way too (success or "no printer set up") — silent failure here
   // just reads as "nothing happened", same as Token Dashboard's manual "Print KOT" toast.
   const autoPrintKot = async (order: ApiOrder) => {
-    const batchItems = order.items.filter(
-      i => i.fireBatch === order.currentFireBatch && !i.voided,
-    );
-    if (batchItems.length === 0) return;
-    const batch = order.fireBatches.find(
-      b => b.batchNumber === order.currentFireBatch,
-    );
-    // Claim it before printing — see printedKots.ts for why (AutoKotPrintHost's safety net
-    // must not re-print a batch this screen is already handling).
-    if (batch) markKotPrinted(batch.kotNumber);
-    // order.title already reads "Takeaway/Delivery – <guest>" once neither tokenNumber
-    // nor tableCode applies, so guestName is only added on top for Token/Table — otherwise
-    // it'd repeat the same name twice.
-    const isTokenOrTable = order.tokenNumber != null || !!order.tableCode;
-    const result = await PrinterService.printKot({
-      title:
-        order.tokenNumber != null
-          ? `Token #${order.tokenNumber}`
-          : order.tableCode
-          ? `Table ${order.tableCode}`
-          : order.title,
-      kotNumber: batch?.kotNumber || `#${order.currentFireBatch}`,
-      time: new Date(batch?.firedAt ?? order.createdAt).toLocaleTimeString([], {
-        hour: '2-digit',
-        minute: '2-digit',
-      }),
-      guestName: isTokenOrTable ? order.guestName : undefined,
-      items: batchItems.map(i => ({
-        name: i.name,
-        qty: i.qty,
-        variantName: i.variantName,
-        modifier: i.modifier,
-        stationName: i.stationName,
-        vegNonVegType: i.vegNonVegType,
-        selectedModifiers: i.selectedModifiers,
-        subtitle: i.subtitle,
-      })),
-    });
+    const result = await printOrderKot(order, order.currentFireBatch);
+    if (!result) return;
     dispatch(
       showToast({
         message: result.ok ? 'KOT sent to kitchen printer.' : result.message,
@@ -2413,13 +2381,17 @@ export const POSCheckoutScreen = () => {
 
   // Manual re-print for the Receipt Modal's "Print KOT" button — a backup for a failed
   // auto-print on fire, or for cash-sale orders that were never auto-printed to begin with.
+  //
+  // Every round, not just the latest. This used to call autoPrintKot, which is hardcoded to
+  // currentFireBatch: right while firing, wrong for a re-print, and it left every earlier
+  // round unreachable from any button in the app.
   const [printingKot, setPrintingKot] = useState(false);
   const handlePrintKotManual = async () => {
     if (!receiptOrder) return;
-    const batchItems = receiptOrder.items.filter(
-      i => i.fireBatch === receiptOrder.currentFireBatch && !i.voided,
-    );
-    if (batchItems.length === 0) {
+    setPrintingKot(true);
+    const result = await printAllOrderKots(receiptOrder);
+    setPrintingKot(false);
+    if (!result) {
       dispatch(
         showToast({
           message: 'Nothing fired to the kitchen yet.',
@@ -2429,9 +2401,13 @@ export const POSCheckoutScreen = () => {
       );
       return;
     }
-    setPrintingKot(true);
-    await autoPrintKot(receiptOrder);
-    setPrintingKot(false);
+    dispatch(
+      showToast({
+        message: result.message,
+        icon: result.ok ? 'printer-check' : 'alert-circle-outline',
+        tone: result.ok ? 'success' : 'danger',
+      }),
+    );
   };
 
   // Takes the order explicitly rather than reading receiptOrder, so a just-settled Pay

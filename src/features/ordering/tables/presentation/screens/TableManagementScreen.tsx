@@ -28,7 +28,7 @@ import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { ordersApi } from '../../../../../core/api/ordersApi';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
-import { markKotPrinted } from '../../../../../core/printing/printedKots';
+import { printOrderKot, printAllOrderKots } from '../../../../../core/printing/orderKot';
 import { billAdjustmentsOf, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
 import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
@@ -468,46 +468,29 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
   const orderId = occupiedModal?.orderId ?? null;
 
-  // Builds and sends the kitchen ticket for the current (latest) fire batch — no prices,
-  // just what to make. Returns null when that batch has nothing printable (nothing fired
-  // yet, or every line since voided) so each caller decides whether that's silent or a toast.
-  const printCurrentKot = async (order: ApiOrder) => {
-    const batchItems = order.items.filter((i) => i.fireBatch === order.currentFireBatch && !i.voided);
-    if (batchItems.length === 0) return null;
-    const batch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
-    // Claim it before printing — see printedKots.ts for why (AutoKotPrintHost's safety net
-    // must not re-print a batch this screen is already handling).
-    if (batch) markKotPrinted(batch.kotNumber);
-    return PrinterService.printKot({
-      title: order.tableCode ? `Table ${order.tableCode}` : order.title,
-      kotNumber: batch?.kotNumber || `#${order.currentFireBatch}`,
-      time: new Date(batch?.firedAt ?? order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      // order.title already reads "<Type> – <guest>" once tableCode isn't set, so
-      // guestName is only added on top for Table — otherwise it'd repeat the name twice.
-      guestName: order.tableCode ? order.guestName : undefined,
-      items: batchItems.map((i) => ({
-        name: i.name, qty: i.qty, variantName: i.variantName, modifier: i.modifier, stationName: i.stationName, vegNonVegType: i.vegNonVegType,
-        selectedModifiers: i.selectedModifiers, subtitle: i.subtitle,
-      })),
-    });
-  };
-
-  // Fires alongside the fire itself. Doesn't block it either way, but does surface its
-  // own toast (success or "no printer set up") right after "Sent to the kitchen" so a
-  // missing/unconfigured printer doesn't just look like nothing happened.
+  // Fires alongside the fire itself — the round that just fired, which is what
+  // currentFireBatch means at this moment. Doesn't block the fire either way, but does
+  // surface its own toast (success or "no printer set up") right after "Sent to the
+  // kitchen" so a missing/unconfigured printer doesn't just look like nothing happened.
   const autoPrintKot = async (order: ApiOrder) => {
-    const result = await printCurrentKot(order);
+    const result = await printOrderKot(order, order.currentFireBatch);
     if (!result) return;
     dispatch(showToast({ message: result.ok ? 'KOT sent to kitchen printer.' : result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'warning' }));
   };
 
-  // Manual re-print of the latest KOT, same header pill as Token Orders — for when the
-  // auto-print at fire time failed (printer off/out of paper) or the kitchen needs another
-  // physical copy beyond what's on the KDS screen.
+  // Manual re-print, same header pill as Token Orders — for when the auto-print at fire
+  // time failed (printer off/out of paper) or the kitchen needs another physical copy
+  // beyond what's on the KDS screen.
+  //
+  // Every round, not just the latest: this used to reuse the auto-print path above, which
+  // is hardcoded to currentFireBatch. Correct while firing, wrong here — a table on its
+  // third round could only ever re-print round three, leaving rounds one and two
+  // unreachable from every button in the app, which is exactly the paper a cashier is
+  // reaching for after a printer came back on.
   const handlePrintKot = async () => {
     if (!occupiedOrder) return;
     setPrintingKot(true);
-    const result = await printCurrentKot(occupiedOrder);
+    const result = await printAllOrderKots(occupiedOrder);
     setPrintingKot(false);
     if (!result) {
       dispatch(showToast({ message: 'Nothing fired to the kitchen yet.', icon: 'alert-circle-outline', tone: 'warning' }));

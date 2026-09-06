@@ -118,7 +118,7 @@ export const GiftCardsScreen = ({ route, navigation }: any) => {
   };
 
   return (
-    <ScrollView style={[styles.container, { backgroundColor: theme.colors.background }]} contentContainerStyle={styles.content}>
+    <ScrollView style={[styles.container, { backgroundColor: COLORS.background }]} contentContainerStyle={styles.content}>
       <DesktopPageHeader
         icon="gift-outline"
         title="Gift Cards"

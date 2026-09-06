@@ -136,6 +136,28 @@ export interface CrmSegment {
   tags: string[];
 }
 
+export interface RedeemableCoupon {
+  id: number;
+  code: string;
+  title: string;
+  type: 'PERCENT' | 'FLAT' | 'BOGO' | 'BIRTHDAY' | 'REFERRAL';
+  value: number;
+  minOrderValue: number;
+  expiresAt: string;
+}
+
+export interface RedeemableGiftCard {
+  id: number;
+  code: string;
+  balance: number;
+  expiresAt: string;
+}
+
+export interface RedeemableOffers {
+  coupons: RedeemableCoupon[];
+  giftCards: RedeemableGiftCard[];
+}
+
 export interface CrmInsights {
   retentionRatePct: number;
   avgLifetimeValue: number;
@@ -197,4 +219,9 @@ export const customersApi = {
   checkGiftCard: (code: string) =>
     apiClient.post<{ valid: boolean; error: string | null; balance: number }>('/customers/gift-cards/check', { code }).then((r) => r.data),
   insights: () => apiClient.get<CrmInsights>('/customers/insights').then((r) => r.data),
+  /** Unused/unexpired coupons and active/non-empty/unexpired gift cards this customer can
+   * redeem right now — lets checkout suggest the exact code instead of the cashier having to
+   * leave the bill and look it up in the customer's CRM profile. Purely a display aid: the
+   * bill-coupon/bill-giftcard endpoints re-validate everything when a code is submitted. */
+  redeemableOffers: (id: number) => apiClient.get<RedeemableOffers>(`/customers/${id}/redeemable-offers`).then((r) => r.data),
 };

@@ -22,7 +22,7 @@ import { getApiErrorMessage } from '../../../../../core/network/api';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { getPublicApiBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
-import { markKotPrinted } from '../../../../../core/printing/printedKots';
+import { printAllOrderKots } from '../../../../../core/printing/orderKot';
 import { billAdjustmentsOf, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
 import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
 import { OrderBillActions, PaymentSplit } from '../../../../../shared/components/billing/OrderBillActions';
@@ -223,31 +223,20 @@ export const TakeawayDeliveryScreen = ({ navigation }: any) => {
     dispatch(showToast({ message: result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'danger' }));
   };
 
-  // Kitchen ticket for the current (latest) KOT — no prices, just what to make.
+  // Kitchen tickets — no prices, just what to make.
+  //
+  // Every round, not just the latest: this used to filter on currentFireBatch, which is
+  // the right round while firing and the wrong one here — an order on its third round
+  // could only ever re-print round three, leaving the earlier ones unreachable.
   const handlePrintKot = async () => {
     if (!order) return;
-    const currentBatchItems = order.items.filter((i) => i.fireBatch === order.currentFireBatch && !i.voided);
-    if (currentBatchItems.length === 0) {
+    setPrintingKot(true);
+    const result = await printAllOrderKots(order);
+    setPrintingKot(false);
+    if (!result) {
       dispatch(showToast({ message: 'Nothing fired to the kitchen yet.', icon: 'alert-circle-outline', tone: 'warning' }));
       return;
     }
-    const currentBatch = order.fireBatches.find((b) => b.batchNumber === order.currentFireBatch);
-    // Claim it before printing — see printedKots.ts for why (AutoKotPrintHost's safety net
-    // must not re-print a batch this screen is already handling).
-    if (currentBatch) markKotPrinted(currentBatch.kotNumber);
-    setPrintingKot(true);
-    const result = await PrinterService.printKot({
-      // order.title already reads "Takeaway – <guest>" for this order type, so no
-      // separate guestName line here — that would just repeat the same name twice.
-      title: order.title,
-      kotNumber: currentBatch?.kotNumber || `#${order.currentFireBatch}`,
-      time: new Date(currentBatch?.firedAt ?? order.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-      items: currentBatchItems.map((i) => ({
-        name: i.name, qty: i.qty, variantName: i.variantName, modifier: i.modifier, stationName: i.stationName, vegNonVegType: i.vegNonVegType,
-        selectedModifiers: i.selectedModifiers, subtitle: i.subtitle,
-      })),
-    });
-    setPrintingKot(false);
     dispatch(showToast({ message: result.message, icon: result.ok ? 'printer-check' : 'alert-circle-outline', tone: result.ok ? 'success' : 'danger' }));
   };
 

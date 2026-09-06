@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { ordersApi, ApiOrder, CreateOrderRequest, OrderStatus, PaymentSplit, PayOptions, VoidReasonCode } from '../ordersApi';
+import { ordersApi, ApiOrder, CreateOrderRequest, CreateOrderItemRequest, OrderStatus, PaymentSplit, PayOptions, VoidReasonCode } from '../ordersApi';
 import { PagedResult } from '../types';
 import { queryKeys } from './queryKeys';
 import { socketAwareInterval } from '../../realtime/socketLiveness';
@@ -273,6 +273,17 @@ export const useAddOrderItem = () => {
   return useMutation({
     mutationFn: ({ id, menuItemId, qty, modifier, variantId, modifierOptionIds, openPrice }: { id: number; menuItemId: number; qty: number; modifier?: string; variantId?: number; modifierOptionIds?: number[]; openPrice?: number }) =>
       ordersApi.addItem(id, { menuItemId, qty, modifier, variantId, modifierOptionIds, openPrice }),
+    onSuccess: (updated) => commitOrderResult(qc, updated),
+  });
+};
+
+/** Batch counterpart of useAddOrderItem — one request for a whole round's worth of lines (see
+ *  ordersApi.addItems). Same cache treatment: the response IS the updated order, so it takes the
+ *  commitOrderResult fast path rather than refetching a list the response already answered. */
+export const useAddOrderItems = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, items }: { id: number; items: CreateOrderItemRequest[] }) => ordersApi.addItems(id, items),
     onSuccess: (updated) => commitOrderResult(qc, updated),
   });
 };

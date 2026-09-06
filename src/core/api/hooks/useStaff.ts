@@ -55,6 +55,22 @@ export const useGrantStaffAccess = () => {
   });
 };
 
+export const useRevokeStaffAccess = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => staffApi.revokeAccess(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+  });
+};
+
+export const useRestoreStaffAccess = () => {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: number) => staffApi.restoreAccess(id),
+    onSuccess: () => qc.invalidateQueries({ queryKey: ['staff'] }),
+  });
+};
+
 export const useShifts = (staffId: number | null, enabled: boolean = true) =>
   useQuery({ queryKey: queryKeys.shifts(staffId ?? -1), queryFn: () => staffApi.listShifts(staffId as number), enabled: staffId !== null && enabled });
 

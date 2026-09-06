@@ -47,6 +47,7 @@ export const queryKeys = {
   customers: (params?: unknown) => ['customers', params] as const,
   customer: (id: number) => ['customers', id] as const,
   customerByPhone: (phone: string) => ['customers', 'by-phone', phone] as const,
+  redeemableOffers: (customerId: number) => ['customers', customerId, 'redeemable-offers'] as const,
   crmInsights: ['customers', 'insights'] as const,
   tasks: (params?: unknown) => ['tasks', params] as const,
   notifications: ['notifications'] as const,

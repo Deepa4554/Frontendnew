@@ -40,6 +40,9 @@ export interface ApiStaff {
   branchId: number | null;
   /** True if this staff member also has an app login (Team Portal "Add Staff" can create one). */
   hasLogin: boolean;
+  /** True when hasLogin is true but that login has been blocked via revokeAccess —
+   * the staff member stays on the roster, they just can't sign in until restoreAccess. */
+  accessRevoked: boolean;
   /** Base64 data URI (or external URL) — no blob storage service exists yet, see imagePicker.ts. */
   photoUrl: string | null;
   department: string | null;
@@ -245,6 +248,11 @@ export const staffApi = {
    * after the fact (StaffProfileScreen's "Give app access" action). */
   grantAccess: (id: number, req: { phone: string; password: string; loginRole: LoginRole }) =>
     apiClient.post<ApiStaff>(`/staff/${id}/grant-access`, req).then((r) => r.data),
+  /** Blocks this staff member's app login (StaffProfileScreen's "Revoke access")
+   * without removing them from the roster — their login link stays intact so
+   * restoreAccess can turn it back on with the same phone/password later. */
+  revokeAccess: (id: number) => apiClient.post<ApiStaff>(`/staff/${id}/revoke-access`).then((r) => r.data),
+  restoreAccess: (id: number) => apiClient.post<ApiStaff>(`/staff/${id}/restore-access`).then((r) => r.data),
   listShifts: (staffId: number) => apiClient.get<Shift[]>(`/staff/${staffId}/shifts`).then((r) => r.data),
   listAllShifts: (date: string) => apiClient.get<ShiftWithStaff[]>('/staff/shifts', { params: { date } }).then((r) => r.data),
   /** repeatUntil (an ISO date, inclusive) creates one shift per day — or weekly, same

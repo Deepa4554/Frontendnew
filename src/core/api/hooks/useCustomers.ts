@@ -26,6 +26,17 @@ export const useCustomerByPhone = (phone: string) =>
 
 export const useCrmInsights = () => useQuery({ queryKey: queryKeys.crmInsights, queryFn: customersApi.insights });
 
+/** Powers the Coupon/Gift Card quick-fill at checkout — see BillAdjustmentsPanel's
+ * quickFill on those tiles in OrderBillActions. A display aid only, so a stale read here
+ * just means a suggested code that's briefly out of date, never a wrong one actually applied
+ * (bill-coupon/bill-giftcard re-validate from scratch). */
+export const useRedeemableOffers = (customerId: number | null) =>
+  useQuery({
+    queryKey: queryKeys.redeemableOffers(customerId ?? -1),
+    queryFn: () => customersApi.redeemableOffers(customerId as number),
+    enabled: customerId !== null,
+  });
+
 export const useCreateCustomer = () => {
   const qc = useQueryClient();
   return useMutation({

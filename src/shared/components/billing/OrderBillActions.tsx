@@ -14,6 +14,7 @@ import { LoadingOverlay } from '../atoms/LoadingOverlay';
 import { useApplyBillDiscount, useBillCoupon, useBillGiftCard, useBillCharges, useBillLoyalty, useBillMilestone, useCloseOrder, useUpdateOrderGuest, useServeAll, useFireOrder, useRemoveOrderItem } from '../../../core/api/hooks/useOrders';
 import { useSettings } from '../../../core/api/hooks/useSettings';
 import { useLoyaltyMilestones } from '../../../core/api/hooks/useLoyaltyMilestones';
+import { useRedeemableOffers } from '../../../core/api/hooks/useCustomers';
 import { useKhata } from '../../../core/api/hooks/useKhatabook';
 import { PaymentMethodPicker, PaymentMethodPickerResult, PaymentMethod, PaymentSplit } from './PaymentMethodPicker';
 import { BillAdjustmentsPanel, AdjustmentTile, AdjustmentApplyValue } from './BillAdjustmentsPanel';
@@ -164,6 +165,7 @@ export const OrderBillActions: React.FC<Props> = ({
   const billLoyalty = useBillLoyalty();
   const billMilestone = useBillMilestone();
   const { data: loyaltyMilestones } = useLoyaltyMilestones();
+  const { data: redeemableOffers } = useRedeemableOffers(order.customerId ?? null);
   const closeOrder = useCloseOrder();
   const serveAll = useServeAll();
   const fireOrder = useFireOrder();
@@ -250,6 +252,12 @@ export const OrderBillActions: React.FC<Props> = ({
         .filter((m) => m.isActive && m.thresholdPoints <= order.customerTotalPoints! && m.thresholdPoints > (order.customerMilestoneClaimedThreshold ?? 0))
         .sort((a, b) => b.thresholdPoints - a.thresholdPoints)[0] ?? null
     : null;
+  // Soonest-expiring redeemable coupon/gift card this order's customer has on file, if any —
+  // used only to pre-fill the Coupon/Gift Card editor's code field (quickFill below), never to
+  // apply anything by itself. The manual text field stays available regardless, since a
+  // generic promotional coupon (not tied to any one customer) is still typed in by hand.
+  const soonestCoupon = redeemableOffers?.coupons[0] ?? null;
+  const soonestGiftCard = redeemableOffers?.giftCards[0] ?? null;
   // What's actually left to collect — order.total once nothing's been paid yet, but the
   // real remaining balance once a partial payment already chipped away at it. Every
   // "settle" calculation below targets this, not order.total.
@@ -624,9 +632,22 @@ export const OrderBillActions: React.FC<Props> = ({
     { key: 'discount', label: 'Discount', icon: 'tag-outline', amount: order.billDiscountAmount, hidden: !canApplyBillDiscount(role), applied: order.billDiscountAmount > 0, kind: 'percentOrFlat', removable: true },
     // Same guestPhone gate as Loyalty Points below — a customer-issued coupon/gift card is
     // matched back to its owner by phone (see IssueCoupon/IssueGiftCard on the backend), so
-    // there's nothing for a phone-less walk-in to redeem.
-    { key: 'coupon', label: order.couponCode ?? 'Coupon', icon: 'ticket-percent-outline', amount: order.couponDiscountAmount, hidden: !order.guestPhone || !!order.couponCode, applied: !!order.couponCode, kind: 'text' },
-    { key: 'giftcard', label: 'Gift Card', icon: 'wallet-giftcard', amount: order.giftCardAmountApplied, hidden: !order.guestPhone || !!order.giftCardCode, applied: !!order.giftCardCode, kind: 'text' },
+    // there's nothing for a phone-less walk-in to redeem. The text field stays manual (a
+    // generic promotional code isn't tied to this customer, so quickFill only pre-fills it —
+    // never applies on its own) but soonestCoupon means the cashier doesn't have to leave the
+    // bill and look the code up in the customer's CRM profile first.
+    {
+      key: 'coupon', label: order.couponCode ?? 'Coupon', icon: 'ticket-percent-outline', amount: order.couponDiscountAmount,
+      hidden: !order.guestPhone || !!order.couponCode, applied: !!order.couponCode, kind: 'text',
+      hint: soonestCoupon ? `${soonestCoupon.title} (${soonestCoupon.code}) available${redeemableOffers!.coupons.length > 1 ? ` · +${redeemableOffers!.coupons.length - 1} more` : ''}` : undefined,
+      quickFill: soonestCoupon ? { label: 'Use', value: soonestCoupon.code } : undefined,
+    },
+    {
+      key: 'giftcard', label: 'Gift Card', icon: 'wallet-giftcard', amount: order.giftCardAmountApplied,
+      hidden: !order.guestPhone || !!order.giftCardCode, applied: !!order.giftCardCode, kind: 'text',
+      hint: soonestGiftCard ? `₹${soonestGiftCard.balance.toFixed(2)} on ${soonestGiftCard.code}${redeemableOffers!.giftCards.length > 1 ? ` · +${redeemableOffers!.giftCards.length - 1} more` : ''}` : undefined,
+      quickFill: soonestGiftCard ? { label: 'Use', value: soonestGiftCard.code } : undefined,
+    },
     {
       key: 'loyalty', label: 'Loyalty Points', icon: 'star-circle-outline', amount: loyaltyDiscountAmount,
       hidden: !order.guestPhone || loyaltyPointsRedeemed > 0, applied: loyaltyPointsRedeemed > 0, kind: 'points',

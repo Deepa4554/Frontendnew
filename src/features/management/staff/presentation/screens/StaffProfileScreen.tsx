@@ -7,7 +7,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { useThemeColors } from '../../../../../core/theme/useThemeColors';
 import { InitialsAvatar } from '../../../../../shared/components/InitialsAvatar';
 import { showToast } from '../../../../../core/store/uiSlice';
-import { useStaff, useShifts, usePerformance, useUpdateStaff, useResetStaffPassword, useStaffFinancialDetails, useGrantStaffAccess, useUpdateStaffStatus, useDeleteStaff } from '../../../../../core/api/hooks/useStaff';
+import { useStaff, useShifts, usePerformance, useUpdateStaff, useResetStaffPassword, useStaffFinancialDetails, useGrantStaffAccess, useRevokeStaffAccess, useRestoreStaffAccess, useUpdateStaffStatus, useDeleteStaff } from '../../../../../core/api/hooks/useStaff';
 import { useBranches } from '../../../../../core/api/hooks/useBranches';
 import { pickImageAsDataUri } from '../../../../../core/utils/imagePicker';
 import { getApiErrorMessage } from '../../../../../core/network/api';
@@ -61,6 +61,8 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
   const updateStaff = useUpdateStaff();
   const resetPassword = useResetStaffPassword();
   const grantAccess = useGrantStaffAccess();
+  const revokeAccess = useRevokeStaffAccess();
+  const restoreAccess = useRestoreStaffAccess();
   const updateStatus = useUpdateStaffStatus();
   const deleteStaff = useDeleteStaff();
   const role = useSelector((s: any) => s.auth.user?.role);
@@ -79,6 +81,7 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
   const [grantLoginRole, setGrantLoginRole] = useState<LoginRole>('Waiter');
   const [statusPickerOpen, setStatusPickerOpen] = useState(false);
   const [deleteConfirmOpen, setDeleteConfirmOpen] = useState(false);
+  const [revokeConfirmOpen, setRevokeConfirmOpen] = useState(false);
 
   const [hrModalOpen, setHrModalOpen] = useState(false);
   const [department, setDepartment] = useState('');
@@ -242,6 +245,27 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
       dispatch(showToast({ message: `${staff.name} can now log in to the app.`, icon: 'check-circle', tone: 'success' }));
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not give app access'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const handleRevokeAccess = async () => {
+    if (!staff) return;
+    try {
+      await revokeAccess.mutateAsync(staff.id);
+      setRevokeConfirmOpen(false);
+      dispatch(showToast({ message: `App access revoked for ${staff.name}.`, icon: 'check-circle', tone: 'success' }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not revoke access'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const handleRestoreAccess = async () => {
+    if (!staff) return;
+    try {
+      await restoreAccess.mutateAsync(staff.id);
+      dispatch(showToast({ message: `App access restored for ${staff.name}.`, icon: 'check-circle', tone: 'success' }));
+    } catch (err) {
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not restore access'), icon: 'alert-circle-outline', tone: 'danger' }));
     }
   };
 
@@ -477,6 +501,31 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
               <View style={{ flex: 1 }}>
                 <Text style={styles.roleItemLabel}>APP LOGIN</Text>
                 <Text style={styles.roleItemValue}>Reset password</Text>
+              </View>
+              <Icon name="chevron-right" size={18} color={COLORS.muted} />
+            </TouchableOpacity>
+          )}
+          {staff.hasLogin && canManage && !staff.accessRevoked && (
+            <TouchableOpacity style={styles.roleItem} onPress={() => setRevokeConfirmOpen(true)}>
+              <View style={styles.roleItemIcon}>
+                <Icon name="account-lock-outline" size={18} color={COLORS.dangerAccent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.roleItemLabel}>APP LOGIN</Text>
+                <Text style={styles.roleItemValue}>Revoke access</Text>
+                <Text style={styles.roleItemSubValue}>{staff.name.split(' ')[0]} keeps their roster record but can't sign in.</Text>
+              </View>
+              <Icon name="chevron-right" size={18} color={COLORS.muted} />
+            </TouchableOpacity>
+          )}
+          {staff.hasLogin && canManage && staff.accessRevoked && (
+            <TouchableOpacity style={styles.roleItem} onPress={handleRestoreAccess} disabled={restoreAccess.isPending}>
+              <View style={styles.roleItemIcon}>
+                <Icon name="account-lock-open-outline" size={18} color={COLORS.accent} />
+              </View>
+              <View style={{ flex: 1 }}>
+                <Text style={styles.roleItemLabel}>APP LOGIN · ACCESS REVOKED</Text>
+                <Text style={styles.roleItemValue}>{restoreAccess.isPending ? 'Restoring…' : 'Restore access'}</Text>
               </View>
               <Icon name="chevron-right" size={18} color={COLORS.muted} />
             </TouchableOpacity>
@@ -838,6 +887,28 @@ export const StaffProfileScreen = ({ navigation, route }: any) => {
             <TouchableOpacity style={styles.pickerCancelBtn} onPress={() => setStatusPickerOpen(false)}>
               <Text style={styles.pickerCancelText}>Cancel</Text>
             </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      <Modal visible={revokeConfirmOpen} transparent animationType="fade" onRequestClose={() => setRevokeConfirmOpen(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.pickerSheet}>
+            <View style={styles.pickerHeaderRow}>
+              <Text style={styles.pickerTitle}>Revoke App Access</Text>
+              <CloseButton onPress={() => setRevokeConfirmOpen(false)} size={18} />
+            </View>
+            <Text style={styles.resetPasswordHint}>
+              {staff.name} won't be able to sign in to the app anymore and is signed out of any devices right now. They stay on your staff roster — you can restore access anytime from this same screen.
+            </Text>
+            <View style={styles.resetPasswordActions}>
+              <TouchableOpacity style={styles.resetPasswordCancelBtn} onPress={() => setRevokeConfirmOpen(false)}>
+                <Text style={styles.pickerCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.dangerConfirmBtn} onPress={handleRevokeAccess} disabled={revokeAccess.isPending}>
+                <Text style={styles.resetPasswordConfirmText}>{revokeAccess.isPending ? 'Revoking…' : 'Revoke Access'}</Text>
+              </TouchableOpacity>
+            </View>
           </View>
         </View>
       </Modal>

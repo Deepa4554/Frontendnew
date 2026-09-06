@@ -258,37 +258,46 @@ export const CouponsScreen = ({ route, navigation }: any) => {
             </View>
 
             <View style={[styles.fieldRow, { marginTop: 8 }]}>
-              <View style={{ borderRadius: 10, flex: 1 }}>
-                <TextInput
-                  style={[styles.modalInput, { flex: 1 }]}
-                  value={value}
-                  onChangeText={setValue}
-                  keyboardType="numeric"
-                  placeholder={type === 'Percent' ? 'Discount %' : 'Discount ₹'}
-                  placeholderTextColor={COLORS.placeholder}
-                />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>{type === 'Percent' ? 'Discount %' : 'Discount ₹'}</Text>
+                <View style={{ borderRadius: 10 }}>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={value}
+                    onChangeText={setValue}
+                    keyboardType="numeric"
+                    placeholder={type === 'Percent' ? 'Discount %' : 'Discount ₹'}
+                    placeholderTextColor={COLORS.placeholder}
+                  />
+                </View>
               </View>
-              <View style={{ borderRadius: 10, flex: 1 }}>
-                <TextInput
-                  style={[styles.modalInput, { flex: 1 }]}
-                  value={minOrderValue}
-                  onChangeText={setMinOrderValue}
-                  keyboardType="numeric"
-                  placeholder="Min order ₹"
-                  placeholderTextColor={COLORS.placeholder}
-                />
+              <View style={{ flex: 1 }}>
+                <Text style={styles.fieldLabel}>Min order ₹</Text>
+                <View style={{ borderRadius: 10 }}>
+                  <TextInput
+                    style={styles.modalInput}
+                    value={minOrderValue}
+                    onChangeText={setMinOrderValue}
+                    keyboardType="numeric"
+                    placeholder="Min order ₹"
+                    placeholderTextColor={COLORS.placeholder}
+                  />
+                </View>
               </View>
             </View>
 
-            <View style={{ borderRadius: 10 }}>
-              <TextInput
-                style={[styles.modalInput, { marginTop: 8 }]}
-                value={validDays}
-                onChangeText={setValidDays}
-                keyboardType="numeric"
-                placeholder="Valid for (days)"
-                placeholderTextColor={COLORS.placeholder}
-              />
+            <View style={{ marginTop: 8 }}>
+              <Text style={styles.fieldLabel}>Valid for (days)</Text>
+              <View style={{ borderRadius: 10 }}>
+                <TextInput
+                  style={styles.modalInput}
+                  value={validDays}
+                  onChangeText={setValidDays}
+                  keyboardType="numeric"
+                  placeholder="Valid for (days)"
+                  placeholderTextColor={COLORS.placeholder}
+                />
+              </View>
             </View>
 
             <View style={styles.modalActions}>
@@ -393,6 +402,7 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   modalSaveBtn: { flex: 1.3, alignItems: 'center', justifyContent: 'center', borderRadius: 6, paddingVertical: 7.5, backgroundColor: COLORS.button },
   modalSaveText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },
   fieldRow: { flexDirection: 'row', gap: 4.5 },
+  fieldLabel: { fontSize: 10.5, fontWeight: '700', color: COLORS.muted, marginBottom: 3, marginLeft: 2 },
   typeRow: { flexDirection: 'row', gap: 4.5 },
   typePill: { flex: 1, alignItems: 'center', justifyContent: 'center', borderRadius: 10, borderWidth: 1, paddingVertical: 5.25 },
   typePillText: { fontSize: 12, fontWeight: '700' },
