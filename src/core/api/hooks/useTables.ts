@@ -1,5 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import { tablesApi, CreateTableRequest, UpdateTableRequest } from '../tablesApi';
+import { tablesApi, ApiTable, CreateTableRequest, UpdateTableRequest } from '../tablesApi';
 import { queryKeys } from './queryKeys';
 import { socketAwareInterval } from '../../realtime/socketLiveness';
 
@@ -56,11 +56,46 @@ export const useRevokeSession = () => {
   });
 };
 
+/**
+ * Merging and unmerging felt slow for a reason that had nothing to do with the server: both
+ * endpoints answer 204 (no body), so the grid could only catch up by refetching the whole table
+ * list afterwards. That is two round trips before anything moves on screen, and a merge is a
+ * gesture staff make standing at the table with a party waiting.
+ *
+ * Both now rewrite the cached list immediately and let the refetch reconcile behind it, so the
+ * tiles change under the finger. The server stays the authority — an error rolls the cache back
+ * to exactly what it held before, and the invalidate still runs either way.
+ */
 export const useMergeTable = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ id, targetHostTableId }: { id: number; targetHostTableId: number }) => tablesApi.merge(id, targetHostTableId),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tables }),
+    onMutate: async ({ id, targetHostTableId }) => {
+      // Stop any in-flight fetch from landing on top of the optimistic write.
+      await qc.cancelQueries({ queryKey: queryKeys.tables });
+      const previous = qc.getQueryData<ApiTable[]>(queryKeys.tables);
+      qc.setQueryData<ApiTable[]>(queryKeys.tables, (old) => {
+        if (!old) return old;
+        const guest = old.find((t) => t.id === id);
+        if (!guest) return old;
+        // A merged-in guest disappears from the grid entirely and its seats fold into its
+        // host's total — exactly what TablesController.List does server-side.
+        return old
+          .filter((t) => t.id !== id)
+          .map((t) => t.id === targetHostTableId
+            ? {
+              ...t,
+              mergedWith: [...(t.mergedWith ?? []), { id: guest.id, code: guest.code }],
+              mergedSeats: (t.mergedSeats ?? t.seats) + guest.seats,
+            }
+            : t);
+      });
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) qc.setQueryData(queryKeys.tables, context.previous);
+    },
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.tables }),
   });
 };
 
@@ -68,6 +103,23 @@ export const useUnmergeTable = () => {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (id: number) => tablesApi.unmerge(id),
-    onSuccess: () => qc.invalidateQueries({ queryKey: queryKeys.tables }),
+    onMutate: async (id) => {
+      await qc.cancelQueries({ queryKey: queryKeys.tables });
+      const previous = qc.getQueryData<ApiTable[]>(queryKeys.tables);
+      qc.setQueryData<ApiTable[]>(queryKeys.tables, (old) => old?.map((t) =>
+        (t.mergedWith ?? []).some((g) => g.id === id)
+          ? { ...t, mergedWith: (t.mergedWith ?? []).filter((g) => g.id !== id) }
+          : t));
+      return { previous };
+    },
+    onError: (_err, _id, context) => {
+      if (context?.previous) qc.setQueryData(queryKeys.tables, context.previous);
+    },
+    // Deliberately only drops the guest from its host's list here, and leaves restoring the
+    // guest's own tile to the refetch: the cache never held that row (a merged-in table is
+    // hidden from the list), so there is nothing to put back from memory. The chip and the
+    // outline clear instantly, which is the part staff are watching for; the freed tile
+    // reappears a moment later.
+    onSettled: () => qc.invalidateQueries({ queryKey: queryKeys.tables }),
   });
 };

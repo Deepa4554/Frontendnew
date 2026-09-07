@@ -989,6 +989,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                   styles.tile,
                   isDesktopWeb && styles.tileDesktop,
                   { backgroundColor: tileBg },
+                  table.status === 'occupied' && styles.tileOccupiedTopGap,
                   isMerged && styles.tileMerged,
                   isDimmed && styles.tileDimmed,
                 ]}
@@ -2044,6 +2045,16 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     padding: isDesktopWeb ? 10 : 10.5,
     justifyContent: 'flex-end',
   },
+  // An occupied tile's status badge is absolutely positioned at top-LEFT (empty tiles put
+  // theirs on the right, clear of everything), while the content below is bottom-aligned. With
+  // only a code, a meta line and the bill that never met — adding the Merged chip made it a
+  // four-line stack that rose straight into the badge and hid the table's own code.
+  //
+  // Reserving the badge's strip instead of shrinking the chip: with justifyContent flex-end
+  // this costs a short tile nothing (its content still sits at the bottom) and simply lets a
+  // tall one grow past minHeight, which is the honest answer when there is genuinely more to
+  // say about that table.
+  tileOccupiedTopGap: { paddingTop: 34 },
   // Desktop web only (isDesktopWeb) — 25% smaller than its own original 18% / 150,
   // same ratio as before. `tile` above is what native/APK mobile actually renders,
   // reverted back to its original size. On a tablet-width browser, 13.5% left barely
