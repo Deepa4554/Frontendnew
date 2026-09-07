@@ -53,6 +53,7 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
   // Same optimistic-mirror trick as the tender ticks above, for the same reason: a switch that
   // waits out the round trip before moving reads as a switch that didn't work.
   const [chargesTaxOverride, setChargesTaxOverride] = useState<boolean | null>(null);
+  const [inclusiveOverride, setInclusiveOverride] = useState<boolean | null>(null);
   const [compositionOverride, setCompositionOverride] = useState<boolean | null>(null);
   const [hsnDraft, setHsnDraft] = useState('');
   const [hsnError, setHsnError] = useState<string | null>(null);
@@ -65,10 +66,12 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
     setModeOverride(null);
     setByModeOverride(null);
     setChargesTaxOverride(null);
+    setInclusiveOverride(null);
     setCompositionOverride(null);
   }, [settings]);
 
   const chargesTaxOn = chargesTaxOverride ?? settings?.taxChargesEnabled ?? false;
+  const inclusiveOn = inclusiveOverride ?? settings?.menuPricesIncludeTax ?? false;
   const compositionOn = compositionOverride ?? settings?.isCompositionScheme ?? false;
 
   const toggleChargesTax = async (next: boolean) => {
@@ -78,6 +81,17 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
       await updateSettings.mutateAsync({ taxChargesEnabled: next });
     } catch (err) {
       setChargesTaxOverride(null);
+      dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save'), icon: 'alert-circle-outline', tone: 'danger' }));
+    }
+  };
+
+  const toggleInclusive = async (next: boolean) => {
+    if (!settings) return;
+    setInclusiveOverride(next);
+    try {
+      await updateSettings.mutateAsync({ menuPricesIncludeTax: next });
+    } catch (err) {
+      setInclusiveOverride(null);
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not save'), icon: 'alert-circle-outline', tone: 'danger' }));
     }
   };
@@ -394,6 +408,34 @@ export const TaxSlabManagementScreen = ({ navigation }: any) => {
             Under GST these charges are part of the same supply as the food, so they are taxable — but turning
             this on RAISES the total of every new bill that carries one. Orders already placed keep the tax they
             were billed with, so a period you have already filed never changes.
+          </Text>
+        </View>
+
+        {/* ---------- Menu prices include tax ---------- */}
+        <View style={styles.card}>
+          <View style={styles.cardHeaderRow}>
+            <View style={styles.cardIcon}>
+              <Icon name="tag-outline" size={20} color={COLORS.accent} />
+            </View>
+            <View style={{ flex: 1 }}>
+              <Text style={styles.cardTitle}>Menu Prices Include Tax</Text>
+              <Text style={styles.cardDesc}>
+                Bill every item at exactly its listed price, with GST carved out of it instead of added on top.
+                A ₹30 item at 5% GST stays a ₹30 bill instead of becoming ₹31.50.
+              </Text>
+            </View>
+            <Switch
+              value={inclusiveOn}
+              onValueChange={toggleInclusive}
+              disabled={!settings || updateSettings.isPending}
+              trackColor={{ false: '#DDD1C6', true: COLORS.accent }}
+              thumbColor="#FFFFFF"
+            />
+          </View>
+          <Text style={styles.cardDesc}>
+            Off by default — every bill adds tax on top of the menu price, as it always has. Turning this on
+            does not change what a customer pays; it only changes how much of that ₹30 is reported as GST versus
+            the item's own value. Applies to items added to a bill after the change, never to ones already rung up.
           </Text>
         </View>
 

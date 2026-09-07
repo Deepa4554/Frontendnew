@@ -9,6 +9,11 @@ import { useBranches } from '../../../../../core/api/hooks/useBranches';
 import { useSettings } from '../../../../../core/api/hooks/useSettings';
 import { RootState } from '../../../../../core/store/rootReducer';
 import { showToast } from '../../../../../core/store/uiSlice';
+import { ordersApi } from '../../../../../core/api/ordersApi';
+import { getApiErrorMessage } from '../../../../../core/network/api';
+import { PrinterService } from '../../../../../core/printing/PrinterService';
+import { buildDuplicateReceipt } from '../../../../../core/printing/duplicateBill';
+import { formatIstDateTime } from '../../../../../core/utils/istDate';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { SearchClearButton } from '../../../../../shared/components/atoms/SearchClearButton';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
@@ -25,10 +30,11 @@ const ORDER_TYPES: { key: string | undefined; label: string }[] = [
   { key: 'QSR', label: 'Token' },
 ];
 
-const fmtDateTime = (iso: string) => {
-  const d = new Date(iso);
-  return `${d.toLocaleDateString()} ${d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
-};
+// Cafe wall clock, not the device's (see formatIstDateTime). The range this report is
+// filtered by is already IST calendar days — rendering the rows inside it in some other
+// timezone put bills on screen at a time, and near midnight on a DATE, that its own filter
+// said they weren't in. The exported PDF/Excel take these same strings.
+const fmtDateTime = (iso: string) => formatIstDateTime(new Date(iso));
 
 const billLabel = (o: { orderNumber: string; tableCode: string | null; tokenNumber: number | null }) =>
   o.tokenNumber != null ? `Token #${o.tokenNumber}` : o.tableCode ? `Table ${o.tableCode}` : `Bill ${o.orderNumber}`;
@@ -46,6 +52,7 @@ export const OrderDetailReportScreen = () => {
   const [customTo, setCustomTo] = useState('');
   const [expanded, setExpanded] = useState<number | null>(null);
   const [exporting, setExporting] = useState<'pdf' | 'excel' | null>(null);
+  const [printingOrderId, setPrintingOrderId] = useState<number | null>(null);
   const activeBranchId = useSelector((s: RootState) => s.branch.activeBranchId);
   const { data: branches = [] } = useBranches();
   const activeBranchName = activeBranchId === null ? 'All Branches' : branches.find((b) => b.id === activeBranchId)?.name ?? 'All Branches';
@@ -65,6 +72,36 @@ export const OrderDetailReportScreen = () => {
   );
 
   const statusOf = (o: { paid: boolean; refunded: boolean }) => (o.refunded ? 'Refunded' : o.paid ? 'Paid' : 'Unpaid');
+
+  /** Reissues a bill that has long since left the till. This report is the only place an old
+   *  bill can still be reached — Billing reprints too, but its query is pinned to today, so
+   *  before this there was no way at all to hand a guest yesterday's slip again.
+   *
+   *  Fetched fresh rather than printed off the report row: the row folds all five reductions
+   *  into one `discountTotal` and carries no coupon code, charges or add-ons, none of which a
+   *  slip can leave out. The order's own stored tax/total are printed as-is (never re-derived
+   *  through taxFiguresOf) — the bill was settled at whatever the rules were that day, and a
+   *  reprint must state the amount that was actually collected. */
+  const printDuplicate = async (orderId: number) => {
+    setPrintingOrderId(orderId);
+    try {
+      const order = await ordersApi.get(orderId);
+      const result = await PrinterService.printReceipt(buildDuplicateReceipt(order, settings));
+      dispatch(showToast({
+        message: result.message,
+        icon: result.ok ? 'printer-check' : 'alert-circle-outline',
+        tone: result.ok ? 'success' : 'danger',
+      }));
+    } catch (e) {
+      dispatch(showToast({
+        message: getApiErrorMessage(e, "Couldn't load this bill to print"),
+        icon: 'alert-circle-outline',
+        tone: 'danger',
+      }));
+    } finally {
+      setPrintingOrderId(null);
+    }
+  };
 
   const runExport = async (format: 'pdf' | 'excel') => {
     if (!data) return;
@@ -287,6 +324,16 @@ export const OrderDetailReportScreen = () => {
                             <Text style={styles.itemTotalLabel}>Gross ₹{o.subtotal.toFixed(2)} · Tax ₹{o.tax.toFixed(2)}</Text>
                             <Text style={styles.itemTotalValue}>₹{o.total.toFixed(2)}</Text>
                           </View>
+                          <TouchableOpacity
+                            style={styles.reprintBtn}
+                            onPress={() => printDuplicate(o.orderId)}
+                            disabled={printingOrderId !== null}
+                          >
+                            {printingOrderId === o.orderId
+                              ? <ActivityIndicator size="small" color={COLORS.heading} />
+                              : <Icon name="printer-outline" size={15} color={COLORS.heading} />}
+                            <Text style={styles.reprintText}>Print Duplicate Bill</Text>
+                          </TouchableOpacity>
                         </View>
                       )}
                     </View>
@@ -353,6 +400,8 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   itemTotalRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 6, paddingTop: 6, borderTopWidth: 1, borderTopColor: COLORS.divider },
   itemTotalLabel: { fontSize: 11, color: COLORS.muted },
   itemTotalValue: { fontSize: 13, fontWeight: '700', color: COLORS.heading },
+  reprintBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, alignSelf: 'flex-start', marginTop: 8, paddingHorizontal: 10, paddingVertical: 6, borderRadius: 6, borderWidth: 1, borderColor: COLORS.divider, backgroundColor: COLORS.cardAlt },
+  reprintText: { fontSize: 11, fontWeight: '700', color: COLORS.heading },
   exportRow: { flexDirection: 'row', paddingHorizontal: isDesktopWeb ? 16 : 12, gap: 8, marginTop: 16 },
   exportPdfBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, backgroundColor: COLORS.button, borderRadius: 6, paddingVertical: 8 },
   exportPdfText: { fontSize: 12, fontWeight: '700', color: '#FFFFFF' },

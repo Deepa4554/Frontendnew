@@ -17,6 +17,8 @@ export const useMenuOnlyQrToken = () => useQuery({ queryKey: queryKeys.menuOnlyQ
 
 export const useDeliveryQrToken = () => useQuery({ queryKey: queryKeys.deliveryQrToken, queryFn: tablesApi.getDeliveryQrToken });
 
+export const useTokenQrToken = () => useQuery({ queryKey: queryKeys.tokenQrToken, queryFn: tablesApi.getTokenQrToken });
+
 export const useCreateTable = () => {
   const qc = useQueryClient();
   return useMutation({

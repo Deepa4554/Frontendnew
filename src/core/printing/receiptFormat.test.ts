@@ -401,6 +401,43 @@ describe('buildReceiptLines — refunded banner', () => {
   });
 });
 
+describe('buildReceiptLines — duplicate marker', () => {
+  const receipt = (over: Partial<PrintableReceipt> = {}): PrintableReceipt => ({
+    businessName: 'Cafe',
+    orderNumber: '#1294',
+    time: '02:07 PM',
+    title: 'Table #T1',
+    orderTypeLabel: 'Dine In',
+    items: [item()],
+    subtotal: 100,
+    taxRatePct: 5,
+    tax: 5,
+    total: 105,
+    footer: 'Thanks!',
+    ...over,
+  });
+
+  const textOf = (lines: ReturnType<typeof buildReceiptLines>) =>
+    lines.map((l) => ('text' in l ? l.text : '')).join('\n');
+
+  it('says nothing on an original slip', () => {
+    expect(textOf(buildReceiptLines(receipt()))).not.toContain('DUPLICATE');
+  });
+
+  it('marks a reprint directly under the document title', () => {
+    const out = textOf(buildReceiptLines(receipt({ duplicate: true, gstNumber: '27AAAPA1234A1Z5' })));
+    expect(out).toContain('DUPLICATE COPY');
+    expect(out.indexOf('TAX INVOICE')).toBeLessThan(out.indexOf('DUPLICATE COPY'));
+    expect(out.indexOf('DUPLICATE COPY')).toBeLessThan(out.indexOf('Order #1294'));
+  });
+
+  it('marks a reprint of a refunded bill with both banners', () => {
+    const out = textOf(buildReceiptLines(receipt({ duplicate: true, refunded: true, refundedAmount: 105 })));
+    expect(out).toContain('DUPLICATE COPY');
+    expect(out).toContain('REFUNDED - Rs.105.00');
+  });
+});
+
 describe('buildReceiptLines — Google review QR', () => {
   const receipt = (over: Partial<PrintableReceipt> = {}): PrintableReceipt => ({
     businessName: 'Cafe',

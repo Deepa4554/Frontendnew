@@ -14,6 +14,7 @@ import { useStations } from '../../../../../core/api/hooks/useStations';
 import { OrderStatus, ApiOrder, OrderItem, FireBatch, STAGE_FLOW, unitsAtStage } from '../../../../../core/api/ordersApi';
 import { SkeletonList } from '../../../../../shared/components/atoms/Skeleton';
 import { VegNonVegBadge } from '../../../../../shared/components/atoms/VegNonVegBadge';
+import { ElapsedTimer } from '../../../../../shared/components/atoms/ElapsedTimer';
 import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { confirmAlert } from '../../../../../shared/components/ConfirmDialogHost';
 import { getKdsDefaultStation, saveKdsDefaultStation, getKdsLocked, saveKdsLocked } from '../../../../../core/kds/kdsDeviceSettings';
@@ -30,21 +31,6 @@ const ACTION_LABEL: Record<OrderStatus, string> = {
   READY: 'Mark Served',
   SERVED: '',
 };
-
-const fmtElapsed = (ms: number) => {
-  const s = Math.max(0, Math.floor(ms / 1000));
-  const m = Math.floor(s / 60);
-  return `${String(m).padStart(2, '0')}:${String(s % 60).padStart(2, '0')}`;
-};
-
-/** Live mm:ss since firedAt, ticking inside this one leaf component — replaces the
- * screen-level 1-second setNow tick that re-rendered every ticket on every beat, which
- * was the KDS's single biggest render cost. Only this Text re-renders per second now. */
-const ElapsedTimer = React.memo(({ firedAt, color, style }: { firedAt: string; color: string; style: object }) => {
-  const [, setTick] = useState(0);
-  useEffect(() => { const t = setInterval(() => setTick((n) => n + 1), 1000); return () => clearInterval(t); }, []);
-  return <Text style={[style, { color }]}>{fmtElapsed(Date.now() - new Date(firedAt).getTime())}</Text>;
-});
 
 /** The header's HH:MM wall clock, self-ticking for the same reason as ElapsedTimer. */
 const WallClock = React.memo(({ style }: { style: object }) => {
@@ -423,7 +409,7 @@ export const KDSScreen = () => {
           </View>
           <View style={[styles.timerBadge, { backgroundColor: `${cardColor}22` }]}>
             <Icon name="timer-outline" size={12} color={cardColor} />
-            <ElapsedTimer firedAt={batch.firedAt} color={cardColor} style={styles.timerText} />
+            <ElapsedTimer since={batch.firedAt} style={[styles.timerText, { color: cardColor }]} />
           </View>
         </View>
 

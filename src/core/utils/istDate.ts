@@ -54,14 +54,37 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
  */
 export const formatIstReceiptTime = (instant: Date): string => {
   const d = new Date(instant.getTime() + IST_OFFSET_MS);
-  const day = d.getUTCDate();
-  const month = MONTHS[d.getUTCMonth()];
-  let hour = d.getUTCHours();
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]}, ${formatIstClockTime(instant)}`;
+};
+
+/**
+ * "02:07 PM" — cafe wall-clock time on its own, for somewhere the date is already obvious
+ * (a table tile showing a bill opened today, a live order row).
+ *
+ * Same reason as formatIstReceiptTime for not using `toLocaleTimeString`: that renders in the
+ * DEVICE's timezone. A tablet left on the wrong TZ, or the web build opened from outside
+ * India, would show a time that disagrees with the kitchen clock, the KOT and the printed
+ * bill — all three of which are already IST. The instant itself is unambiguous (the API sends
+ * UTC with a `Z`), so only the rendering has to be pinned.
+ *
+ * Zero-padded to match `toLocaleTimeString`'s own `hour: '2-digit'` output, which is what
+ * every call site replaced by this used ("01:00 AM", not "1:00 AM").
+ */
+export const formatIstClockTime = (instant: Date): string => {
+  const d = new Date(instant.getTime() + IST_OFFSET_MS);
+  const hour24 = d.getUTCHours();
+  const hour = hour24 % 12 || 12;
   const minute = d.getUTCMinutes().toString().padStart(2, '0');
-  const ampm = hour >= 12 ? 'PM' : 'AM';
-  hour = hour % 12 || 12;
-  // Zero-padded to match toLocaleTimeString's own 'hour: 2-digit' output — every screen this
-  // replaces used that option, and a bill printed the moment before this change and the
-  // moment after must read the same width ("01:00 AM", not "1:00 AM").
-  return `${day} ${month}, ${hour.toString().padStart(2, '0')}:${minute} ${ampm}`;
+  return `${hour.toString().padStart(2, '0')}:${minute} ${hour24 >= 12 ? 'PM' : 'AM'}`;
+};
+
+/**
+ * "14 Aug 2026, 02:07 PM" — cafe wall clock with the year, for anything that ranges over
+ * more than the current day (reports, a bill-wise register, an exported sheet). The year is
+ * what separates this from formatIstReceiptTime: a receipt is read the day it prints, a
+ * report is read against dates months old.
+ */
+export const formatIstDateTime = (instant: Date): string => {
+  const d = new Date(instant.getTime() + IST_OFFSET_MS);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}, ${formatIstClockTime(instant)}`;
 };

@@ -45,6 +45,13 @@ export const WarmColors = {
   chipBg: '#EFE6E3',
   chipActiveBg: '#31170A',
 
+  // An occupied table that also has other tables merged into it (Tables grid). Deliberately a
+  // dark tone like `heading`, because the tile still has to read as occupied from across the
+  // room — but pulled towards `accent` so the two darks are told apart side by side, and so a
+  // merged tile matches the accent outline and "Merged" chip it carries. White text on it
+  // clears 9:1, same as on `heading`.
+  occupiedMerged: '#6E3517',
+
   // Onboarding / setup wizard
   onboardTop: '#F3EBE3',
   onboardBottom: '#E4D6C8',

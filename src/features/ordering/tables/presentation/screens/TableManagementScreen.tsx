@@ -34,8 +34,9 @@ import { getPublicApiBaseUrl, getPublicOrderBaseUrl } from '../../../../../core/
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { printOrderKot, printAllOrderKots } from '../../../../../core/printing/orderKot';
 import { billAdjustmentsOf, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
-import { formatIstReceiptTime } from '../../../../../core/utils/istDate';
+import { formatIstReceiptTime, formatIstClockTime } from '../../../../../core/utils/istDate';
 import { SkeletonGrid } from '../../../../../shared/components/atoms/Skeleton';
+import { ElapsedTimer } from '../../../../../shared/components/atoms/ElapsedTimer';
 import { Tooltip } from '../../../../../shared/components/atoms/Tooltip';
 import { ErrorState } from '../../../../../shared/components/atoms/StateComponents';
 import { GlobalSearchTrigger } from '../../../../../shared/components/search/GlobalSearchTrigger';
@@ -302,9 +303,24 @@ export const TableManagementScreen = ({ navigation }: any) => {
     Available: TABLES.filter((t) => t.status === 'empty').length,
     Occupied: TABLES.filter((t) => t.status === 'occupied').length,
   }), [TABLES]);
+  // When each occupied table's order was opened, by table code. ApiTable carries no timestamp
+  // of its own (see tablesApi), so it comes off the active-orders list this screen already
+  // fetches for its "Active Orders" stat — no extra request. Feeds both the grid's ordering
+  // and each tile's clock.
+  const orderStartedAt = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const o of activeOrders) if (o.tableCode) map[o.tableCode] = o.createdAt;
+    return map;
+  }, [activeOrders]);
+
   // Occupied tables sort to the front of the grid — those are the ones staff act on
   // (settle, shift, add items), so they shouldn't be hunted for among the free tiles.
-  // Sort is stable, so within each group the zone's own table order is preserved.
+  // WITHIN the occupied group it's newest order first, which is the ordering staff actually
+  // think in: table order is an accident of how tables were named, so the round just fired on
+  // T9 used to land wherever T9 happens to sit and there was no way to tell it from a table
+  // that had been sitting for two hours. An order with no known start time (its row missing
+  // from the active-orders page) sorts last rather than jumping the queue on a 0 timestamp.
+  // Empty tiles keep the zone's own table order — the sort is stable and never compares them.
   const FILTERED_TABLES = useMemo(() => TABLES.filter((t) => {
     const matchesCapacity = capacityFilter === 'All Sizes' || t.seats === parseInt(capacityFilter, 10);
     const matchesStatus =
@@ -312,8 +328,16 @@ export const TableManagementScreen = ({ navigation }: any) => {
       (statusFilter === 'Available' && t.status === 'empty') ||
       (statusFilter === 'Occupied' && t.status === 'occupied');
     return matchesCapacity && matchesStatus;
-  }).sort((a, b) => Number(b.status === 'occupied') - Number(a.status === 'occupied')),
-  [TABLES, capacityFilter, statusFilter]);
+  }).sort((a, b) => {
+    const byStatus = Number(b.status === 'occupied') - Number(a.status === 'occupied');
+    if (byStatus !== 0 || a.status !== 'occupied') return byStatus;
+    const at = orderStartedAt[a.code], bt = orderStartedAt[b.code];
+    if (!at && !bt) return 0;
+    if (!at) return 1;
+    if (!bt) return -1;
+    return bt.localeCompare(at);
+  }),
+  [TABLES, capacityFilter, statusFilter, orderStartedAt]);
 
   const occupiedCount = allTables.filter((t) => t.status === 'occupied').length;
   const freeTableCount = allTables.filter((t) => t.status === 'empty').length;
@@ -386,14 +410,18 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
   // Undoes every guest folded into this host in one tap — a partial split (only some of
   // several merged tables) just means re-merging whichever ones should stay combined.
-  const handleUnmergeAll = async (host: ApiTable) => {
+  /** Resolves true only when every guest actually split — the occupied modal needs to know,
+   *  since it holds a tile snapshot it has to correct itself (see its merged banner). */
+  const handleUnmergeAll = async (host: ApiTable): Promise<boolean> => {
     // Falls back to [] — an older/not-yet-updated API build won't send this field at all.
     const guests = host.mergedWith ?? [];
     try {
       await Promise.all(guests.map((g) => unmergeTable.mutateAsync(g.id)));
       dispatch(showToast({ message: `${host.code} split back into ${guests.length + 1} tables.`, icon: 'call-split', tone: 'success' }));
+      return true;
     } catch (err) {
       dispatch(showToast({ message: getApiErrorMessage(err, 'Could not unmerge'), icon: 'alert-circle-outline', tone: 'danger' }));
+      return false;
     }
   };
 
@@ -834,6 +862,31 @@ export const TableManagementScreen = ({ navigation }: any) => {
           onSelect={setStatusFilter}
         />
 
+        {/* What the tile colours mean. Right-aligned above the grid so it reads as a key to
+            what is below it rather than as another filter. Merged is the entry that earns this
+            row: empty/occupied were already obvious from the "Empty"/status badge on each tile,
+            but an accent outline means nothing until something names it. */}
+        <View style={styles.colourKeyRow}>
+          <View style={styles.colourKeyItem}>
+            <View style={[styles.colourKeySwatch, { backgroundColor: COLORS.cardAlt, borderColor: COLORS.divider }]} />
+            <Text style={styles.colourKeyLabel}>Empty</Text>
+          </View>
+          <View style={styles.colourKeyItem}>
+            <View style={[styles.colourKeySwatch, { backgroundColor: COLORS.heading, borderColor: COLORS.heading }]} />
+            <Text style={styles.colourKeyLabel}>Occupied</Text>
+          </View>
+          {/* Two-tone: merged tables come in both grounds (tan when free, dark brown when a
+              bill is running), and one swatch claiming a single colour would send staff
+              looking for the wrong one. The accent outline is what both actually share. */}
+          <View style={styles.colourKeyItem}>
+            <View style={[styles.colourKeySwatch, styles.colourKeySwatchSplit, { borderColor: COLORS.accent }]}>
+              <View style={{ flex: 1, backgroundColor: COLORS.aiCardBg }} />
+              <View style={{ flex: 1, backgroundColor: COLORS.occupiedMerged }} />
+            </View>
+            <Text style={styles.colourKeyLabel}>Merged</Text>
+          </View>
+        </View>
+
         {pickerActive && (
           <View style={styles.pickerBanner}>
             <Icon name={shiftingFrom ? 'table-furniture' : seatingFromWaitlist ? 'account-clock' : 'call-merge'} size={16} color={COLORS.accent} />
@@ -915,10 +968,30 @@ export const TableManagementScreen = ({ navigation }: any) => {
             // stays reachable and the grid doesn't jarringly re-layout.
             const isPickTarget = !!pickerActive && table.status === 'empty' && table.id !== pickerActive.id;
             const isDimmed = !!pickerActive && !isPickTarget;
+            // Merge is not a third status — a merged table is still either empty or occupied —
+            // so it gets its own colour in BOTH states rather than stealing one from status:
+            // empty+merged goes to the warm tan ground, occupied+merged stays dark (it has to
+            // read as occupied from across the room) but on the accent-leaning brown rather
+            // than `heading`, so the two darks are told apart at a glance. The accent outline
+            // and the Merged chip then tie both back to the legend. Occupied was the case that
+            // had nothing at all before: once an order landed the tile went dark and every
+            // trace of the merge vanished, so a table merged by mistake became unfindable.
+            const isMerged = mergedWith.length > 0;
+            const mergedCodes = mergedWith.map((g) => g.code).join(', ');
+            const startedAt = table.status === 'occupied' ? orderStartedAt[table.code] : undefined;
+            const tileBg = !isMerged
+              ? style.bg
+              : table.status === 'empty' ? COLORS.aiCardBg : COLORS.occupiedMerged;
             return (
               <TouchableOpacity
                 key={table.id}
-                style={[styles.tile, isDesktopWeb && styles.tileDesktop, { backgroundColor: style.bg }, isDimmed && styles.tileDimmed]}
+                style={[
+                  styles.tile,
+                  isDesktopWeb && styles.tileDesktop,
+                  { backgroundColor: tileBg },
+                  isMerged && styles.tileMerged,
+                  isDimmed && styles.tileDimmed,
+                ]}
                 activeOpacity={0.85}
                 onPress={() => handleTilePress(table)}
               >
@@ -959,12 +1032,26 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
                 <Text style={[styles.tileId, { color: style.text }]} numberOfLines={1}>{table.code}</Text>
 
+                {/* Which tables are joined, on its own line rather than tacked onto the seat
+                    count — "8 Seater (+T2, T3)" is one numberOfLines={1} label on a tile this
+                    narrow, so the codes were the half that got ellipsised away. Shown on empty
+                    AND occupied tiles: staff need it most once an order is running. */}
+                {isMerged && (
+                  <View style={[styles.tileMergedChip, table.status === 'occupied' && styles.tileMergedChipOnDark]}>
+                    <Icon name="call-merge" size={11} color={table.status === 'occupied' ? '#FFFFFF' : COLORS.accent} />
+                    <Text
+                      style={[styles.tileMergedText, { color: table.status === 'occupied' ? '#FFFFFF' : COLORS.accent }]}
+                      numberOfLines={1}
+                    >
+                      Merged: {mergedCodes}
+                    </Text>
+                  </View>
+                )}
+
                 {table.status === 'empty' && (
                   <>
                     <Text style={[styles.tileMeta, { color: style.text }]} numberOfLines={1}>
-                      {mergedWith.length > 0
-                        ? `${table.mergedSeats ?? table.seats} Seater (+${mergedWith.map((g) => g.code).join(', ')})`
-                        : `${table.seats} Seater`}
+                      {isMerged ? `${table.mergedSeats ?? table.seats} Seater combined` : `${table.seats} Seater`}
                     </Text>
                     <Text style={[styles.tileMetaItalic, { color: style.text }]}>Available</Text>
                     <TouchableOpacity style={styles.openCheckBtn} onPress={() => handleTilePress(table)}>
@@ -973,7 +1060,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
                     {/* Hidden mid-picker so a tap here can't be mistaken for completing the
                         Shift/Merge in progress — Merge/Unmerge only make sense as a fresh action. */}
                     {canAdd && !pickerActive && (
-                      mergedWith.length > 0 ? (
+                      isMerged ? (
                         <TouchableOpacity style={styles.tileSecondaryBtn} onPress={() => handleUnmergeAll(table)}>
                           <Text style={styles.tileSecondaryBtnText}>Unmerge</Text>
                         </TouchableOpacity>
@@ -988,10 +1075,29 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
                 {table.status === 'occupied' && (
                   <>
+                    {/* The stage used to repeat here ("· PREPARING") when the badge in the
+                        corner already says it. That slot buys more as the clock time the order
+                        was opened — the tile had no timestamp of any kind, so a table that had
+                        been sitting all evening looked exactly like one seated a minute ago. */}
                     <Text style={[styles.tileMeta, { color: style.text }]} numberOfLines={1}>
-                      {table.guestName ? table.guestName : `Order ${tableOrderLabel(table)}`} · {table.orderStatus}
+                      {table.guestName ? table.guestName : `Order ${tableOrderLabel(table)}`}
+                      {/* Cafe wall clock, not the device's — see formatIstClockTime. A tablet
+                          on the wrong timezone would otherwise print a table time that
+                          disagrees with the KOT and the bill, which are both already IST. */}
+                      {startedAt ? ` · ${formatIstClockTime(new Date(startedAt))}` : ''}
                     </Text>
-                    <Text style={[styles.tileBill, { color: style.text }]}>₹{table.bill?.toFixed(2)}</Text>
+                    <View style={styles.tileBillRow}>
+                      <Text style={[styles.tileBill, { color: style.text }]}>₹{table.bill?.toFixed(2)}</Text>
+                      {/* The running clock KDS gives every ticket, which the floor never had:
+                          how long this table has been open. Ticks inside ElapsedTimer itself,
+                          so a grid of 30 tables re-renders 30 Texts a second, not 30 tiles. */}
+                      {startedAt && (
+                        <View style={styles.tileTimer}>
+                          <Icon name="clock-outline" size={11} color={style.text} />
+                          <ElapsedTimer since={startedAt} style={[styles.tileTimerText, { color: style.text }]} />
+                        </View>
+                      )}
+                    </View>
                   </>
                 )}
               </TouchableOpacity>
@@ -1154,6 +1260,45 @@ export const TableManagementScreen = ({ navigation }: any) => {
                 <ActivityIndicator size="small" color={COLORS.accent} style={{ marginVertical: 24 }} />
               )}
 
+              {/* Names the joined tables while the bill is open — the exact moment staff need it
+                  and the one place that never said. Unmerge is offered right here, not only on
+                  the empty tile: the server's Unmerge has no open-order guard (seats were never
+                  mutated by the merge, so a guest table just detaches), and a merge made by
+                  mistake is discovered precisely when an order is already running on it. Without
+                  this, the only way back was to settle a bill nobody wanted settled. */}
+              {(occupiedModal?.mergedWith?.length ?? 0) > 0 && (
+                <View style={styles.occMergedBanner}>
+                  <Icon name="call-merge" size={15} color={COLORS.accent} />
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.occMergedText}>
+                      <Text style={styles.occMergedStrong}>
+                        {occupiedModal!.mergedWith!.map((g) => g.code).join(', ')}
+                      </Text>
+                      {occupiedModal!.mergedWith!.length === 1 ? ' is' : ' are'} merged into {occupiedModal!.code} — all
+                      {' '}{occupiedModal!.mergedSeats ?? occupiedModal!.seats} seats bill here.
+                    </Text>
+                    {canAdd && (
+                      <TouchableOpacity
+                        style={styles.occMergedUndoBtn}
+                        onPress={async () => {
+                          const host = occupiedModal!;
+                          // The modal carries the tile as it was at tap time, so it would go on
+                          // claiming the tables are joined until it was closed and reopened.
+                          if (await handleUnmergeAll(host)) {
+                            setOccupiedModal({ ...host, mergedWith: [], mergedSeats: host.seats });
+                          }
+                        }}
+                        disabled={unmergeTable.isPending}
+                      >
+                        <Text style={styles.occMergedUndoText}>
+                          {unmergeTable.isPending ? 'Splitting…' : 'Unmerge (this bill stays on ' + occupiedModal!.code + ')'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                </View>
+              )}
+
               {/* --- Item list (open editing — nothing fired yet, so no batches to group by) --- */}
               {occupiedOrder && isOpenOrder && (
                 <View style={styles.occItemsScroll}>
@@ -1169,15 +1314,21 @@ export const TableManagementScreen = ({ navigation }: any) => {
                       <View style={styles.occUnfiredTag}><Text style={styles.occUnfiredTagText}>NEW</Text></View>
                       <Text style={styles.occItemPrice}>₹{(item.price * item.qty).toFixed(2)}</Text>
                       <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled} />
-                      <Tooltip label="Remove item" placement="left">
-                        <TouchableOpacity
-                          onPress={() => voidPrompt.request(item)}
-                          disabled={voidPrompt.pendingItemId === item.id}
-                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                        >
-                          <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                        </TouchableOpacity>
-                      </Tooltip>
+                      {/* Hidden outright below Manager once the line has been fired — see
+                          voidPrompt.canVoid. A waiter can still pull an unfired line, which is
+                          all this row ever holds. `disabled` while a void is in flight is the
+                          other half: the gate decides who may tap, that stops a double-tap. */}
+                      {voidPrompt.canVoid(item) && (
+                        <Tooltip label="Remove item" placement="left">
+                          <TouchableOpacity
+                            onPress={() => voidPrompt.request(item)}
+                            disabled={voidPrompt.pendingItemId === item.id}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
+                            <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                          </TouchableOpacity>
+                        </Tooltip>
+                      )}
                     </View>
                   ))}
                   <TouchableOpacity style={styles.occAddItemBtn} onPress={handleAddItemsViaPos}>
@@ -1233,15 +1384,17 @@ export const TableManagementScreen = ({ navigation }: any) => {
                                 <Text style={[styles.occItemStatusPillText, { color: dotColor }]}>{item.status}</Text>
                               </TouchableOpacity>
                               <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled || item.voided} />
-                              <Tooltip label="Remove item" placement="left">
-                                <TouchableOpacity
-                                  onPress={() => voidPrompt.request(item)}
-                                  disabled={voidPrompt.pendingItemId === item.id}
-                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                                >
-                                  <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                                </TouchableOpacity>
-                              </Tooltip>
+                              {voidPrompt.canVoid(item) && (
+                                <Tooltip label="Remove item" placement="left">
+                                  <TouchableOpacity
+                                    onPress={() => voidPrompt.request(item)}
+                                    disabled={voidPrompt.pendingItemId === item.id}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  >
+                                    <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                                  </TouchableOpacity>
+                                </Tooltip>
+                              )}
                             </View>
                           );
                         })}
@@ -1277,15 +1430,17 @@ export const TableManagementScreen = ({ navigation }: any) => {
                             <Text style={[styles.occItemStatusPillText, { color: COLORS.muted }]}>NEW</Text>
                           </View>
                           <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled} />
-                          <Tooltip label="Remove item" placement="left">
-                            <TouchableOpacity
-                              onPress={() => voidPrompt.request(item)}
-                              disabled={voidPrompt.pendingItemId === item.id}
-                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-                            >
-                              <Icon name="close" size={16} color={COLORS.dangerAccent} />
-                            </TouchableOpacity>
-                          </Tooltip>
+                          {voidPrompt.canVoid(item) && (
+                            <Tooltip label="Remove item" placement="left">
+                              <TouchableOpacity
+                                onPress={() => voidPrompt.request(item)}
+                                disabled={voidPrompt.pendingItemId === item.id}
+                                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                              >
+                                <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                              </TouchableOpacity>
+                            </Tooltip>
+                          )}
                         </View>
                       ))}
                     </View>
@@ -1773,6 +1928,37 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     marginBottom: 0,
     maxWidth: undefined,
   },
+  occMergedBanner: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    gap: 8,
+    backgroundColor: COLORS.proTipBg,
+    borderRadius: 8,
+    borderLeftWidth: 3,
+    borderLeftColor: COLORS.accent,
+    paddingHorizontal: 12,
+    paddingVertical: 9,
+    marginBottom: isDesktopWeb ? 12 : 12,
+  },
+  occMergedText: { fontSize: fs(12), lineHeight: fs(17), color: COLORS.heading },
+  occMergedStrong: { fontWeight: '800', color: COLORS.accent },
+  occMergedUndoBtn: { alignSelf: 'flex-start', marginTop: 5 },
+  occMergedUndoText: { fontSize: fs(11), fontWeight: '800', color: COLORS.accent, textDecorationLine: 'underline' },
+  colourKeyRow: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    alignItems: 'center',
+    flexWrap: 'wrap',
+    gap: isDesktopWeb ? 12 : 10,
+    paddingHorizontal: isDesktopWeb ? 12 : 12,
+    marginBottom: isDesktopWeb ? 8 : 9,
+  },
+  colourKeyItem: { flexDirection: 'row', alignItems: 'center', gap: 4 },
+  // Borders on every swatch, not just the outlined one: an "Empty" swatch is the card colour
+  // on the page colour, which is almost no contrast at all without an edge to hold it.
+  colourKeySwatch: { width: 11, height: 11, borderRadius: 3, borderWidth: 1.5 },
+  colourKeySwatchSplit: { flexDirection: 'row', overflow: 'hidden' },
+  colourKeyLabel: { fontSize: fs(10), fontWeight: '700', color: COLORS.muted },
   pickerBanner: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -1867,6 +2053,30 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     width: isTablet ? '23%' : '13.5%',
     minHeight: 113,
   },
+  // The one signal that survives on both grounds — an empty merged tile changes colour, an
+  // occupied one cannot (it has to stay readable as occupied), so the outline is what makes
+  // "merged" recognisable at a glance in either state. Inset border, not a shadow: tiles sit
+  // 9px apart and a glow would bleed into the neighbours.
+  tileMerged: {
+    borderWidth: 2,
+    borderColor: COLORS.accent,
+  },
+  tileMergedChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 3,
+    maxWidth: '100%',
+    borderRadius: 4,
+    paddingHorizontal: 5,
+    paddingVertical: 2,
+    marginBottom: isDesktopWeb ? 4 : 4.5,
+    backgroundColor: COLORS.proTipBg,
+  },
+  // Same chip on the dark occupied ground — matches the SERVED status badge's own
+  // white-on-translucent treatment rather than inventing a second one.
+  tileMergedChipOnDark: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  tileMergedText: { flexShrink: 1, fontSize: fs(10), fontWeight: '700' },
   // Not a valid Shift/Merge target while a picker is active.
   tileDimmed: { opacity: 0.35 },
   tileTopIcon: {
@@ -1910,11 +2120,21 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     opacity: 0.7,
     marginBottom: isDesktopWeb ? 7 : 7.5,
   },
+  tileBillRow: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
+    gap: 6,
+  },
   tileBill: {
     fontSize: fs(17),
     fontWeight: 'bold',
     marginBottom: isDesktopWeb ? 6 : 6,
   },
+  // Rides the same line as the bill rather than taking a row of its own — the tile is
+  // minHeight 130 and already carries a code, a chip, a meta line and the amount.
+  tileTimer: { flexDirection: 'row', alignItems: 'center', gap: 2, opacity: 0.85, marginBottom: 6 },
+  tileTimerText: { fontSize: fs(11), fontWeight: '700', fontVariant: ['tabular-nums'] },
   openCheckBtn: {
     backgroundColor: COLORS.background,
     borderRadius: 6,

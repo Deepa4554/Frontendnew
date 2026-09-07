@@ -49,6 +49,11 @@ export const DesktopColors = {
   chipBg: '#F1EDE8',
   chipActiveBg: '#0E0401',
 
+  // See WarmColors.occupiedMerged. Pulled towards this palette's own accent (#904D00) rather
+  // than reused from there — against a near-black `heading` the warm brown has to be its own
+  // shade to stay distinguishable. White text on it clears 10:1.
+  occupiedMerged: '#5C3100',
+
   onboardTop: '#F3EBE3',
   onboardBottom: '#E4D6C8',
   inputTint: '#F7F3EE',

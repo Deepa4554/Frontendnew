@@ -1,12 +1,13 @@
 import React, { useRef, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
-import { useDispatch } from 'react-redux';
+import { useDispatch, useSelector } from 'react-redux';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
 import { useResponsive } from '../../../core/utils/useResponsive';
 import { showToast } from '../../../core/store/uiSlice';
 import { useRemoveOrderItem } from '../../../core/api/hooks/useOrders';
 import { OrderItem as ApiOrderItem } from '../../../core/api/ordersApi';
 import { getApiErrorMessage } from '../../../core/network/api';
+import { canVoidItem } from '../../../core/auth/permissions';
 import { modalHeadingOverride } from '../../design/commonStyles';
 import { VoidReasonPicker, useVoidReasonState } from './voidReasons';
 
@@ -17,6 +18,12 @@ export interface ItemVoidPrompt {
   request: (item: ApiOrderItem) => void;
   /** The line currently mid-write, so a screen can grey out just that row if it wants to. */
   pendingItemId: number | null;
+  /** Whether this login may take THIS line off the bill — false on a fired line for anyone
+   * below Manager (see canVoidItem). Screens gate the row's remove button on it so a waiter
+   * never sees a control that can only answer with a 403: ASP.NET's Forbid() carries no body,
+   * so the toast could only ever say "Could not void item", which reads as the app being
+   * broken rather than as the rule it is. */
+  canVoid: (item: ApiOrderItem) => boolean;
   // --- consumed by VoidReasonPrompt below; not meant for screens to read directly ---
   item: ApiOrderItem | null;
   dismiss: () => void;
@@ -40,6 +47,10 @@ export const useItemVoidPrompt = (orderId: number | null, verb: 'void' | 'remove
   const reason = useVoidReasonState();
   const [item, setItem] = useState<ApiOrderItem | null>(null);
   const [pendingItemId, setPendingItemId] = useState<number | null>(null);
+  const role = useSelector((s: any) => s.auth.user?.role);
+
+  const canVoid = (target: ApiOrderItem) => canVoidItem(role, target.fireBatch);
+
   // `pendingItemId` (state) drives the UI but can't close a same-tick double-fire on its own —
   // two onPress calls landing before React commits the re-render both still read the OLD state
   // (null), so a fast double-tap (or a platform double-firing onPress for one physical tap, a
@@ -91,6 +102,9 @@ export const useItemVoidPrompt = (orderId: number | null, verb: 'void' | 'remove
 
   const request = (target: ApiOrderItem) => {
     if (orderId === null || pendingIdsRef.current.has(target.id)) return;
+    // The screens already hide the button this comes from (see canVoid), so reaching here means
+    // a call site forgot the gate — refuse rather than fire a request the server will only 403.
+    if (!canVoid(target)) return;
     // Same rule the server enforces, asked up front so the till isn't bounced by a 400. Anything
     // the kitchen has cooked, or that was recorded as gone out, needs a reason on the record.
     const needsReason = target.fireBatch > 0
@@ -130,7 +144,7 @@ export const useItemVoidPrompt = (orderId: number | null, verb: 'void' | 'remove
     void apply(target, args);
   };
 
-  return { request, pendingItemId, item, dismiss, confirm, reason, verb };
+  return { request, pendingItemId, canVoid, item, dismiss, confirm, reason, verb };
 };
 
 /** The reason prompt for taking one line off the bill. Render one per screen, driven by the

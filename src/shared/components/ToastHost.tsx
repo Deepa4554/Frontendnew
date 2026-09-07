@@ -16,6 +16,26 @@ const TONE_COLORS: Record<string, { bg: string; icon: string }> = {
   danger: { bg: COLORS.dangerAccent, icon: '#FFFFFF' },
 };
 
+/**
+ * How long a toast stays up when the caller doesn't say. The old flat 1800ms was set for a
+ * two-word "Saved" and never revisited, so the long ones — "Voided Paneer Tikka off the bill —
+ * no stock reversal (already served)." — were gone before they could be read, which is the same
+ * as never having shown them.
+ *
+ * ~13 characters a second is a comfortable glance-read of a line someone isn't expecting, on top
+ * of a fixed beat for noticing the toast arrived at all. Clamped at both ends: nothing shorter
+ * than 2.2s (below that even "Saved" flickers), nothing longer than 6s (past that it stops being
+ * a toast and starts covering the screen). Problems get an extra beat — a warning or an error is
+ * read twice and usually acted on, while a success is only being confirmed.
+ *
+ * An explicit `durationMs` still wins outright; this is only the default.
+ */
+export const autoDismissMs = (message: string, tone?: string): number => {
+  const base = 1100 + message.length * 75;
+  const forTone = tone === 'danger' || tone === 'warning' ? base + 1200 : base;
+  return Math.min(6000, Math.max(2200, forTone));
+};
+
 // Mounted once near the app root. Anywhere in the app, dispatch(showToast({message, icon, tone}))
 // to surface a brief, self-dismissing confirmation — used for "item added", "unavailable", etc.
 // Anchored to the top (not bottom) with a very high zIndex so it always renders above the
@@ -50,7 +70,7 @@ export const ToastHost = () => {
         Animated.timing(translateY, { toValue: restingOffset, duration: 200, useNativeDriver: true }),
         Animated.timing(opacity, { toValue: 0, duration: 200, useNativeDriver: true }),
       ]).start(() => dispatch(hideToast()));
-    }, toast.durationMs ?? 1800);
+    }, toast.durationMs ?? autoDismissMs(toast.message, toast.tone));
 
     return () => {
       if (timerRef.current) clearTimeout(timerRef.current);

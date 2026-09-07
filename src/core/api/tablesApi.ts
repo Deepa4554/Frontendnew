@@ -76,6 +76,10 @@ export const tablesApi = {
    * Scanning it opens the ordering page in delivery mode (address + location), and the
    * order arrives as DELIVERY. See backend TablesController.GetDeliveryQrToken. */
   getDeliveryQrToken: () => apiClient.get<{ token: string }>('/tables/delivery-qr-token').then((r) => r.data),
+  /** A QR token for the counter/token queue — one card printed at the till. Scanning it opens
+   * the ordering page in counter mode, and the order arrives as a QSR ticket on the Token
+   * Dashboard. See backend TablesController.GetCounterQrToken. */
+  getTokenQrToken: () => apiClient.get<{ token: string }>('/tables/token-qr-token').then((r) => r.data),
   /** Manual end of a table's live QR guest session (doc Section 5.6) — abuse, a
    * wrong-table scan, or a guest request. Every device on that session gets 410 on its
    * next request. */

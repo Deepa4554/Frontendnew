@@ -233,6 +233,19 @@ export function canMarkComplimentary(role: AppRole | undefined): boolean {
   return isOwnerOrManager(role);
 }
 
+/// Taking a line off the bill once the kitchen has already seen it. Food that was cooked (or
+/// recorded as served) is stock and money that has left the building, so pulling it off a bill
+/// is a manager's call, not a floor one — the server gates it identically (see backend
+/// OrdersController.RemoveItem's IsOwnerOrManager check on a fired line).
+///
+/// Only about FIRED lines. A line that never reached a KOT is nothing but a mis-tap — no food,
+/// no stock movement — and any staff member may pull it, same bar as adding it in the first
+/// place. Callers must pass the line's fireBatch so both halves stay in one place; see
+/// useItemVoidPrompt.canVoid, which is what the screens actually call.
+export function canVoidItem(role: AppRole | undefined, fireBatch: number): boolean {
+  return fireBatch === 0 || isOwnerOrManager(role);
+}
+
 export function canAccessSuperAdmin(isPlatformAdmin: boolean | undefined): boolean {
   return isPlatformAdmin === true;
 }

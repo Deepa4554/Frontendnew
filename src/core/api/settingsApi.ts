@@ -4,6 +4,16 @@ export interface ApiSettings {
   id: number;
   /** The owning tenant's URL-safe slug — used to build tenant-aware QR ordering links. */
   tenantSlug: string | null;
+  /** This cafe takes Razorpay payments from the guest QR page and settles the bill itself when
+   *  one is captured (see CafeSettings.OnlinePaymentEnabled). The keys behind it never come
+   *  down — only this flag and the public key id do. */
+  onlinePaymentEnabled: boolean;
+  /** The CAFE's own Razorpay key id, not the platform's. Public half; safe to hold. */
+  razorpayKeyId: string | null;
+  /** Whether a key secret is stored, without revealing it — what the settings screen shows in
+   *  place of the value. */
+  razorpayKeySecretConfigured: boolean;
+  razorpayWebhookSecretConfigured: boolean;
   taxRatePct: number;
   /** Charge tax only on the tenders in `taxablePaymentModes` instead of on every bill.
    * Off for every cafe that hasn't deliberately turned it on. */
@@ -15,6 +25,10 @@ export interface ApiSettings {
    * an already-computed tax. Off for every cafe that hasn't turned it on, and it only ever
    * affects orders placed after the change — each bill snapshots the decision. */
   taxChargesEnabled: boolean;
+  /** Bills every regular menu item tax-inclusive — GST carved out of the listed price instead of
+   * added on top, the same treatment an MRP/open-price item already always gets. Off for every
+   * cafe that hasn't turned it on. */
+  menuPricesIncludeTax: boolean;
   /** This cafe bills under the GST composition scheme, so its bill prints as a BILL OF SUPPLY
    * rather than a TAX INVOICE. */
   isCompositionScheme: boolean;
@@ -162,6 +176,8 @@ export type UpdateSettingsRequest = Partial<
     | 'gstNumber'
     | 'upiVpa'
     | 'googleReviewUrl'
+    | 'onlinePaymentEnabled'
+    | 'razorpayKeyId'
     | 'latitude'
     | 'longitude'
     | 'serviceChargeDefaultPct'
@@ -188,12 +204,19 @@ export type UpdateSettingsRequest = Partial<
   serviceChargeClearDefault?: boolean;
   packingChargeClearDefault?: boolean;
   deliveryChargeClearDefault?: boolean;
+  /** Write-only, and never returned by the GET — the response carries
+   * `razorpayKeySecretConfigured` instead. An empty string clears the stored secret; omit the
+   * field entirely to leave it as it is, which is what every save that isn't about payments
+   * does. Same rule for the webhook secret beside it. */
+  razorpayKeySecret?: string;
+  razorpayWebhookSecret?: string;
   taxByPaymentModeEnabled?: boolean;
   /** A list going up, a CSV string coming back down (see ApiSettings) — the client never has
    * to know the storage format. An empty array is a real value ("no tender is taxable"), not
    * "leave unchanged"; omit the field entirely for that. */
   taxablePaymentModes?: string[];
   taxChargesEnabled?: boolean;
+  menuPricesIncludeTax?: boolean;
   isCompositionScheme?: boolean;
   /** Empty string clears it back to "no HSN"; omit the field to leave it unchanged. Digits
    * only, 4-8 of them — the server rejects anything else rather than printing it on a bill. */

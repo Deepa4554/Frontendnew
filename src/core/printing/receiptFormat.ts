@@ -313,6 +313,15 @@ export interface PrintableReceipt extends PrintableBillAdjustments {
   /** Amount refunded, when known — appended to the banner. Omit (or a full refund with no
    * amount tracked) prints the banner with no figure. */
   refundedAmount?: number | null;
+  /** This is a reprint of a bill that was already issued (Order Detail Report's Print
+   * Duplicate), not the original slip. Printed as a line under the document title so the
+   * second copy can never be passed off as the first — a bill reissued for a guest who lost
+   * theirs, or for a cafe's own records, has to say which one it is. */
+  duplicate?: boolean;
+  /** The whole order was cancelled. Banner alongside `refunded`, for the same reason: a
+   * reprint of an order that was called off must not read as a live bill. Distinct from
+   * refunded — that one took money back, this one never took any. */
+  cancelled?: boolean;
   footer: string;
   /** Receipt Builder toggles (see Cafe Settings → Receipt Builder) — every one defaults
    * to true so an existing caller that doesn't pass them keeps today's behavior. */
@@ -473,6 +482,9 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
   // What kind of document this is — see billDocumentTitle. Between the cafe's identity block
   // and the order's own details, the same place the PDF puts it.
   push({ kind: 'text', text: billDocumentTitle(receipt), align: 'center', bold: true });
+  // Directly under the title, so whoever picks the slip up reads what it is and that it is a
+  // reissue in the same glance — see PrintableReceipt.duplicate.
+  if (receipt.duplicate) push({ kind: 'text', text: 'DUPLICATE COPY', align: 'center', bold: true });
   push({ kind: 'dashes' });
   push({ kind: 'text', text: twoCol(`Order ${receipt.orderNumber}`, receipt.time, columns) });
   push({ kind: 'text', text: twoCol(receipt.title, receipt.orderTypeLabel, columns) });
@@ -572,6 +584,10 @@ export function buildReceiptLines(receipt: PrintableReceipt, columns = 32, logoR
   }
   pushAmountRow(push, 'TOTAL', money(receipt.total), columns, true);
   push({ kind: 'dashes' });
+
+  // Both can be true at once in principle; print both rather than picking one, since they say
+  // different things about where the money went.
+  if (receipt.cancelled) push({ kind: 'text', text: 'CANCELLED', align: 'center', bold: true });
 
   if (receipt.refunded) {
     push({

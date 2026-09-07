@@ -6,7 +6,7 @@ import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import QRCode from 'react-native-qrcode-svg';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useThemeColors } from '../../../../core/theme/useThemeColors';
-import { useTables, useMenuOnlyQrToken, useDeliveryQrToken } from '../../../../core/api/hooks/useTables';
+import { useTables, useMenuOnlyQrToken, useDeliveryQrToken, useTokenQrToken } from '../../../../core/api/hooks/useTables';
 import { useMenuPdfStatus, useUploadMenuPdf, useToggleMenuPdf, useRemoveMenuPdf } from '../../../../core/api/hooks/useMenuPdf';
 import { pickPdfAsDataUri } from '../../../../core/utils/pdfPicker';
 import { ApiTable } from '../../../../core/api/tablesApi';
@@ -33,6 +33,7 @@ export const QRMenuScreen = ({ navigation }: any) => {
   const { data: allTables = [], isLoading, isError, refetch } = useTables();
   const { data: menuOnlyToken } = useMenuOnlyQrToken();
   const { data: deliveryToken } = useDeliveryQrToken();
+  const { data: counterToken } = useTokenQrToken();
   const { data: pdfStatus } = useMenuPdfStatus();
   const uploadPdf = useUploadMenuPdf();
   const togglePdf = useToggleMenuPdf();
@@ -40,6 +41,7 @@ export const QRMenuScreen = ({ navigation }: any) => {
   const [selected, setSelected] = useState<ApiTable | null>(null);
   const [genericVisible, setGenericVisible] = useState(false);
   const [deliveryVisible, setDeliveryVisible] = useState(false);
+  const [counterVisible, setCounterVisible] = useState(false);
 
   // When a PDF is uploaded AND switched on, the general (menu-only) QR redirects to it
   // server-side (see backend PublicOrderPageController) — so the same printed code now opens
@@ -99,6 +101,7 @@ export const QRMenuScreen = ({ navigation }: any) => {
   // Same page, same URL shape — the token itself is what puts it in delivery mode (see backend
   // QrTokenService.DeliveryTableCode), so nothing about this link gives away that it's special.
   const deliveryOrderUrl = deliveryToken ? `${getPublicOrderBaseUrl()}/order/${deliveryToken.token}` : null;
+  const counterOrderUrl = counterToken ? `${getPublicOrderBaseUrl()}/order/${counterToken.token}` : null;
 
   // Every table gets a printed code, occupied or not — a scan on an occupied table
   // is handled by the guest-session JOIN flow server-side, so there's no need to
@@ -134,6 +137,10 @@ export const QRMenuScreen = ({ navigation }: any) => {
 
   const handleShareDelivery = () => {
     if (deliveryOrderUrl) shareOrCopy(`Order home delivery: ${deliveryOrderUrl}`, deliveryOrderUrl);
+  };
+
+  const handleShareCounter = () => {
+    if (counterOrderUrl) shareOrCopy(`Order at the counter: ${counterOrderUrl}`, counterOrderUrl);
   };
 
   const [downloading, setDownloading] = useState<string | null>(null);
@@ -221,6 +228,15 @@ export const QRMenuScreen = ({ navigation }: any) => {
           <View style={{ flex: 1 }}>
             <Text style={styles.genericCardTitle}>Home Delivery</Text>
             <Text style={styles.genericCardSub}>Customer orders to their address — no table needed</Text>
+          </View>
+          <Icon name="chevron-right" size={20} color="#FFFFFF" />
+        </TouchableOpacity>
+
+        <TouchableOpacity style={styles.counterCard} activeOpacity={0.85} onPress={() => setCounterVisible(true)}>
+          <Icon name="ticket-confirmation-outline" size={22} color="#FFFFFF" />
+          <View style={{ flex: 1 }}>
+            <Text style={styles.genericCardTitle}>Counter / Token Queue</Text>
+            <Text style={styles.genericCardSub}>Queue orders from their own phone — you confirm, they get a token</Text>
           </View>
           <Icon name="chevron-right" size={20} color="#FFFFFF" />
         </TouchableOpacity>
@@ -430,6 +446,45 @@ export const QRMenuScreen = ({ navigation }: any) => {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={counterVisible} transparent animationType="fade" onRequestClose={() => setCounterVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeader}>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>Counter / Token Queue</Text>
+              <CloseButton onPress={() => setCounterVisible(false)} size={18} />
+            </View>
+
+            <View style={styles.qrLarge}>
+              {counterOrderUrl && <QRCode value={counterOrderUrl} size={220} color={COLORS.heading} backgroundColor="#FFFFFF" />}
+            </View>
+
+            <Text style={styles.urlText} numberOfLines={2}>
+              {counterOrderUrl ?? ''}
+            </Text>
+
+            <TouchableOpacity style={styles.shareBtn} onPress={handleShareCounter}>
+              <Icon name="share-variant" size={14} color="#FFFFFF" />
+              <Text style={styles.shareBtnText}>Share Link</Text>
+            </TouchableOpacity>
+
+            {counterOrderUrl && renderDownloadQr({
+              qrKey: 'counter',
+              url: counterOrderUrl,
+              heading: 'Order Here',
+              instruction: 'Scan to order from your phone. Your token number appears once we confirm it.',
+            })}
+
+            <Text style={styles.hintText}>
+              Stand this card on the counter. Orders arrive on the Token Dashboard needing your
+              confirmation first — the customer's phone shows a token number only once you accept,
+              so someone walking past who scans the code can't put a number in the queue on their
+              own. They pay at the till as usual, and the moment you settle it their bill opens on
+              their phone.
+            </Text>
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -470,6 +525,18 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
     alignItems: 'center',
     gap: isDesktopWeb ? 9 : 9,
     backgroundColor: COLORS.accent,
+    borderRadius: 8,
+    padding: isDesktopWeb ? 12 : 12,
+    marginBottom: isDesktopWeb ? 14 : 15,
+  },
+  // Third card in the same family. Its own dark tone rather than reusing either of the two
+  // above: all three take real orders, so the colour is what tells a hurried hand which card it
+  // is about to print.
+  counterCard: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: isDesktopWeb ? 9 : 9,
+    backgroundColor: COLORS.occupiedMerged,
     borderRadius: 8,
     padding: isDesktopWeb ? 12 : 12,
     marginBottom: isDesktopWeb ? 14 : 15,

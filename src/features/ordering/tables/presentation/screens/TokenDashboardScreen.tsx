@@ -413,7 +413,9 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                                 <Text style={[styles.itemStatusPillText, { color: dotColor }]}>{item.status}</Text>
                               </TouchableOpacity>
                               <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
-                              {!order.paid && (
+                              {/* canVoid: hidden outright below Manager once the line is fired,
+                                  rather than left to answer with a bodyless 403. */}
+                              {!order.paid && voidPrompt.canVoid(item) && (
                                 <Tooltip label="Remove item" placement="left">
                                   <TouchableOpacity
                                     onPress={() => voidPrompt.request(item)}
@@ -442,7 +444,7 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                       <Text style={styles.itemName} numberOfLines={isDesktopWeb ? 1 : 2}>{item.name}</Text>
                       <View style={styles.unfiredTag}><Text style={styles.unfiredTagText}>NEW</Text></View>
                       <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
-                      {!order.paid && (
+                      {!order.paid && voidPrompt.canVoid(item) && (
                         <Tooltip label="Remove item" placement="left">
                           <TouchableOpacity
                             onPress={() => voidPrompt.request(item)}
