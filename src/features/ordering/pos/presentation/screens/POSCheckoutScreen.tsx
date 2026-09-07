@@ -508,6 +508,13 @@ export const POSCheckoutScreen = () => {
   // Desktop-web category tab strip (see desktopCategoryTabs) — the three numbers its
   // ◀ ▶ buttons need to know how far it can still travel in each direction. Tracked in
   // state rather than a ref because the buttons' enabled/disabled look is derived from it.
+  // Closes a double-submit race the `submitting` state flag alone can't: two physical
+  // taps landing before React re-renders the disabled button both read the SAME stale
+  // `.isPending === false` from their own render's closure, so both proceed and duplicate
+  // every cart line (each addOrderItemsMutation/createOrderMutation call goes through). A
+  // ref is mutated synchronously and shared across every closure immediately, so the
+  // second tap always sees the first tap's lock regardless of render timing.
+  const orderSubmitLockRef = useRef(false);
   const catScrollRef = useRef<ScrollView>(null);
   const [catScroll, setCatScroll] = useState({ x: 0, viewport: 0, content: 0 });
   const catMaxScroll = Math.max(0, catScroll.content - catScroll.viewport);
@@ -1295,7 +1302,8 @@ export const POSCheckoutScreen = () => {
     guestOverride?: { name: string; phone: string },
     andPrint: boolean = true,
   ) => {
-    if (createOrderMutation.isPending) return;
+    if (createOrderMutation.isPending || orderSubmitLockRef.current) return;
+    orderSubmitLockRef.current = true;
     // setGuestName/setGuestPhone are async — a caller that just validated and set
     // them in the same handler (the guest modal's Save button) would otherwise read
     // the pre-update state here and submit with an empty phone. The override lets
@@ -1452,6 +1460,8 @@ export const POSCheckoutScreen = () => {
           tone: 'danger',
         }),
       );
+    } finally {
+      orderSubmitLockRef.current = false;
     }
   };
 
@@ -1459,7 +1469,8 @@ export const POSCheckoutScreen = () => {
   // holdOnly) fire them as a fresh KOT — the existing fired KOTs are never touched. Guest
   // and table already live on the order, so nothing is re-asked. Returns to Orders after.
   const submitAppend = async (andPrint: boolean = true) => {
-    if (resumeOrderId == null || addOrderItemsMutation.isPending) return;
+    if (resumeOrderId == null || addOrderItemsMutation.isPending || orderSubmitLockRef.current) return;
+    orderSubmitLockRef.current = true;
     try {
       // One request for the whole round, not one per line (see ordersApi.addItems). Looping the
       // single-item call meant the waiter watched the spinner tick through a full round trip per
@@ -1512,6 +1523,8 @@ export const POSCheckoutScreen = () => {
           tone: 'danger',
         }),
       );
+    } finally {
+      orderSubmitLockRef.current = false;
     }
   };
 

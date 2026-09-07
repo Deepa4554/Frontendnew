@@ -35,6 +35,7 @@ const SCOPE_QUERY_KEYS: Record<string, readonly (readonly unknown[])[]> = {
   tasks: [['tasks']],
   approvals: [['approvals']],
   settings: [['settings'], ['branches'], ['subscription'], ['integrations']],
+  waitlist: [['waitlist']],
 };
 
 /**

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View, StyleSheet, Text, TouchableOpacity, Modal, ActivityIndicator } from 'react-native';
 import { useDispatch } from 'react-redux';
 import { useThemeColors } from '../../../core/theme/useThemeColors';
@@ -40,11 +40,22 @@ export const useItemVoidPrompt = (orderId: number | null, verb: 'void' | 'remove
   const reason = useVoidReasonState();
   const [item, setItem] = useState<ApiOrderItem | null>(null);
   const [pendingItemId, setPendingItemId] = useState<number | null>(null);
+  // `pendingItemId` (state) drives the UI but can't close a same-tick double-fire on its own —
+  // two onPress calls landing before React commits the re-render both still read the OLD state
+  // (null), so a fast double-tap (or a platform double-firing onPress for one physical tap, a
+  // known RN-Web quirk) sends the RemoveItem request twice: the first voids the line for real,
+  // the second gets a 404 ("item is null" server-side, since it's already gone) and surfaces as
+  // this hook's generic "Could not void item" fallback — with no success toast to explain the
+  // first call actually worked, since an unfired item's happy path (see request() below) is
+  // silent. A ref is mutated synchronously and is visible to every closure immediately,
+  // regardless of render timing, so it closes the race a state flag can't.
+  const pendingIdsRef = useRef<Set<number>>(new Set());
 
   const past = verb === 'void' ? 'Voided' : 'Removed';
 
   const apply = async (target: ApiOrderItem, args?: { reasonCode: string; note: string; unprepared: boolean }) => {
-    if (orderId === null) return;
+    if (orderId === null || pendingIdsRef.current.has(target.id)) return;
+    pendingIdsRef.current.add(target.id);
     setPendingItemId(target.id);
     try {
       await removeOrderItem.mutateAsync({
@@ -73,12 +84,13 @@ export const useItemVoidPrompt = (orderId: number | null, verb: 'void' | 'remove
         tone: 'danger',
       }));
     } finally {
+      pendingIdsRef.current.delete(target.id);
       setPendingItemId(null);
     }
   };
 
   const request = (target: ApiOrderItem) => {
-    if (orderId === null) return;
+    if (orderId === null || pendingIdsRef.current.has(target.id)) return;
     // Same rule the server enforces, asked up front so the till isn't bounced by a 400. Anything
     // the kitchen has cooked, or that was recorded as gone out, needs a reason on the record.
     const needsReason = target.fireBatch > 0

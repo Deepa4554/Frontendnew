@@ -11,6 +11,10 @@ import { showToast } from '../../../../../core/store/uiSlice';
 import { selectTableForOrder, resumeOrder } from '../../../../../core/store/tablesSlice';
 import { canManageTables, isOwnerOrManager } from '../../../../../core/auth/permissions';
 import { useTables, useCreateTable, useUpdateTable, useDeleteTable, useRevokeSession, useMergeTable, useUnmergeTable } from '../../../../../core/api/hooks/useTables';
+import { useWaitlist, useWaitlistQrToken, useSeatWaitlistEntry, useCancelWaitlistEntry } from '../../../../../core/api/hooks/useWaitlist';
+import { WaitlistEntry } from '../../../../../core/api/waitlistApi';
+import QRCode from 'react-native-qrcode-svg';
+import { downloadQrCard } from '../../../../../core/utils/qrCard';
 import {
   useOrders,
   useOrder,
@@ -26,7 +30,7 @@ import { ApiTable } from '../../../../../core/api/tablesApi';
 import { getApiErrorMessage } from '../../../../../core/network/api';
 import { buildWhatsAppBillUrl } from '../../../../../core/utils/whatsappShare';
 import { ordersApi } from '../../../../../core/api/ordersApi';
-import { getPublicApiBaseUrl } from '../../../../../core/config/env';
+import { getPublicApiBaseUrl, getPublicOrderBaseUrl } from '../../../../../core/config/env';
 import { PrinterService } from '../../../../../core/printing/PrinterService';
 import { printOrderKot, printAllOrderKots } from '../../../../../core/printing/orderKot';
 import { billAdjustmentsOf, inferTaxRatePct, taxFiguresOf } from '../../../../../core/printing/receiptFormat';
@@ -72,6 +76,17 @@ const DINING_STATUS_THRESHOLDS = { busy: 70, moderate: 30 };
  * it reproduces exactly what that older server would have printed on the matching bill. */
 const tableOrderLabel = (table: Pick<ApiTable, 'orderId' | 'orderNumber'>) =>
   table.orderNumber ?? (table.orderId != null ? `#${1000 + table.orderId}` : '—');
+
+// A sentinel zone value, never present in `zones` (which is always derived from real table
+// data) — picks out the Waiting tab without it ever colliding with an actual zone name.
+const WAITING_TAB = '__WAITING__';
+
+const formatWaitDuration = (createdAt: string) => {
+  const mins = Math.max(0, Math.floor((Date.now() - new Date(createdAt).getTime()) / 60000));
+  if (mins < 1) return 'just now';
+  if (mins < 60) return `${mins} min`;
+  return `${Math.floor(mins / 60)}h ${mins % 60}m`;
+};
 
 export const TableManagementScreen = ({ navigation }: any) => {
   const dispatch = useDispatch();
@@ -136,21 +151,30 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const mergeTable = useMergeTable();
   const unmergeTable = useUnmergeTable();
   const canCancelOrder = isOwnerOrManager(role);
+  const { data: waitlistEntries = [] } = useWaitlist();
+  const { data: waitlistQrToken } = useWaitlistQrToken();
+  const seatWaitlistEntry = useSeatWaitlistEntry();
+  const cancelWaitlistEntry = useCancelWaitlistEntry();
+  const [waitlistQrVisible, setWaitlistQrVisible] = useState(false);
+  const [waitlistDownloading, setWaitlistDownloading] = useState(false);
 
-  // Grid "picker mode" — set by tapping Shift Table (in the occupied modal) or Merge (on an
-  // empty tile). While either is set, tapping any OTHER tile in the grid completes that
-  // action instead of the tile's normal tap behavior (open the occupied modal / start a new
-  // order) — see handleTilePress.
+  // Grid "picker mode" — set by tapping Shift Table (in the occupied modal), Merge (on an
+  // empty tile), or Seat (on a Waiting-tab entry). While any is set, tapping any OTHER tile in
+  // the grid completes that action instead of the tile's normal tap behavior (open the
+  // occupied modal / start a new order) — see handleTilePress.
   const [shiftingFrom, setShiftingFrom] = useState<ApiTable | null>(null);
   const [mergingFrom, setMergingFrom] = useState<ApiTable | null>(null);
-  const pickerActive = shiftingFrom ?? mergingFrom;
+  const [seatingFromWaitlist, setSeatingFromWaitlist] = useState<WaitlistEntry | null>(null);
+  const pickerActive = shiftingFrom ?? mergingFrom ?? seatingFromWaitlist;
+  const cancelPicker = () => { setShiftingFrom(null); setMergingFrom(null); setSeatingFromWaitlist(null); };
 
 
   // Zones are derived from whatever tables actually exist on the backend —
   // no hardcoded zone list that could drift from reality.
   const zones = useMemo(() => Array.from(new Set(allTables.map((t) => t.zone))), [allTables]);
   const [zone, setZone] = useState<string | null>(null);
-  const activeZone = zone ?? zones[0] ?? 'Indoor';
+  const isWaitingTab = zone === WAITING_TAB;
+  const activeZone = zone && zone !== WAITING_TAB ? zone : zones[0] ?? 'Indoor';
 
   const [capacityFilter, setCapacityFilter] = useState('All Sizes');
   const [statusFilter, setStatusFilter] = useState('All');
@@ -343,6 +367,23 @@ export const TableManagementScreen = ({ navigation }: any) => {
     setMergingFrom(null);
   };
 
+  const handleSeatWaitlistTargetPress = (target: ApiTable) => {
+    if (!seatingFromWaitlist || target.status !== 'empty') return;
+    const guest = seatingFromWaitlist;
+    seatWaitlistEntry.mutate(
+      { id: guest.id, tableId: target.id },
+      {
+        onSuccess: () => {
+          dispatch(showToast({ message: `${guest.name}'s party seated at ${target.code}.`, icon: 'table-furniture', tone: 'success' }));
+          dispatch(selectTableForOrder(target.code));
+          navigateToPOS();
+        },
+        onError: (err) => dispatch(showToast({ message: getApiErrorMessage(err, 'Could not seat this party'), icon: 'alert-circle-outline', tone: 'danger' })),
+      },
+    );
+    setSeatingFromWaitlist(null);
+  };
+
   // Undoes every guest folded into this host in one tap — a partial split (only some of
   // several merged tables) just means re-merging whichever ones should stay combined.
   const handleUnmergeAll = async (host: ApiTable) => {
@@ -359,6 +400,7 @@ export const TableManagementScreen = ({ navigation }: any) => {
   const handleTilePress = (table: ApiTable) => {
     if (shiftingFrom) return handleShiftTargetPress(table);
     if (mergingFrom) return handleMergeTargetPress(table);
+    if (seatingFromWaitlist) return handleSeatWaitlistTargetPress(table);
     if (table.status === 'occupied') {
       setOccupiedModal(table);
     } else {
@@ -753,6 +795,12 @@ export const TableManagementScreen = ({ navigation }: any) => {
               </TouchableOpacity>
             );
           })}
+          <TouchableOpacity onPress={() => setZone(WAITING_TAB)} style={styles.zoneTab}>
+            <Text style={[styles.zoneText, isWaitingTab && styles.zoneTextActive]}>
+              {waitlistEntries.length > 0 ? `Waiting (${waitlistEntries.length})` : 'Waiting'}
+            </Text>
+            {isWaitingTab && <View style={styles.zoneUnderline} />}
+          </TouchableOpacity>
         </ScrollView>
 
         <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={styles.legendRow}>
@@ -788,17 +836,59 @@ export const TableManagementScreen = ({ navigation }: any) => {
 
         {pickerActive && (
           <View style={styles.pickerBanner}>
-            <Icon name={shiftingFrom ? 'table-furniture' : 'call-merge'} size={16} color={COLORS.accent} />
+            <Icon name={shiftingFrom ? 'table-furniture' : seatingFromWaitlist ? 'account-clock' : 'call-merge'} size={16} color={COLORS.accent} />
             <Text style={styles.pickerBannerText} numberOfLines={2}>
-              {shiftingFrom ? `Pick an empty table for ${shiftingFrom.code}'s order` : `Pick another empty table to merge with ${mergingFrom!.code}`}
+              {shiftingFrom
+                ? `Pick an empty table for ${shiftingFrom.code}'s order`
+                : seatingFromWaitlist
+                ? `Pick an empty table to seat ${seatingFromWaitlist.name}'s party`
+                : `Pick another empty table to merge with ${mergingFrom!.code}`}
             </Text>
-            <TouchableOpacity onPress={() => { setShiftingFrom(null); setMergingFrom(null); }} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <TouchableOpacity onPress={cancelPicker} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
               <Text style={styles.pickerBannerCancel}>Cancel</Text>
             </TouchableOpacity>
           </View>
         )}
 
-        {isError && allTables.length === 0 ? (
+        {isWaitingTab ? (
+          <View style={styles.waitlistPanel}>
+            <TouchableOpacity style={styles.waitlistQrBtn} onPress={() => setWaitlistQrVisible(true)}>
+              <Icon name="qrcode" size={16} color={COLORS.heading} />
+              <Text style={styles.waitlistQrBtnText}>Show QR</Text>
+            </TouchableOpacity>
+
+            {waitlistEntries.length === 0 ? (
+              <View style={styles.emptyZone}>
+                <Icon name="account-clock-outline" size={28} color={COLORS.muted} />
+                <Text style={styles.emptyZoneText}>No one is waiting right now.</Text>
+              </View>
+            ) : (
+              waitlistEntries.map((entry) => (
+                <View key={entry.id} style={styles.waitlistRow}>
+                  <View style={{ flex: 1 }}>
+                    <Text style={styles.waitlistName} numberOfLines={1}>
+                      {entry.name} · {entry.partySize} {entry.partySize === 1 ? 'guest' : 'guests'}
+                    </Text>
+                    <Text style={styles.waitlistMeta} numberOfLines={1}>{entry.phone} · waiting {formatWaitDuration(entry.createdAt)}</Text>
+                  </View>
+                  <TouchableOpacity
+                    style={styles.waitlistSeatBtn}
+                    onPress={() => { setSeatingFromWaitlist(entry); setZone(zones[0] ?? null); }}
+                  >
+                    <Text style={styles.waitlistSeatBtnText}>Seat</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity
+                    style={styles.waitlistCancelBtn}
+                    onPress={() => cancelWaitlistEntry.mutate(entry.id)}
+                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  >
+                    <Icon name="close" size={16} color={COLORS.dangerAccent} />
+                  </TouchableOpacity>
+                </View>
+              ))
+            )}
+          </View>
+        ) : isError && allTables.length === 0 ? (
           <ErrorState
             title="Couldn't load tables"
             message="Check your connection and try again."
@@ -1080,7 +1170,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
                       <Text style={styles.occItemPrice}>₹{(item.price * item.qty).toFixed(2)}</Text>
                       <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled} />
                       <Tooltip label="Remove item" placement="left">
-                        <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                        <TouchableOpacity
+                          onPress={() => voidPrompt.request(item)}
+                          disabled={voidPrompt.pendingItemId === item.id}
+                          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                        >
                           <Icon name="close" size={16} color={COLORS.dangerAccent} />
                         </TouchableOpacity>
                       </Tooltip>
@@ -1140,7 +1234,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
                               </TouchableOpacity>
                               <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled || item.voided} />
                               <Tooltip label="Remove item" placement="left">
-                                <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                <TouchableOpacity
+                                  onPress={() => voidPrompt.request(item)}
+                                  disabled={voidPrompt.pendingItemId === item.id}
+                                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                >
                                   <Icon name="close" size={16} color={COLORS.dangerAccent} />
                                 </TouchableOpacity>
                               </Tooltip>
@@ -1180,7 +1278,11 @@ export const TableManagementScreen = ({ navigation }: any) => {
                           </View>
                           <ItemRateButton editor={priceEditor} item={item} disabled={occupiedOrder.paid || occupiedOrder.cancelled} />
                           <Tooltip label="Remove item" placement="left">
-                            <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                            <TouchableOpacity
+                              onPress={() => voidPrompt.request(item)}
+                              disabled={voidPrompt.pendingItemId === item.id}
+                              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                            >
                               <Icon name="close" size={16} color={COLORS.dangerAccent} />
                             </TouchableOpacity>
                           </Tooltip>
@@ -1534,6 +1636,58 @@ export const TableManagementScreen = ({ navigation }: any) => {
         </View>
       </Modal>
 
+      {/* ---------- Waitlist entrance QR ---------- */}
+      <Modal visible={waitlistQrVisible} transparent animationType="fade" onRequestClose={() => setWaitlistQrVisible(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.occupiedModalHeader}>
+              <Text style={[styles.modalTitle, { flex: 1, minWidth: 0 }, modalHeadingOverride(styles.modalTitle.fontSize)]}>Waitlist QR</Text>
+              <CloseButton onPress={() => setWaitlistQrVisible(false)} size={18} />
+            </View>
+
+            <View style={styles.qrLarge}>
+              {waitlistQrToken && (
+                <QRCode value={`${getPublicOrderBaseUrl()}/waitlist/${waitlistQrToken.token}`} size={220} color={COLORS.heading} backgroundColor="#FFFFFF" />
+              )}
+            </View>
+
+            <TouchableOpacity
+              style={styles.downloadBtn}
+              disabled={!waitlistQrToken || waitlistDownloading}
+              onPress={async () => {
+                if (!waitlistQrToken) return;
+                setWaitlistDownloading(true);
+                try {
+                  await downloadQrCard({
+                    url: `${getPublicOrderBaseUrl()}/waitlist/${waitlistQrToken.token}`,
+                    heading: 'Join the Waitlist',
+                    instruction: 'Scan to add your name to the waitlist — we’ll call you when your table is ready.',
+                    businessName: settings?.businessName ?? 'Our Cafe',
+                    fileLabel: 'Waitlist',
+                  });
+                } catch (err) {
+                  dispatch(showToast({ message: getApiErrorMessage(err, 'Could not build the QR card'), icon: 'alert-circle-outline', tone: 'danger' }));
+                } finally {
+                  setWaitlistDownloading(false);
+                }
+              }}
+            >
+              {waitlistDownloading ? (
+                <ActivityIndicator size="small" color={COLORS.heading} />
+              ) : (
+                <Icon name="printer-outline" size={14} color={COLORS.heading} />
+              )}
+              <Text style={styles.downloadBtnText}>Print / Save QR card</Text>
+            </TouchableOpacity>
+
+            <Text style={styles.hintText}>
+              Print this once and keep it at the entrance. Customers scan it, add their name/phone/party
+              size, and show up in the Waiting tab — no app or login needed on their side.
+            </Text>
+          </View>
+        </View>
+      </Modal>
+
       {/* Same wastage bargain as the void prompt below, for a quantity cut rather than a
           whole line. */}
       <QtyReasonPrompt editor={qtyEditor} />
@@ -1654,6 +1808,48 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
   emptyZoneText: {
     fontSize: fs(13),
     color: COLORS.muted,
+  },
+  waitlistPanel: {
+    paddingHorizontal: isDesktopWeb ? 12 : 12,
+    marginBottom: isDesktopWeb ? 14 : 15,
+  },
+  waitlistQrBtn: {
+    flexDirection: 'row',
+    alignSelf: 'flex-start',
+    alignItems: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.card,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    marginBottom: 12,
+  },
+  waitlistQrBtnText: { fontSize: fs(12.5), fontWeight: '700', color: COLORS.heading },
+  waitlistRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 10,
+    backgroundColor: COLORS.cardAlt,
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 9,
+  },
+  waitlistName: { fontSize: fs(14), fontWeight: '700', color: COLORS.heading },
+  waitlistMeta: { fontSize: fs(12), color: COLORS.muted, marginTop: 2 },
+  waitlistSeatBtn: {
+    backgroundColor: COLORS.heading,
+    borderRadius: 6,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  waitlistSeatBtnText: { fontSize: fs(12.5), fontWeight: '700', color: '#FFFFFF' },
+  waitlistCancelBtn: {
+    width: 30,
+    height: 30,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   tile: {
     width: '46.5%',
@@ -1852,6 +2048,28 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, fontScale: number
     gap: isDesktopWeb ? 7 : 7.5,
     marginBottom: isDesktopWeb ? 2 : 5,
   },
+  qrLarge: {
+    alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 12,
+  },
+  downloadBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 6,
+    borderWidth: 1,
+    borderColor: COLORS.divider,
+    backgroundColor: COLORS.card,
+    borderRadius: 6,
+    paddingVertical: 10,
+    width: '100%',
+    marginBottom: 10,
+  },
+  downloadBtnText: { fontSize: fs(12.5), fontWeight: '700', color: COLORS.heading },
+  hintText: { fontSize: fs(12), color: COLORS.muted, textAlign: 'center', lineHeight: 17 },
   // Fixed-size hit target, same pattern as CafeSettingsScreen's header iconBtn — gives the
   // back icon a clean box to center in so it lines up with the title on the row's cross-axis.
   occupiedModalBackBtn: {

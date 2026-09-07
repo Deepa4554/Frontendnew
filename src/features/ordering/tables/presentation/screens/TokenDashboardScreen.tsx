@@ -415,7 +415,11 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                               <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
                               {!order.paid && (
                                 <Tooltip label="Remove item" placement="left">
-                                  <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                                  <TouchableOpacity
+                                    onPress={() => voidPrompt.request(item)}
+                                    disabled={voidPrompt.pendingItemId === item.id}
+                                    hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                                  >
                                     <Icon name="close" size={16} color={COLORS.dangerAccent} />
                                   </TouchableOpacity>
                                 </Tooltip>
@@ -440,7 +444,11 @@ export const TokenDashboardScreen = ({ navigation }: any) => {
                       <ItemRateButton editor={priceEditor} item={item} disabled={order.paid || order.cancelled} />
                       {!order.paid && (
                         <Tooltip label="Remove item" placement="left">
-                          <TouchableOpacity onPress={() => voidPrompt.request(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                          <TouchableOpacity
+                            onPress={() => voidPrompt.request(item)}
+                            disabled={voidPrompt.pendingItemId === item.id}
+                            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                          >
                             <Icon name="close" size={16} color={COLORS.dangerAccent} />
                           </TouchableOpacity>
                         </Tooltip>

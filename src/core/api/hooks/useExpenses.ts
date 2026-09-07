@@ -1,7 +1,8 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { expensesApi, CreateCafeExpenseRequest, ExpenseCategory, SaveDailyPurchaseRequest } from '../expensesApi';
 
-export const useCafeExpenses = () => useQuery({ queryKey: ['expenses'], queryFn: expensesApi.list });
+export const useCafeExpenses = (params?: { from?: string; to?: string }) =>
+  useQuery({ queryKey: ['expenses', params], queryFn: () => expensesApi.list(params) });
 
 export const useExpenseReport = (params?: { from?: string; to?: string }) =>
   useQuery({ queryKey: ['reports', 'expenses', params], queryFn: () => expensesApi.report(params) });

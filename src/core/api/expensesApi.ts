@@ -122,7 +122,10 @@ export interface SaveDailyPurchaseRequest {
 }
 
 export const expensesApi = {
-  list: () => apiClient.get<CafeExpenseSummary>('/expenses').then((r) => r.data),
+  /** `from`/`to` (yyyy-MM-dd, IST) narrow only the `recent` list — the all-time/this-month
+   * summary fields stay whole-history regardless. Omit both for the unfiltered history. */
+  list: (params?: { from?: string; to?: string }) =>
+    apiClient.get<CafeExpenseSummary>('/expenses', { params }).then((r) => r.data),
   create: (req: CreateCafeExpenseRequest) =>
     apiClient.post<CafeExpense | PendingApprovalResponse>('/expenses', req).then((r) => r.data),
   remove: (id: number) => apiClient.delete<void>(`/expenses/${id}`).then((r) => r.data),

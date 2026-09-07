@@ -78,15 +78,76 @@ const MODE_FILTER_ICON: Record<string, string> = {
   [UNSET_PAYMENT_MODE]: 'help-circle-outline',
 };
 
-const DATE_FILTERS = ['all', 'today', 'yesterday', 'week', 'month'] as const;
-type DateFilterKey = (typeof DATE_FILTERS)[number];
-const DATE_FILTER_LABEL: Record<DateFilterKey, string> = {
-  all: 'All Time', today: 'Today', yesterday: 'Yesterday', week: 'This Week', month: 'This Month',
+const isValidIsoDate = (s: string) => /^\d{4}-\d{2}-\d{2}$/.test(s);
+const WEEKDAYS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+const MONTHS = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+
+/** Tap-to-pick month calendar for the From/To fields below the expense history. */
+const MiniCalendar = ({ selected, onSelect }: { selected: string; onSelect: (iso: string) => void }) => {
+  const COLORS = useThemeColors();
+  const styles = calendarStyles(COLORS);
+  const base = isValidIsoDate(selected) ? new Date(`${selected}T00:00:00`) : new Date();
+  const [viewYear, setViewYear] = useState(base.getFullYear());
+  const [viewMonth, setViewMonth] = useState(base.getMonth());
+
+  const firstDayOffset = new Date(viewYear, viewMonth, 1).getDay();
+  const daysInMonth = new Date(viewYear, viewMonth + 1, 0).getDate();
+  const todayIsoVal = todayIst();
+
+  const goMonth = (delta: number) => {
+    const next = new Date(viewYear, viewMonth + delta, 1);
+    setViewYear(next.getFullYear());
+    setViewMonth(next.getMonth());
+  };
+
+  return (
+    <View style={styles.box}>
+      <View style={styles.header}>
+        <TouchableOpacity onPress={() => goMonth(-1)} style={styles.navBtn}>
+          <Icon name="chevron-left" size={16} color={COLORS.heading} />
+        </TouchableOpacity>
+        <Text style={styles.monthLabel}>{MONTHS[viewMonth]} {viewYear}</Text>
+        <TouchableOpacity onPress={() => goMonth(1)} style={styles.navBtn}>
+          <Icon name="chevron-right" size={16} color={COLORS.heading} />
+        </TouchableOpacity>
+      </View>
+      <View style={styles.weekRow}>
+        {WEEKDAYS.map((d, i) => <Text key={i} style={styles.weekday}>{d}</Text>)}
+      </View>
+      <View style={styles.daysWrap}>
+        {Array.from({ length: firstDayOffset }).map((_, i) => <View key={`pad-${i}`} style={styles.dayCell} />)}
+        {Array.from({ length: daysInMonth }).map((_, i) => {
+          const iso = `${viewYear}-${String(viewMonth + 1).padStart(2, '0')}-${String(i + 1).padStart(2, '0')}`;
+          const isSelected = iso === selected;
+          const isToday = iso === todayIsoVal;
+          return (
+            <TouchableOpacity key={iso} style={styles.dayCell} onPress={() => onSelect(iso)}>
+              <View style={[styles.dayInner, isSelected && styles.daySelected, !isSelected && isToday && styles.dayToday]}>
+                <Text style={[styles.dayText, isSelected && styles.dayTextSelected]}>{i + 1}</Text>
+              </View>
+            </TouchableOpacity>
+          );
+        })}
+      </View>
+    </View>
+  );
 };
-const DATE_FILTER_ICON: Record<DateFilterKey, string> = {
-  all: 'calendar-blank', today: 'calendar-today', yesterday: 'calendar-arrow-left',
-  week: 'calendar-week', month: 'calendar-month',
-};
+
+const calendarStyles = (COLORS: ReturnType<typeof useThemeColors>) => StyleSheet.create({
+  box: { backgroundColor: COLORS.cardAlt, borderRadius: 10, padding: 8 },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 4 },
+  navBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center' },
+  monthLabel: { fontSize: 12, fontWeight: '700', color: COLORS.heading },
+  weekRow: { flexDirection: 'row', marginBottom: 1.5 },
+  weekday: { width: '14.28%', textAlign: 'center', fontSize: 11, fontWeight: '700', color: COLORS.muted },
+  daysWrap: { flexDirection: 'row', flexWrap: 'wrap' },
+  dayCell: { width: '14.28%', alignItems: 'center', paddingVertical: 2 },
+  dayInner: { width: 30, height: 30, borderRadius: 15, alignItems: 'center', justifyContent: 'center' },
+  daySelected: { backgroundColor: COLORS.button },
+  dayToday: { borderWidth: 1, borderColor: COLORS.accent },
+  dayText: { fontSize: 12, fontWeight: '600', color: COLORS.heading },
+  dayTextSelected: { color: '#FFFFFF' },
+});
 
 export const CafeExpensesScreen = () => {
   const { isDesktopWeb } = useResponsive();
@@ -95,7 +156,19 @@ export const CafeExpensesScreen = () => {
   const navigation = useNavigation<any>();
   const dispatch = useDispatch();
   const insets = useSafeAreaInsets();
-  const { data, isLoading, isError, refetch } = useCafeExpenses();
+
+  // The history list's date range; '' on either end means that side is open (no bound sent
+  // to the API — see expensesApi.list). Resolved server-side, same IST-day math the Report
+  // endpoint and PurchaseOrdersController.List() already use, so the range is exact rather
+  // than an approximation over whatever page of `recent` happened to be loaded.
+  const [fromDate, setFromDate] = useState('');
+  const [toDate, setToDate] = useState('');
+  const [datePicker, setDatePicker] = useState<'from' | 'to' | null>(null);
+  const dateParams = useMemo(
+    () => ({ from: fromDate || undefined, to: toDate || undefined }),
+    [fromDate, toDate]
+  );
+  const { data, isLoading, isError, refetch } = useCafeExpenses(dateParams);
   const addExpense = useAddCafeExpense();
   const removeExpense = useRemoveCafeExpense();
 
@@ -111,8 +184,6 @@ export const CafeExpensesScreen = () => {
 
   // Which payment mode the history list below is narrowed to; ALL_MODES = no filter.
   const [modeFilter, setModeFilter] = useState<string>(ALL_MODES);
-  // Which day/range the history list is narrowed to; 'all' = no filter.
-  const [dateFilter, setDateFilter] = useState<DateFilterKey>('all');
 
   // ---------- Daily purchase list ----------
   // Daily opens first on purpose: filling the day's sheet is the recurring job, while the
@@ -254,25 +325,34 @@ export const CafeExpensesScreen = () => {
     return chips;
   }, [data?.recent, modeFilter]);
 
-  // spentAt is a UTC instant; every comparison below happens on its IST calendar date so
-  // "Today" matches what the till clock (and todayIst()) call today, not a UTC day that can
-  // still be yesterday evening in IST.
-  const matchesDateFilter = (spentAt: string, filter: DateFilterKey) => {
-    if (filter === 'all') return true;
-    const spentIst = new Date(new Date(spentAt).getTime() + 330 * 60 * 1000).toISOString().slice(0, 10);
-    const today = todayIst();
-    if (filter === 'today') return spentIst === today;
-    if (filter === 'yesterday') return spentIst === shiftDay(today, -1);
-    if (filter === 'week') return spentIst >= shiftDay(today, -6) && spentIst <= today;
-    return spentIst.slice(0, 7) === today.slice(0, 7); // month
+  // The date range itself is already applied server-side (dateParams above) — data.recent
+  // only ever holds rows inside it, so this is just the payment-mode narrowing on top.
+  const visibleExpenses = (data?.recent ?? [])
+    .filter((e) => modeFilter === ALL_MODES || modeOf(e) === modeFilter);
+  // Total of the picked mode within the picked range — it's the total of exactly what's
+  // listed underneath, so the two can't disagree.
+  const visibleTotal = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
+
+  const dateRangeLabel = fromDate && toDate ? `${prettyDate(fromDate)} - ${prettyDate(toDate)}`
+    : fromDate ? `From ${prettyDate(fromDate)}`
+    : toDate ? `Until ${prettyDate(toDate)}`
+    : '';
+
+  const pickDate = (iso: string) => {
+    if (datePicker === 'from') {
+      setFromDate(iso);
+      if (toDate && iso > toDate) setToDate(iso);
+    } else if (datePicker === 'to') {
+      setToDate(iso);
+      if (fromDate && iso < fromDate) setFromDate(iso);
+    }
+    setDatePicker(null);
   };
 
-  const visibleExpenses = (data?.recent ?? [])
-    .filter((e) => modeFilter === ALL_MODES || modeOf(e) === modeFilter)
-    .filter((e) => matchesDateFilter(e.spentAt, dateFilter));
-  // All-time for the picked mode, not this month's — it's the total of exactly what's listed
-  // underneath, so the two can't disagree.
-  const visibleTotal = visibleExpenses.reduce((sum, e) => sum + e.amount, 0);
+  const clearDateRange = () => {
+    setFromDate('');
+    setToDate('');
+  };
 
   const openModal = () => {
     setAmount('');
@@ -502,7 +582,7 @@ export const CafeExpensesScreen = () => {
         <View style={styles.listHeaderRow}>
           <Text style={[styles.sectionTitle, styles.listHeaderTitle]}>
             {modeFilter === ALL_MODES ? 'ALL EXPENSES' : `${modeFilter.toUpperCase()} EXPENSES`}
-            {dateFilter !== 'all' ? ` · ${DATE_FILTER_LABEL[dateFilter].toUpperCase()}` : ''}
+            {dateRangeLabel ? ` · ${dateRangeLabel.toUpperCase()}` : ''}
           </Text>
           {!isLoading && visibleExpenses.length > 0 && (
             <Text style={styles.listHeaderTotal}>{money(visibleTotal)}</Text>
@@ -524,30 +604,40 @@ export const CafeExpensesScreen = () => {
           </View>
         )}
 
-        {!isLoading && (data?.recent.length ?? 0) > 0 && (
-          <View style={styles.modeFilterRow}>
-            {DATE_FILTERS.map((f) => (
-              <TouchableOpacity
-                key={f}
-                style={[styles.paymentModePill, styles.modeFilterPill, dateFilter === f && styles.paymentModePillActive]}
-                onPress={() => setDateFilter(f)}
-              >
-                <Icon name={DATE_FILTER_ICON[f]} size={13} color={dateFilter === f ? '#FFFFFF' : COLORS.muted} />
-                <Text style={[styles.paymentModePillText, dateFilter === f && styles.paymentModePillTextActive]}>{DATE_FILTER_LABEL[f]}</Text>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
+        <View style={styles.dateFilterRow}>
+          <TouchableOpacity
+            style={[styles.dateFilterField, !!fromDate && styles.dateFilterFieldActive]}
+            onPress={() => setDatePicker('from')}
+          >
+            <Icon name="calendar-month-outline" size={15} color={fromDate ? COLORS.accent : COLORS.muted} />
+            <View>
+              <Text style={styles.dateFilterFieldLabel}>FROM</Text>
+              <Text style={styles.dateFilterFieldValue}>{fromDate ? prettyDate(fromDate) : 'Any date'}</Text>
+            </View>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.dateFilterField, !!toDate && styles.dateFilterFieldActive]}
+            onPress={() => setDatePicker('to')}
+          >
+            <Icon name="calendar-month-outline" size={15} color={toDate ? COLORS.accent : COLORS.muted} />
+            <View>
+              <Text style={styles.dateFilterFieldLabel}>TO</Text>
+              <Text style={styles.dateFilterFieldValue}>{toDate ? prettyDate(toDate) : 'Any date'}</Text>
+            </View>
+          </TouchableOpacity>
+          {(!!fromDate || !!toDate) && (
+            <TouchableOpacity style={styles.dateFilterClearBtn} onPress={clearDateRange} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+              <Icon name="close-circle" size={18} color={COLORS.muted} />
+            </TouchableOpacity>
+          )}
+        </View>
 
         {isLoading && <SkeletonList rows={6} />}
-        {!isLoading && (data?.recent.length ?? 0) === 0 && <Text style={styles.emptyText}>No expenses logged yet.</Text>}
+        {!isLoading && (data?.recent.length ?? 0) === 0 && (
+          <Text style={styles.emptyText}>{dateRangeLabel ? `No expenses ${dateRangeLabel}.` : 'No expenses logged yet.'}</Text>
+        )}
         {!isLoading && (data?.recent.length ?? 0) > 0 && visibleExpenses.length === 0 && (
-          <Text style={styles.emptyText}>
-            {modeFilter === ALL_MODES && dateFilter === 'all' ? 'No expenses match.'
-              : modeFilter === ALL_MODES ? `Nothing logged ${DATE_FILTER_LABEL[dateFilter].toLowerCase()}.`
-              : dateFilter === 'all' ? `Nothing paid by ${modeFilter} yet.`
-              : `Nothing paid by ${modeFilter} ${DATE_FILTER_LABEL[dateFilter].toLowerCase()}.`}
-          </Text>
+          <Text style={styles.emptyText}>{`Nothing paid by ${modeFilter}${dateRangeLabel ? ` ${dateRangeLabel}` : ' yet'}.`}</Text>
         )}
 
         {visibleExpenses.map((e) => (
@@ -788,6 +878,20 @@ export const CafeExpensesScreen = () => {
           </View>
         </View>
       </Modal>
+
+      <Modal visible={!!datePicker} transparent animationType="fade" onRequestClose={() => setDatePicker(null)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalSheet}>
+            <View style={styles.modalHeaderRow}>
+              <Text style={[styles.modalTitle, modalHeadingOverride(styles.modalTitle.fontSize)]}>
+                {datePicker === 'from' ? 'From date' : 'To date'}
+              </Text>
+              <CloseButton onPress={() => setDatePicker(null)} size={18} />
+            </View>
+            <MiniCalendar selected={datePicker === 'from' ? fromDate : toDate} onSelect={pickDate} />
+          </View>
+        </View>
+      </Modal>
     </View>
   );
 };
@@ -939,4 +1043,18 @@ const makeStyles = (COLORS: ReturnType<typeof useThemeColors>, isDesktopWeb: boo
   paymentModePillActive: { backgroundColor: COLORS.button },
   paymentModePillText: { fontSize: 11.5, fontWeight: '700', color: COLORS.muted },
   paymentModePillTextActive: { color: '#FFFFFF' },
+
+  dateFilterRow: {
+    flexDirection: 'row', alignItems: 'center', gap: 8,
+    marginHorizontal: isDesktopWeb ? 16 : 12, marginBottom: isDesktopWeb ? 11 : 12,
+  },
+  dateFilterField: {
+    flex: 1, flexDirection: 'row', alignItems: 'center', gap: 6,
+    backgroundColor: COLORS.cardAlt, borderRadius: 8, paddingHorizontal: 10, paddingVertical: 7,
+    borderWidth: 1, borderColor: 'transparent',
+  },
+  dateFilterFieldActive: { borderColor: COLORS.accent },
+  dateFilterFieldLabel: { fontSize: 9.5, fontWeight: '700', color: COLORS.muted, letterSpacing: 0.5 },
+  dateFilterFieldValue: { fontSize: 12, fontWeight: '600', color: COLORS.heading },
+  dateFilterClearBtn: { padding: 2 },
 });
