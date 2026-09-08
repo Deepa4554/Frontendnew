@@ -10,6 +10,16 @@ const PRODUCTION_API_ORIGIN = 'https://api.prabandhos.com';
 // in CafePosApi, listening on 0.0.0.0:5080). When true, the backend URL is
 // derived from the browser's current hostname/IP so it works on any WiFi
 // without needing to update the hardcoded IP.
+//
+// MUST be false on every commit. This is a local-only switch, and it reached
+// main once already (4199a91, buried in a large feature commit) — from there
+// the next mirror sync would have carried it straight into the deploy. On a
+// deployed build `true` resolves the API to http://<the site's own host>:5080,
+// which nothing serves, and it also collapses the `isWeb && !USE_LOCAL_API`
+// guard in getApiBaseUrl() below, so web stops using the same-origin /api
+// rewrite that is the only reason the auth cookies are accepted at all. The
+// symptom is not a slow app, it is a site that cannot reach its backend or log
+// anyone in. Flip it locally, flip it back before you stage.
 const USE_LOCAL_API = false;
 
 function getLocalApiOrigin(): string {

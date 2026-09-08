@@ -47,6 +47,13 @@ const PEAK_GAIN = 0.6;
  * straight to full is heard as a click on the front of the note, and one that stops dead is
  * heard as another on the end — the ramps are what make this a chime instead of a tick. */
 const RAMP_SECONDS = 0.012;
+/**
+ * Seconds of head start given to the first note. Scheduling at exactly `currentTime` means
+ * "already due": the audio thread works a render quantum ahead, so a note handed to it with no
+ * lead has its attack clipped or is dropped outright. Small enough that nobody perceives it as
+ * a delay, big enough that the phrase always starts whole.
+ */
+const SCHEDULE_LEAD_SECONDS = 0.02;
 
 let context: AudioContext | null = null;
 
@@ -122,6 +129,25 @@ function primeSilently(ctx: AudioContext): void {
  * left to do.
  */
 let primed = false;
+
+/**
+ * Resumes an already-unlocked context, and deliberately never creates one — that is the whole
+ * difference between this and `wake` below. Creating a context here would be worse than
+ * useless: away from a user gesture it would come up suspended and unresumable, yet it would
+ * still burn the one-shot `primed` flag, so the real gesture that followed would skip the
+ * priming that actually unlocks iOS.
+ *
+ * This exists for latency, not for unlocking. A suspended context freezes its clock, so a
+ * chime fired while suspended cannot sound until resume() has finished — on iOS that means
+ * waiting for the audio session to activate, a few hundred milliseconds during which the toast
+ * is already on screen and the till appears to beep late. Resuming when the tab comes back to
+ * the foreground takes that wait off the critical path: by the time an order lands the context
+ * is already running and the notes start immediately.
+ */
+function warmUp(): void {
+  if (context?.state === 'suspended') void context.resume().catch(() => {});
+}
+
 if (typeof window !== 'undefined') {
   const wake = () => {
     const ctx = getContext();
@@ -134,6 +160,15 @@ if (typeof window !== 'undefined') {
   };
   window.addEventListener('pointerdown', wake, { passive: true });
   window.addEventListener('keydown', wake, { passive: true });
+
+  // Coming back to the foreground is the moment a suspend is most likely to have happened and
+  // the moment there is most time to spare — an order arriving is the moment there is least.
+  // 'pageshow' covers the bfcache restore, which fires no visibilitychange of its own.
+  window.addEventListener('focus', warmUp, { passive: true });
+  window.addEventListener('pageshow', warmUp, { passive: true });
+  document.addEventListener('visibilitychange', () => {
+    if (document.visibilityState === 'visible') warmUp();
+  });
 }
 
 /** One note. `startAt` is on the context's own clock, which is what lets the second note be
@@ -161,17 +196,35 @@ function playNote(ctx: AudioContext, hz: number, startAt: number): void {
   oscillator.stop(startAt + NOTE_SECONDS + RAMP_SECONDS);
 }
 
+/** Lays the phrase out on the context clock, reading it at the moment of scheduling. */
+function scheduleNotes(ctx: AudioContext): void {
+  try {
+    const start = ctx.currentTime + SCHEDULE_LEAD_SECONDS;
+    NOTES_HZ.forEach((hz, i) => playNote(ctx, hz, start + i * (NOTE_SECONDS + GAP_SECONDS)));
+  } catch {
+    // See the module comment: the alert itself must survive a broken audio stack.
+  }
+}
+
 export const alertChime = {
   play(): void {
     try {
       const ctx = getContext();
       if (!ctx) return;
-      // A tab that was backgrounded comes back suspended. Resuming is async, but the notes are
-      // scheduled against the context clock and simply start once it is running again.
-      if (ctx.state === 'suspended') void ctx.resume().catch(() => {});
 
-      const start = ctx.currentTime;
-      NOTES_HZ.forEach((hz, i) => playNote(ctx, hz, start + i * (NOTE_SECONDS + GAP_SECONDS)));
+      // A suspended context has a STOPPED clock, so currentTime is whatever instant it froze
+      // at. Scheduling against that — which this used to do — puts every note in the past the
+      // moment the clock restarts, and the phrase does not sound until resume() has finished:
+      // on iOS, the few hundred milliseconds it takes to activate the audio session. That is
+      // heard as the chime lagging behind its own toast. Waiting for the resume and reading
+      // the clock afterwards costs the same wall time but puts the notes where they belong;
+      // warmUp() above is what keeps that wait out of the way in the first place.
+      if (ctx.state === 'suspended') {
+        void ctx.resume().then(() => scheduleNotes(ctx)).catch(() => {});
+        return;
+      }
+
+      scheduleNotes(ctx);
     } catch {
       // See the module comment: the alert itself must survive a broken audio stack.
     }
