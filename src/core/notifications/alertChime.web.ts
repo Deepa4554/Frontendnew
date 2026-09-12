@@ -18,10 +18,10 @@
  * between roughly 2 and 4 kHz, so a note placed up there carries across a room at a level that
  * would go unheard an octave down. */
 const NOTES_HZ = [1046.5, 1568, 2093];
-/** Seconds. Short — this fires repeatedly while orders sit unconfirmed, and anything longer
- * starts to feel like an alarm in a room where people are also talking to customers. Three
- * notes at this length still land inside 0.4s, so the phrase got sharper, not longer. */
-const NOTE_SECONDS = 0.11;
+/** Seconds. Still short enough not to read as an alarm — this fires repeatedly while orders sit
+ * unconfirmed — but longer than the original 0.11s, which on a noisy floor was gone before
+ * anyone's ear had time to lock onto it. Three notes at this length land inside ~0.55s. */
+const NOTE_SECONDS = 0.16;
 const GAP_SECONDS = 0.03;
 /**
  * A square wave, not a sine. This is the single biggest reason the old chime went unheard: a
@@ -39,10 +39,11 @@ const TONE_TYPE: OscillatorType = 'square';
  * reads as a bell rather than an alarm clock.
  */
 const TONE_FILTER_HZ = 5000;
-/** Audible across a counter without being shrill. Was 0.22, which paired with a sine left the
- * chime barely above a quiet room; a square at this level is roughly 11dB louder in RMS terms
- * and still leaves 40% headroom before anything clips on laptop speakers. */
-const PEAK_GAIN = 0.6;
+/** Audible across a counter without being shrill. Was 0.22 (barely above a quiet room with the
+ * old sine wave), then 0.6 once the tone switched to a square — still asked-for-louder against a
+ * grinder and a full floor, so pushed further. 0.85 is close to full scale but stays under it, so
+ * laptop speakers still don't clip. */
+const PEAK_GAIN = 0.85;
 /** How long the note takes to reach PEAK_GAIN and to fall back to silence. A gain that jumps
  * straight to full is heard as a click on the front of the note, and one that stops dead is
  * heard as another on the end — the ramps are what make this a chime instead of a tick. */
